@@ -2693,11 +2693,160 @@ func MiscAlertsPack() TriggerPack {
 	}
 }
 
+// slowTarget wraps npcNameClass in a named "target" capture group for a
+// Slows-pack "landed on other" branch. TimerTargetCapture="target" then
+// namespaces the resulting timer key by the captured mob name (see
+// spelltimer.Engine.StartExternal), so slowing two differently-named mobs
+// at once tracks two independent rows instead of one overwriting the
+// other — the community pack this was built from set
+// TimerTargetCapture="target" on every trigger but never actually wrapped
+// a group named that in the pattern, so the capture silently did nothing
+// and every cast of the same trigger collided into a single timer
+// regardless of target. Two mobs sharing the exact same displayed name
+// still collide — EQ's log carries no spawn id, a limitation documented in
+// LIMITATIONS.md §1.3 that no pack can work around.
+const slowTarget = `(?P<target>` + npcNameClass + `)`
+
+// SlowsPack returns a raid-utility pack that tracks every detrimental
+// "slow" effect a Seekers of Souls raid is likely to see land — caster
+// self-inflicted slows (Beastlord, Shaman, Enchanter, Bard, Ranger,
+// Necromancer, Rogue) plus a few NPC-cast slows with no owning class
+// (Waves of the Deep Sea, Breath of the Sea, Sha's Vengeance, and the
+// generic "Vas Ren" line) — so a slow landing on any raid member or NPC
+// shows a countdown on the detrimental overlay.
+//
+// Ported from a NAG export originally assembled by Takkisini and Sandrian
+// for the guild, converted to a PQC pack by Grimrose. Thanks to all three
+// for the legwork — Takkisini did the heavy lifting on the trigger
+// patterns, Sandrian tracked down the full list of slows to cover, and
+// Grimrose did the NAG→PQC conversion and multiple rounds of in-game
+// testing. Durations below are recomputed from spells_new via
+// spelltimer.CalcDurationTicks at a level-60 caster (see duration.go) —
+// two values from the original NAG export didn't match that formula
+// (Ranger's Earthcall and Rogue's Paralyzing Poison I) and are corrected
+// here; see each trigger's comment.
+func SlowsPack() TriggerPack {
+	const packName = "Slows"
+	slow := func(name, selfMsg, otherSuffix, wornOff string, spellID int, durationSecs float64) Trigger {
+		other := slowTarget + otherSuffix
+		pattern := "^(?:" + other + ")$"
+		if selfMsg != "" {
+			pattern = "^(?:" + selfMsg + "|" + other + ")$"
+		}
+		return Trigger{
+			Name:               name,
+			Enabled:            true,
+			Pattern:            pattern,
+			WornOffPattern:     wornOff,
+			TimerType:          TimerTypeDetrimental,
+			TimerDurationSecs:  durationSecs,
+			SpellID:            spellID,
+			TimerTargetCapture: "target",
+			BarColor:           "#ff0000",
+			PackName:           packName,
+			// General (class-agnostic) packs aren't run through
+			// applyDefaultTimerAlerts (see AllPacks), so the standard
+			// 10-second "expiring" TTS is set by hand here, same alert a
+			// class pack's detrimental timer would get for free.
+			TimerAlerts: []TimerAlert{detrimentalExpiringAlert()},
+			Actions: []Action{
+				{Type: ActionTextToSpeech, Text: name, DurationSecs: 5, Volume: 1.0},
+			},
+		}
+	}
+	return TriggerPack{
+		PackName: packName,
+		Description: "Detrimental-overlay timers for every slow a raid is likely to " +
+			"eat — Beastlord, Shaman, Enchanter, Bard, Ranger, Necromancer, and " +
+			"Rogue self-cast slows plus a handful of NPC-cast ones. Built from a " +
+			"NAG export originally assembled by Takkisini and Sandrian, converted " +
+			"and tested in PQC by Grimrose — thanks to all three for putting this " +
+			"pack together.",
+		Triggers: []Trigger{
+			slow("BST slow (50-65%)", `You lose your fighting edge\.`, ` loses their fighting edge\.`,
+				`^You regain your fighting edge\.$`, 2942, 192),
+			slow("BST slow (30%)", `You feel lethargic\.`, ` feels lethargic\.`,
+				`^You are no longer lethargic\.$`, 2634, 192),
+			// BST's pet-cast slow (Sha's Vengeance) — not a memorized spell
+			// (classes1-15 are all 255 in spells_new), so no self-cast branch
+			// exists; the "other" branch is what a raid member sees the pet
+			// land it on them. spell_fades has no trailing period in the DB.
+			slow("BST slow (55%)", `You are wracked by the vengeance of Sha\.`, ` is wracked by the vengeance of Sha\.`,
+				`^The pain subsides$`, 2679, 120),
+			slow("SHM slow (40%)", `A cloud of plague numbs your body\.`, `'s body is covered in a brown mist\.`,
+				`^The cloud disperses\.$`, 3380, 192),
+			// Turgur's Insects — the longest-duration slow in the pack
+			// (formula 7, base 65 ticks; only formula in this pack whose
+			// level-60 result doesn't hit the formula's own cap).
+			slow("SHM slow (?/75%)", `You feel drowsy\.`, ` yawns\.`,
+				`^You feel less drowsy\.$`, 1588, 360),
+			// Fixed a stray leading space in the original export's self-cast
+			// branch (" You're motions...") that made the pattern never match
+			// the actual log line (no leading space in the real text).
+			slow("SHM slow (25%)", `You're motions slow as a plague of insects chew at your skin\.`,
+				`'s motions slow as a plague of insects chews at their skin\.`,
+				`^The plague of insects subsides\.$`, 2527, 192),
+			// Forlorn Deeds — "You slow down."/"X slows down." is shared
+			// verbatim by several ENC slow ranks (Tepid Deeds, Shiftless
+			// Deeds, Languid Pace, Slow, Forlorn Deeds) at different levels,
+			// so the exact rank landed can't be told from the log line alone
+			// — hence the "?" in the name, matching the original pack.
+			slow("ENC slow (?/70%)", `You slow down\.`, ` slows down\.`,
+				`^Your speed returns\.$`, 1712, 192),
+			slow("WAVE slow (20%)", `You are slowed by the mist of the seas\.`, ` is slowed by the  mist of the seas\.`,
+				`^The mist melts away\.$`, 1978, 60),
+			// Earthcall — original export had this at 150s (Waves of the Deep
+			// Sea's duration, apparently copy-pasted from the row below it).
+			// spells_new has it as formula 6 / base 35, same family as the
+			// other 192s slows above, not formula 1 / base 25 — corrected to
+			// 192.
+			slow("RNG slow (50%)", `The earth's call dulls your mind and slows your muscles\.`,
+				` is slowed by the embracing earth\.`,
+				`^The call of earth recedes\.$`, 1928, 192),
+			// Deafen has no spell_fades text in spells_new (it wears off
+			// silently), so there's no worn-off pattern to give it — same as
+			// the original export.
+			slow("BRD slow (40%)", `You have been deafened\.`, ` has been deafened\.`,
+				``, 1748, 60),
+			// Necromancer's slow line comes in at least two named ranks
+			// (Shackle of Bone, Shackle of Spirit) that share the same
+			// "is hindered by a shackle of ___" phrasing and both fold to
+			// 192s at level 60 — matched by name so a future third rank with
+			// the same phrasing needs adding here explicitly rather than
+			// falling through a bare wildcard. Neither rank has a self-cast
+			// branch (not a memorized spell — pet/proc only) or spell_fades
+			// text.
+			slow("NEC slow (35/70%)", ``, ` is hindered by a shackle of (?:bone|spirit)\.`,
+				``, 2544, 192),
+			// Original export had this at 102s. spells_new has Paralyzing
+			// Poison I as formula 6 / base 7 — the base-7 cap binds well
+			// before level 60, giving 42s, not 102s.
+			slow("ROG slow (50%)", `You feel your muscles lock\.`, `'s muscles lock\.`,
+				`^Your feet come free\.$`, 1833, 42),
+			// Waves of the Deep Sea — an NPC-cast slow (not a memorized
+			// spell), no spell_fades text.
+			slow("COLD slow (10%)", `A wave crushes you\.`, ` is crushed by a wall of water\.`,
+				``, 1972, 150),
+			// Generic "Vas Ren" raid-mob slow line — reported in Discord as
+			// still showing up untracked. Three near-identical spells share
+			// this exact text (Vas Ren Slow x2, Hinderance of the Vas Ren);
+			// the log line can't tell them apart, so no single spell_id is
+			// bound here and the duration uses the more common of the two
+			// underlying formulas (192s; the other candidate is a flat
+			// 300s). The worn-off line is shared by all three and is exact,
+			// so the timer clears correctly regardless of which one landed.
+			slow("Generic Slow (Vas Ren)", `You have been slowed\.`, ` has been slowed\.`,
+				`^You are no longer slowed\.$`, 0, 192),
+		},
+	}
+}
+
 // AllPacks returns all built-in trigger packs with default audio alerts
 // applied. Class packs run through applyDefaultTimerAlerts so every timer
 // trigger gets a fading/expiring TTS without each pack having to spell it
-// out per-spell. The class-agnostic packs have no timers and are returned
-// as-is.
+// out per-spell. The class-agnostic packs are returned as-is — the few
+// that carry timer triggers of their own (Raid Alerts, Slows) set their
+// TimerAlerts by hand instead.
 func AllPacks() []TriggerPack {
 	classPacks := []TriggerPack{
 		EnchanterPack(),
@@ -2725,6 +2874,7 @@ func AllPacks() []TriggerPack {
 		RaidAlertsPack(),
 		TrackingPack(),
 		MiscAlertsPack(),
+		SlowsPack(),
 	}
 	out := make([]TriggerPack, 0, len(classPacks)+len(generalPacks))
 	for _, p := range classPacks {
