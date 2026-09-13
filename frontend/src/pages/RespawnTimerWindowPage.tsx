@@ -8,6 +8,7 @@ import { useWebSocket } from '../hooks/useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
 import { useOverlayOpacity } from '../hooks/useOverlayOpacity'
 import { useOverlayChromeFade } from '../hooks/useOverlayChromeFade'
+import { useTimerAppearance } from '../hooks/useTimerAppearance'
 import { useOverlayLock } from '../hooks/useOverlayLock'
 import { useWindowDrag } from '../hooks/useWindowDrag'
 import OverlayLockButton from '../components/OverlayLockButton'
@@ -25,6 +26,7 @@ export default function RespawnTimerWindowPage(): React.ReactElement {
     useOverlayLock('respawnTimer')
   const chrome = useOverlayChromeFade(mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
+  const appearance = useTimerAppearance()
   const [state, setState] = useState<RespawnState | null>(null)
   const [alertsEnabled, toggleAlerts] = useOverlayAlertMute(RESPAWN_ALERTS_KEY)
 
@@ -146,7 +148,14 @@ export default function RespawnTimerWindowPage(): React.ReactElement {
       </div>
 
       {/* ── Timer list ───────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: appearance.stackFromBottom ? 'column-reverse' : 'column',
+        }}
+      >
         {state === null ? (
           <p style={{ padding: 12, fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', margin: 0 }}>
             Connecting…

@@ -87,6 +87,9 @@ function TimerRow({
   // remaining-time/category color, matching the in-app dashboard preview.
   const color = timer.bar_color || barColor(timer.remaining_seconds, timer.duration_seconds, timer.category)
   const urgent = pct < 0.2
+  // Settings → Spell Timers can opt out of the red urgent-text color for
+  // legibility; the bold/weight escalation below still applies either way.
+  const showUrgentColor = urgent && !appearance.urgentTextWhite
   const catColor = CATEGORY_COLORS[timer.category]
   const target = detrimTarget(timer.target_name, activePlayer)
 
@@ -144,7 +147,7 @@ function TimerRow({
           <span
             style={{
               fontSize: appearance.nameFontSize,
-              color: urgent ? '#f87171' : 'rgba(255,255,255,1)',
+              color: showUrgentColor ? '#f87171' : 'rgba(255,255,255,1)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -161,7 +164,7 @@ function TimerRow({
         <span
           style={{
             fontSize: appearance.timeFontSize,
-            color: urgent ? '#f87171' : color,
+            color: showUrgentColor ? '#f87171' : color,
             fontVariantNumeric: 'tabular-nums',
             flexShrink: 0,
             fontWeight: urgent ? 700 : 600,
@@ -319,7 +322,14 @@ export default function DetrimTimerWindowPage(): React.ReactElement {
       {/* display:flex + column so the empty-state child's flex:1 can stretch
           to fill — without this the icon/label clings to the top edge instead
           of centering. */}
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: appearance.stackFromBottom ? 'column-reverse' : 'column',
+        }}
+      >
         {state === null ? (
           <p
             style={{

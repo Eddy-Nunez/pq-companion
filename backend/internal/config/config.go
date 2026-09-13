@@ -190,6 +190,19 @@ type SpellTimerSettings struct {
 	TimerNameFontSize int `yaml:"timer_name_font_size,omitempty" json:"timer_name_font_size,omitempty"`
 	TimerTimeFontSize int `yaml:"timer_time_font_size,omitempty" json:"timer_time_font_size,omitempty"`
 	TimerRowPadding   int `yaml:"timer_row_padding,omitempty" json:"timer_row_padding,omitempty"`
+
+	// TimerBarStackFromBottom reverses the timer overlay row order so new
+	// rows stack upward from the bottom of the window instead of downward
+	// from underneath the header. Off by default — most users expect the
+	// header-then-rows-below layout. Frontend-only; the engine never reads
+	// it.
+	TimerBarStackFromBottom bool `yaml:"timer_bar_stack_from_bottom,omitempty" json:"timer_bar_stack_from_bottom,omitempty"`
+
+	// TimerBarUrgentTextWhite, when true, keeps the spell-name/countdown
+	// text white instead of switching to red once a timer drops under 20%
+	// remaining (legibility preference). Off by default (red is the
+	// long-standing look). Frontend-only; the engine never reads it.
+	TimerBarUrgentTextWhite bool `yaml:"timer_bar_urgent_text_white,omitempty" json:"timer_bar_urgent_text_white,omitempty"`
 }
 
 // DPSClassColors holds the user-customisable bar colours for the DPS meter

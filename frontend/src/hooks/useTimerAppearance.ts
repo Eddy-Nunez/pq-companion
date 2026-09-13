@@ -18,6 +18,11 @@ export interface TimerAppearance {
   timeFontSize: number
   /** Vertical row padding in px. */
   rowPadding: number
+  /** Stack rows upward from the bottom of the window instead of downward
+   *  from underneath the header. */
+  stackFromBottom: boolean
+  /** Keep row text white instead of switching to red under 20% remaining. */
+  urgentTextWhite: boolean
 }
 
 // Built-in defaults, matching the panels' historical hardcoded values.
@@ -26,6 +31,8 @@ const DEFAULTS: TimerAppearance = {
   nameFontSize: 12,
   timeFontSize: 11,
   rowPadding: 3,
+  stackFromBottom: false,
+  urgentTextWhite: false,
 }
 
 /**
@@ -53,6 +60,8 @@ function resolve(st: SpellTimerSettings | undefined): TimerAppearance {
     nameFontSize: st.timer_name_font_size || DEFAULTS.nameFontSize,
     timeFontSize: st.timer_time_font_size || DEFAULTS.timeFontSize,
     rowPadding: st.timer_row_padding || DEFAULTS.rowPadding,
+    stackFromBottom: st.timer_bar_stack_from_bottom ?? DEFAULTS.stackFromBottom,
+    urgentTextWhite: st.timer_bar_urgent_text_white ?? DEFAULTS.urgentTextWhite,
   }
 }
 

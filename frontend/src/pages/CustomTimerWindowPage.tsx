@@ -90,6 +90,9 @@ function TimerRow({
   // remaining-time color, matching the in-app dashboard preview.
   const color = timer.bar_color || barColor(timer.remaining_seconds, timer.duration_seconds)
   const urgent = pct < 0.2
+  // Settings → Spell Timers can opt out of the red urgent-text color for
+  // legibility; the bold/weight escalation below still applies either way.
+  const showUrgentColor = urgent && !appearance.urgentTextWhite
 
   return (
     <div
@@ -133,7 +136,7 @@ function TimerRow({
           <span
             style={{
               fontSize: appearance.nameFontSize,
-              color: urgent ? '#f87171' : 'rgba(255,255,255,1)',
+              color: showUrgentColor ? '#f87171' : 'rgba(255,255,255,1)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -150,7 +153,7 @@ function TimerRow({
         <span
           style={{
             fontSize: appearance.timeFontSize,
-            color: urgent ? '#f87171' : color,
+            color: showUrgentColor ? '#f87171' : color,
             fontVariantNumeric: 'tabular-nums',
             flexShrink: 0,
             fontWeight: urgent ? 700 : 600,
@@ -367,7 +370,14 @@ export default function CustomTimerWindowPage(): React.ReactElement {
       </div>
 
       {/* ── Timer list ───────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: appearance.stackFromBottom ? 'column-reverse' : 'column',
+        }}
+      >
         {state === null ? (
           <p
             style={{

@@ -412,7 +412,14 @@ export default function CHChainOverlayWindowPage(): React.ReactElement {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: appearance.stackFromBottom ? 'column-reverse' : 'column',
+        }}
+      >
         {state === null ? (
           <p style={{ padding: 12, fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', margin: 0 }}>
             Connecting…

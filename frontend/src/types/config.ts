@@ -379,6 +379,20 @@ export interface SpellTimerSettings {
   timer_time_font_size?: number
   /** Timer row vertical padding in px (controls row height). 0/absent = 3. */
   timer_row_padding?: number
+
+  /**
+   * When true, timer overlay rows stack upward from the bottom of the
+   * window (new rows appear at the bottom, pushing older ones up) instead
+   * of downward from underneath the header. Off by default.
+   */
+  timer_bar_stack_from_bottom?: boolean
+
+  /**
+   * When true, a timer row's spell-name/countdown text stays white instead
+   * of switching to red once the timer drops under 20% remaining. Off by
+   * default (red is the long-standing look).
+   */
+  timer_bar_urgent_text_white?: boolean
 }
 
 // CHChainSettings configures the Complete-Heal-chain overlay matcher. Mirrors

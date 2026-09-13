@@ -2756,6 +2756,52 @@ export default function SettingsPage(): React.ReactElement {
                 </label>
               ))}
             </div>
+
+            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.spell_timer?.timer_bar_stack_from_bottom ?? false}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    spell_timer: { ...config.spell_timer, timer_bar_stack_from_bottom: e.target.checked },
+                  })
+                }
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  Stack timer rows from the bottom
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                  New rows appear at the bottom of the window and push older ones up, instead of stacking
+                  downward from underneath the header. The header stays put either way.
+                </span>
+              </span>
+            </label>
+
+            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.spell_timer?.timer_bar_urgent_text_white ?? false}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    spell_timer: { ...config.spell_timer, timer_bar_urgent_text_white: e.target.checked },
+                  })
+                }
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  Keep row text white when a timer is running low
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                  By default the spell name and countdown turn red under 20% time remaining. Enable this to
+                  keep them in their normal color for legibility.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* ── Custom timer alerts ──────────────────────────────────────── */}
