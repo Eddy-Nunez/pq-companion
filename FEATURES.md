@@ -1719,6 +1719,66 @@ hardening — no new features, but a broad sweep of reliability fixes.
 - Maps: a toggle keeps POI pins (zone lines, succor points) visible at
   full opacity through the depth/z-height fade.
 
+## Phase 12 — Raid Composition (Editor + Checker) ✅
+
+Raid-raid-cadence tooling for guild leadership: a knowledge base of raid
+encounters with per-role staffing plans, a full editor for it, and a live
+composition checker that compares the current raid roster against an
+encounter's minimum/recommended staff. Ported from the eqmon project's
+`raids/base.yaml` taxonomy, `raids/velious.yaml` encounter data, and
+`lua/comp-check.lua` checker — re-implemented in Go against user.db.
+
+**Role taxonomy (user-editable):**
+- `raid_roles` store table (role id, optional sub-role, display label, ordered
+  class codes, position), seeded from eqmon's `base.yaml` taxonomy with human
+  labels (internal ids stay stable — e.g. `rgc` displays as "Remove Greater
+  Curse"). Lives in `internal/raidcomp/taxonomy.go` + `seed.go`.
+- Editable inline on the Raid Editor page (add/edit/delete flat roles and
+  sub-roles, edit labels and class lists). The comp grid and the checker read
+  the same store, so taxonomy edits apply immediately. Deleting a role still
+  referenced by an encounter comp is blocked with a clear message.
+- Class codes are validated against the 15-class EQ catalog (Zeal 1-based ids
+  resolved via `internal/raidcomp` helpers).
+
+**Encounter knowledge base (`raid_encounters` + normalized children):**
+- One row per encounter with identity fields, zone (`zone_id` = the EQ
+  `zoneidnumber`, matching what the Zeal pipe reports), status
+  (active/placeholder), trigger notes, prerequisites
+  (`raid_encounter_reqs`), strategy sections (`raid_encounter_strategy`) and
+  per-leaf staffing in `raid_encounter_comps` (one row per leaf per min/rec
+  level) — fully normalized, no JSON blobs.
+- Seeded from eqmon's `velious.yaml` (Avatar of War) on first open; zone ids
+  resolved from quarm.db at seed time and backfilled for rows created before
+  the `zone_id` column existed.
+- CRUD via `internal/api/raids.go` (`/api/raids/encounters`).
+
+**Composition checker (`/api/raids/check`):**
+- Ports eqmon's comp-check: maps the live roster to taxonomy class codes,
+  flattens the taxonomy to leaves, and assesses each leaf present in the
+  encounter's comps with a non-zero need — per-level MIN (hard floor) and REC
+  (recommended) rows with have/need, a GAP figure per short row, and
+  class-eligible candidate member names (capped at 8 + n more), with a
+  candidates-are-not-assignments caveat surfaced in the UI.
+- Roles with min_count 0 are omitted from the report (a role the encounter
+  doesn't need is never printed as a 0/0 OK row); a min 0 / rec > 0 leaf
+  appears in the REC report only.
+- Roster source: the live Zeal raid envelope (`MsgRaid`, type 5 — already
+  consumed for the Players tab, now also kept as an in-memory snapshot via
+  `internal/raidcomp/roster.go`) or a manually-entered roster. The UI
+  distinguishes three states: ailing Zeal connection, connected-but-not-
+  in-a-raid, and a live roster.
+- Encounter detection on the Raid Composition page matches the roster's zone
+  id against `zone_id` (name-normalization fallback); the dropdown stays
+  authoritative.
+
+**Frontend:**
+- New Raids sidebar section (ShieldCheck/PencilRuler icons) with a
+  Combat-style parent layout: `/raids` (Raid Composition — checker + report
+  GUI with OK/GAP pills and candidate chips) and `/raids/editor` (encounter
+  list + edit form with a zone type-ahead over the game's zone catalog, and
+  the Role Taxonomy editor).
+- Types in `types/raid.ts`, wrappers in `services/api.ts`.
+
 ## v0.19.2 — Native Detrimental Timer Alerts
 
 - **Fading-soon alerts for native Detrimental timers** — debuff/DoT/mez/
