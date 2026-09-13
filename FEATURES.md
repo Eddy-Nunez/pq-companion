@@ -1941,6 +1941,78 @@ name-based path when a field is nil, so older Zeal is unaffected.
   seed (v0.21.0) only caught the rare ding back to exactly 1. The regex now
   accepts the "(s)" ending.
 
+## v0.21.2 — Overlay Text Alerts, Timer Bar Appearance, Wishlist Auto-Remove, Slows Pack
+
+- **Overlay Text as a fading-soon alert type** — a trigger's fading-soon
+  threshold alerts were audio-only (`TimerAlert` was deliberately scoped
+  that way); it now carries the same text/duration/color/position/font/
+  glow/align fields `Action` already has for `overlay_text`, and
+  `marshalTimerAlerts` resolves capture references in `Text` the same way
+  it does for `TTSTemplate`. A new `POST /api/triggers/timer-alert-overlay`
+  broadcasts the same `trigger:fired` + `Action` shape a regular fire uses,
+  so `TriggerOverlayWindowPage` needed no changes — dedup, stacking,
+  per-alert style, and pinned position all come for free. Settings →
+  Spell Timers' four global fading-soon defaults (Custom timer, Respawn,
+  Detrimental timer, CH Metronome start/cast) got the same fields on
+  `config.TimerAlertPref`, reusing the existing `OverlayPosition` type.
+  `withTimerAlertDefaults`' type guard only accepted `'play_sound' |
+  'text_to_speech'`, which would have silently reverted a saved
+  `overlay_text` pref on next load — fixed alongside the new fields.
+- **Bottom-up stacking and white urgent-text toggles** — two new
+  frontend-only display prefs under Settings → Spell Timers → Timer bar
+  appearance, resolved through `useTimerAppearance()`, both off by
+  default: `timer_bar_stack_from_bottom` (column-reverse across Buff/
+  Detrimental/Custom/Respawn/CH Chain overlay windows; header stays
+  anchored at top) and `timer_bar_urgent_text_white` (suppresses the red
+  spell-name/countdown color under 20% time remaining while still
+  bolding it). The countdown digit's own color comes from `barColor()`
+  independently of the urgent-text override (it also drives the
+  depleting fill bar and pin icon), so the white toggle needed a
+  dedicated `timeColor` resolution to actually cover the digits — an
+  initial pass only caught the spell name.
+- **Wishlist entries auto-remove on self-loot** — `wishlistauto.Remover`
+  watches the active character's own anchored self-loot log line (the
+  loot package's existing regex, not a loose name mention) and deletes
+  matching entries. A per-entry `character_wishlist.keep_after_loot` flag
+  (`AddWishlistEntry`, `SetWishlistKeepAfterLoot`,
+  `RemoveLootedWishlistEntries`, `PATCH
+  /api/characters/{id}/wishlist/{entryID}`) opts recurring farm targets
+  out — defaults false for equippable-gear buckets, true for the General
+  (non-equippable) bucket, toggleable per-row via a Repeat-icon on
+  `WishlistPage`, which now subscribes to `wishlist:changed` so a
+  server-triggered removal refreshes the open list live.
+- **Built-in Slows trigger pack** — `SlowsPack()` converts a community
+  NAG→PQC export (BST, SHM, ENC, BRD, RNG, NEC, ROG slows plus a few
+  NPC-cast ones) into a general pack, fixed up after in-game testing:
+  none of the imported patterns actually defined the `(?P<target>...)`
+  group `timer_target_capture="target"` pointed at, so every firing
+  collided into one timer row regardless of target — fixed by wrapping
+  the "landed on other" branch's mob name in a real named group. Ranger's
+  Earthcall (150s → 192s) and Rogue's Paralyzing Poison I (102s → 42s)
+  are corrected against the level-60 `spells_new` formula, the Shaman
+  25% slow's self-cast branch had a stray leading space breaking the
+  match, the Necromancer pattern is tightened from an unanchored `.*` to
+  the two known "Shackle of ___" ranks, and a "Generic Slow (Vas Ren)"
+  trigger covers the raid-mob slow line three near-identical spells
+  share with no single `spell_id` bound to it. Two same-named mobs
+  slowed at once still collide on one timer row — needs a spawn id EQ's
+  log doesn't carry (LIMITATIONS.md §1.3).
+
+### Fixes
+
+- **Gear Upgrade Finder no longer suggests a worn LORE item as its own
+  upgrade** — `quarm.db` carries some LORE items as several duplicate-name
+  rows with identical stats (e.g. "Dull Pearl Necklace" ids 13347-13350);
+  the candidate query always collapses these to one canonical row
+  (`variants.go`), but a live character's Quarmy export reports whichever
+  raw id the server assigned, which can be a non-canonical sibling. The
+  worn/lore dedup checks compared that raw id directly against candidate
+  ids and missed the match, so a LORE ring/item already equipped in a
+  paired slot (e.g. Finger 2) kept surfacing as an "upgrade" for the other
+  slot (Finger 1). New `db.CanonicalItemID` (nil-receiver safe) keys both
+  the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
+  the same canonical id space the candidate list already uses.
+
 ## Phase 11 — Project Website
 _Planned_
 
