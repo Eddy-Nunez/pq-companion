@@ -99,6 +99,26 @@ func (vi *variantIndex) canonicalID(id int) int {
 	return canon
 }
 
+// CanonicalItemID returns the id that identity comparisons against item
+// candidate lists (which only ever surface a group's canonical row, see
+// excludeNonCanonical) should use: the canonical id for a variant, or id
+// itself when it isn't part of a duplicate-name group. A worn item resolved
+// from a Zeal export carries whatever raw id the live server assigned it,
+// which may be a non-canonical duplicate row — comparing that raw id
+// directly against a candidate's id would silently miss the match (e.g. the
+// gear upgrade finder failing to recognize an already-worn LORE item as
+// itself, and offering a second copy).
+func (db *DB) CanonicalItemID(id int) int {
+	if db == nil {
+		return id
+	}
+	db.ensureVariants()
+	if canon := db.itemVariants.canonicalID(id); canon != 0 {
+		return canon
+	}
+	return id
+}
+
 // variantFields returns the (siblings, canonicalID) pair for an id, for
 // populating the Item/Spell detail fields in one call. List rows are always
 // canonical, so there the siblings are the hidden variants and canonical is 0.

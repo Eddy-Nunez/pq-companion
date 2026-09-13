@@ -542,10 +542,14 @@ func (h *charactersHandler) scoreSlotCands(
 	considered = len(cands)
 
 	// Exclude every item worn at this Location (both paired slots), so the other
-	// earring/ring you already wear is never suggested as an upgrade.
+	// earring/ring you already wear is never suggested as an upgrade. Canonicalize:
+	// a worn item's id is whatever the live server assigned it, which can be a
+	// non-canonical duplicate row (see db.CanonicalItemID), while candidates are
+	// always the canonical row for their name — comparing raw ids would miss the
+	// match and re-suggest an item already worn under a sibling id.
 	wornHere := make(map[int]bool, len(allWorn))
 	for _, ci := range allWorn {
-		wornHere[ci.ID] = true
+		wornHere[h.db.CanonicalItemID(ci.ID)] = true
 	}
 	results = make([]upgradeResult, 0, len(cands))
 	for _, c := range cands {
@@ -780,17 +784,21 @@ func (h *charactersHandler) equippedFocusSet(worn map[int]*db.Item) map[int]bool
 	return set
 }
 
-// equippedLoreSet returns the IDs of LORE items the character already wears in
-// any slot. A LORE item is unique — you can only possess one — so once it's
-// equipped it must never be offered as an upgrade for a different slot (you
-// can't acquire a second). EQ encodes LORE as a lore string beginning with '*'.
-// (Same-slot duplicates are already filtered by the per-slot worn check, so this
-// only matters for multi-slot items like a charm/torch that also fit elsewhere.)
+// equippedLoreSet returns the canonical IDs of LORE items the character
+// already wears in any slot. A LORE item is unique — you can only possess
+// one — so once it's equipped it must never be offered as an upgrade for a
+// different slot (you can't acquire a second). EQ encodes LORE as a lore
+// string beginning with '*'. Keyed by db.CanonicalItemID rather than the raw
+// worn id: candidates are always a name group's canonical row, so a worn item
+// resolved to a non-canonical sibling id would otherwise fail to match and
+// get re-suggested. (Same-slot duplicates are already filtered by the
+// per-slot worn check, so this only matters for multi-slot items like a
+// charm/torch that also fit elsewhere.)
 func (h *charactersHandler) equippedLoreSet(worn map[int]*db.Item) map[int]bool {
 	set := map[int]bool{}
 	for id, item := range worn {
 		if strings.HasPrefix(item.Lore, "*") {
-			set[id] = true
+			set[h.db.CanonicalItemID(id)] = true
 		}
 	}
 	return set

@@ -1,6 +1,9 @@
 package api
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/jasonsoprovich/pq-companion/backend/internal/character"
@@ -215,4 +218,43 @@ func TestScoreSlotCands_WeaponStyleFilter(t *testing.T) {
 			t.Fatalf("got %d results, want 2", len(results))
 		}
 	})
+}
+
+// TestEquippedLoreSet_CanonicalizesVariantIDs is the regression test for a
+// real gear-upgrade-finder bug: quarm.db carries some LORE items under
+// several duplicate-name rows with different ids (e.g. "Dull Pearl Necklace"
+// exists as ids 13347-13350, all identical stats) — the item explorer and
+// candidate query collapse these to one canonical row (see
+// db.CanonicalItemID / variants.go), but a live character's Quarmy export
+// reports whichever raw id the server actually assigned, which can be one of
+// the non-canonical siblings. Comparing that raw id against the (always
+// canonical) candidate id would silently fail to match, so the finder kept
+// suggesting a LORE item the character already had equipped elsewhere.
+func TestEquippedLoreSet_CanonicalizesVariantIDs(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
+	dbPath := filepath.Join(repoRoot, "backend", "data", "quarm.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Skip("quarm.db not present")
+	}
+	d, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer d.Close()
+	h := &charactersHandler{db: d}
+
+	const wornVariantID = 13350 // a non-canonical sibling of "Dull Pearl Necklace"
+	canon := d.CanonicalItemID(wornVariantID)
+	if canon == wornVariantID {
+		t.Skip("13350 is no longer a non-canonical variant in this quarm.db; test fixture stale")
+	}
+
+	worn := map[int]*db.Item{
+		wornVariantID: {ID: wornVariantID, Name: "Dull Pearl Necklace", Lore: "*Jaylas Necklace"},
+	}
+	set := h.equippedLoreSet(worn)
+	if !set[canon] {
+		t.Errorf("equippedLoreSet(%+v) = %v, want the canonical id %d present so a candidate row (always canonical) is recognized as already worn", worn, set, canon)
+	}
 }
