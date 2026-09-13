@@ -1497,15 +1497,18 @@ func main() {
 		for _, l := range labels {
 			switch l.Type {
 			case zealpipe.LabelTargetName:
-				targetName = l.Value
-				if l.Value == "" {
+				// Strip Zeal 1.4.7's optional " (<spawnid>)" decoration before
+				// anything keys off the name — see zealpipe.CleanTargetName.
+				name := zealpipe.CleanTargetName(l.Value)
+				targetName = name
+				if name == "" {
 					npcTracker.ClearPipeTarget()
 				} else {
-					npcTracker.SetPipeTarget(l.Value)
+					npcTracker.SetPipeTarget(name)
 				}
-				combatTracker.SetPipeTarget(l.Value)
-				threatTracker.SetPipeTarget(l.Value)
-				raidThreatAssembler.SetPipeTarget(l.Value)
+				combatTracker.SetPipeTarget(name)
+				threatTracker.SetPipeTarget(name)
+				raidThreatAssembler.SetPipeTarget(name)
 				raidThreatAssembler.Broadcast()
 			case zealpipe.LabelTargetHPPerc:
 				if n, err := strconv.Atoi(strings.TrimSpace(l.Value)); err == nil {

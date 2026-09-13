@@ -291,3 +291,27 @@ func TestLocationGameAccessorsTranspose(t *testing.T) {
 		t.Errorf("GameY() = %v, want -784 (Zeal's x)", got)
 	}
 }
+
+func TestCleanTargetName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain name", "a gnoll pup", "a gnoll pup"},
+		{"spawn id appended", "a gnoll pup (1234)", "a gnoll pup"},
+		{"no space before id", "a gnoll pup(1234)", "a gnoll pup"},
+		{"boss name with spawn id", "Kaas Thox Xi Aten Ha Ra (881)", "Kaas Thox Xi Aten Ha Ra"},
+		{"corpse suffix preserved", "a gnoll pup's corpse (881)", "a gnoll pup's corpse"},
+		{"trailing digits are not an id", "Animation1", "Animation1"},
+		{"parens mid-name are left alone", "a (test) gnoll", "a (test) gnoll"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CleanTargetName(tt.in); got != tt.want {
+				t.Errorf("CleanTargetName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

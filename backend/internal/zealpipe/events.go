@@ -3,6 +3,8 @@ package zealpipe
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 // Envelope is the outer JSON shape on every pipe message line.
@@ -27,6 +29,28 @@ type Label struct {
 	Type  LabelType       `json:"type"`
 	Value string          `json:"value"`
 	Meta  json.RawMessage `json:"meta,omitempty"`
+}
+
+// targetSpawnIDSuffix matches the " (<spawnid>)" that Zeal appends to the
+// target-name label when the user has enabled /labels showtargetspawnid.
+var targetSpawnIDSuffix = regexp.MustCompile(`\s*\(\d+\)$`)
+
+// CleanTargetName normalises the LabelTargetName (eqtype 28) value.
+//
+// Zeal 1.4.7 added a /labels showtargetspawnid toggle (Zeal/labels.cpp:27-36)
+// that renders the label as "Kaas Thox Xi Aten Ha Ra (1234)" instead of the
+// bare name. Everything downstream of the label — NPC overlay DB lookup,
+// combat attribution, threat tracking — keys off the name, so the decorated
+// form silently breaks all of them for any user who flips that toggle.
+//
+// Stripping the suffix is unambiguous: no npc_types name in quarm.db contains
+// a parenthesis (verified: zero rows), and EQ does not permit them in player
+// names either, so a trailing "(digits)" can only be Zeal's decoration.
+//
+// Names that merely end in digits ("Animation1") are untouched — the pattern
+// requires the parentheses.
+func CleanTargetName(value string) string {
+	return strings.TrimSpace(targetSpawnIDSuffix.ReplaceAllString(value, ""))
 }
 
 // Gauge is one entry inside a MsgGauge payload.
