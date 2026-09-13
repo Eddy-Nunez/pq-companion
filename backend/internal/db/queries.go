@@ -1490,6 +1490,27 @@ func (db *DB) GetZoneShortNameByLongName(longName string) (string, error) {
 	return short, nil
 }
 
+// ZoneIDByLongName resolves a zone long name to its EQ zoneidnumber (the id
+// the Zeal pipe reports as Zone). ok=false when the name isn't in quarm.db.
+func (db *DB) ZoneIDByLongName(longName string) (int, bool) {
+	longName = strings.TrimSpace(longName)
+	if i := strings.Index(longName, " ("); i >= 0 {
+		longName = strings.TrimSpace(longName[:i])
+	}
+	if longName == "" {
+		return 0, false
+	}
+	var id int
+	err := db.QueryRow(
+		`SELECT zoneidnumber FROM zone WHERE long_name = ? COLLATE NOCASE LIMIT 1`,
+		longName,
+	).Scan(&id)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
+}
+
 // Quarm-specific zone-wide loot overlays. The Quarm DB stores zone-wide
 // shared drops as standalone lootdrops that aren't actually attached to any
 // NPC's loottable — they need to be surfaced manually on every NPC in the

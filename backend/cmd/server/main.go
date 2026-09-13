@@ -42,6 +42,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/players"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/popflag"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/progress"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/raidcomp"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/raidthreat"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/respawn"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/rolltracker"
@@ -369,6 +370,26 @@ func main() {
 		lockoutStore = nil
 	} else {
 		defer lockoutStore.Close()
+	}
+
+	// Raid knowledge base + composition checker store. The store seeds itself
+	// with the starter taxonomy + encounters (aow) on first open — same
+	// non-fatal pattern as lockouts: a failure here only disables the raid
+	// features. Zone ids are resolved from quarm.db at seed time.
+	raidStore, err := raidcomp.OpenStore(
+		filepath.Join(home, ".pq-companion", "user.db"),
+		func(longName string) int {
+			if id, ok := database.ZoneIDByLongName(longName); ok {
+				return id
+			}
+			return 0
+		},
+	)
+	if err != nil {
+		slog.Warn("open raid composition store (disabled)", "err", err)
+		raidStore = nil
+	} else {
+		defer raidStore.Close()
 	}
 
 	// Build the spell-landed detection index from the read-only spells_new
@@ -1351,7 +1372,13 @@ func main() {
 	// MsgRaid to zone-stamp raid-roster sightings. lastRaidSeen dedupes those
 	// upserts to "on change" — key name -> "level:class".
 	var pipeZoneShort string
+	var pipeZoneID int
 	lastRaidSeen := map[string]string{}
+
+	// Live raid roster keeper: latest MsgRaid snapshot, consumed by the raid
+	// composition checker. Separate from the players-store upserts below, which
+	// feed the Players tab.
+	rosterKeeper := raidcomp.NewRoster()
 
 	pipeSupervisor := zealpipe.NewSupervisor(func(env zealpipe.Envelope) {
 		switch env.Type {
@@ -1394,6 +1421,7 @@ func main() {
 				}
 			}
 			pipeZoneShort = zoneShort
+			pipeZoneID = p.Zone
 			posTracker.Update(
 				zoneShort, p.Location.GameX(), p.Location.GameY(), p.Location.Z, p.Heading)
 			// Zeal v1.4.6+ pet spawn id: a stable, collision-proof identity for
@@ -1448,6 +1476,15 @@ func main() {
 				slog.Debug("zealpipe: decode raid failed", "err", err)
 				return
 			}
+			raidMembers := make([]raidcomp.Member, 0, len(members))
+			for _, m := range members {
+				code, _ := raidcomp.CodeForZealID(m.Class)
+				raidMembers = append(raidMembers, raidcomp.Member{
+					Name: m.Name, Level: m.Level, Class: m.Class, Code: code,
+					Group: m.Group, Rank: m.Rank,
+				})
+			}
+			rosterKeeper.Set(pipeZoneID, pipeZoneShort, raidMembers)
 			if playerStore == nil {
 				return
 			}
@@ -1931,7 +1968,7 @@ func main() {
 	}
 	defer mapStore.Close()
 
-	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, actualPort)
+	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, actualPort)
 
 	slog.Info("server starting", "addr", listener.Addr().String(), "db", *dbPath)
 	if err := http.Serve(listener, router); err != nil {
