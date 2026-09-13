@@ -62,7 +62,14 @@ function TimerRow({
   const urgent = pct < 0.2
   // Settings → Spell Timers can opt out of the red urgent-text color for
   // legibility; the bold/weight escalation below still applies either way.
+  // `color` itself already goes red under 20% via barColor() (it also drives
+  // the fill bar and pin icon, which should still redden) — so suppressing
+  // just showUrgentColor isn't enough for the countdown digits, which
+  // otherwise inherit that same red straight from `color`. timeColor is the
+  // countdown-specific override: white while urgent text is suppressed,
+  // `color` the rest of the time (never red when not urgent).
   const showUrgentColor = urgent && !appearance.urgentTextWhite
+  const timeColor = showUrgentColor ? '#f87171' : urgent ? 'rgba(255,255,255,1)' : color
   const onTarget = targetSuffix(timer.target_name, activePlayer)
 
   return (
@@ -123,7 +130,7 @@ function TimerRow({
         <span
           style={{
             fontSize: appearance.timeFontSize,
-            color: showUrgentColor ? '#f87171' : color,
+            color: timeColor,
             fontVariantNumeric: 'tabular-nums',
             flexShrink: 0,
             fontWeight: urgent ? 700 : 600,
