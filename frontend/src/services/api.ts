@@ -3069,6 +3069,30 @@ export function getActiveTriggerTest(): Promise<ActiveTriggerTest | null> {
   return get<ActiveTriggerTest | null>('/api/triggers/test-overlay/active')
 }
 
+export interface TimerAlertOverlayRequest {
+  /** Scopes the trigger overlay window's dedup key to this active timer
+   *  instance rather than the underlying trigger — two instances of the same
+   *  mez trigger on two different mobs must not suppress each other. */
+  timer_id: string
+  text: string
+  color: string
+  duration_secs: number
+  font_size?: number
+  glow_color?: string
+  font_family?: string
+  align?: string
+  position?: { x: number; y: number } | null
+}
+
+// fireTimerAlertOverlay pops an overlay_text "fading soon" threshold's alert
+// in the trigger overlay window. useTimerAlerts detects the remaining-seconds
+// crossing client-side (same as it already does for play_sound/text_to_speech
+// thresholds); this just relays the resolved text into the same trigger:fired
+// broadcast + rendering path a regular overlay_text Action uses.
+export function fireTimerAlertOverlay(req: TimerAlertOverlayRequest): Promise<void> {
+  return post<void>('/api/triggers/timer-alert-overlay', req)
+}
+
 // ── Backend server info / port testing ───────────────────────────────────────
 
 export interface ServerInfo {

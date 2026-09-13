@@ -605,12 +605,13 @@ func substituteCaptures(template string, match []string, names []string, builtin
 }
 
 // marshalTimerAlerts resolves capture references ({1}, $1, {name}, {target})
-// in each fading-soon threshold's TTSTemplate the same way substituteCaptures
-// does for action text (#149), then marshals the result for the spelltimer
-// sink. {spell} is deliberately left untouched — the spell name isn't known
-// at fire time and is filled in client-side (useTimerAlerts.ts) once the
-// timer carries a resolved SpellName. Returns nil when there are no alerts,
-// matching the previous zero-value alertJSON behavior.
+// in each fading-soon threshold's TTSTemplate and overlay-text Text the same
+// way substituteCaptures does for action text (#149), then marshals the
+// result for the spelltimer sink. {spell} is deliberately left untouched in
+// both — the spell name isn't known at fire time and is filled in
+// client-side (useTimerAlerts.ts) once the timer carries a resolved
+// SpellName. Returns nil when there are no alerts, matching the previous
+// zero-value alertJSON behavior.
 func marshalTimerAlerts(alerts []TimerAlert, match []string, names []string, builtins map[string]string) json.RawMessage {
 	if len(alerts) == 0 {
 		return nil
@@ -619,6 +620,7 @@ func marshalTimerAlerts(alerts []TimerAlert, match []string, names []string, bui
 	copy(resolved, alerts)
 	for i := range resolved {
 		resolved[i].TTSTemplate = substituteCaptures(resolved[i].TTSTemplate, match, names, builtins)
+		resolved[i].Text = substituteCaptures(resolved[i].Text, match, names, builtins)
 	}
 	buf, err := json.Marshal(resolved)
 	if err != nil {

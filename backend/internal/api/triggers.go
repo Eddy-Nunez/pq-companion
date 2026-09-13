@@ -991,6 +991,65 @@ func (h *triggerHandler) testOverlayEnd(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ── Timer fading-soon overlay alerts ─────────────────────────────────────────
+//
+// A trigger's "fading soon" thresholds (Trigger.TimerAlerts) are audio-only
+// on the backend — the spelltimer sink just carries the resolved TimerAlert
+// list along on each ActiveTimer, and the frontend's useTimerAlerts hook
+// detects the remaining-seconds crossing entirely client-side (it already
+// has everything it needs: the timer's own countdown). For an overlay_text
+// threshold, that crossing-detection still happens client-side, but the
+// actual popup has to render in the separate trigger-overlay Electron
+// window — so the hook POSTs here, and this reuses the exact same
+// trigger:fired broadcast + Action shape the trigger overlay window already
+// knows how to render (dedup, stacking, style, pinned position and all),
+// rather than teaching it a second event type.
+type fireTimerAlertOverlayRequest struct {
+	// TimerID scopes the trigger-overlay window's dedup key (see
+	// DEDUP_WINDOW_MS in TriggerOverlayWindowPage) to this specific active
+	// timer instance, not the underlying Trigger — two instances of the same
+	// mez trigger on two different mobs must not suppress each other.
+	TimerID      string                  `json:"timer_id"`
+	Text         string                  `json:"text"`
+	Color        string                  `json:"color"`
+	DurationSecs float64                 `json:"duration_secs"`
+	FontSize     int                     `json:"font_size,omitempty"`
+	GlowColor    string                  `json:"glow_color,omitempty"`
+	FontFamily   string                  `json:"font_family,omitempty"`
+	Align        string                  `json:"align,omitempty"`
+	Position     *trigger.ActionPosition `json:"position,omitempty"`
+}
+
+func (h *triggerHandler) fireTimerAlertOverlay(w http.ResponseWriter, r *http.Request) {
+	var req fireTimerAlertOverlayRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		writeError(w, http.StatusBadRequest, "text is required")
+		return
+	}
+	event := trigger.TriggerFired{
+		TriggerID:   req.TimerID,
+		TriggerName: req.Text,
+		Actions: []trigger.Action{{
+			Type:         trigger.ActionOverlayText,
+			Text:         req.Text,
+			DurationSecs: req.DurationSecs,
+			Color:        req.Color,
+			FontSize:     req.FontSize,
+			GlowColor:    req.GlowColor,
+			FontFamily:   req.FontFamily,
+			Align:        req.Align,
+			Position:     req.Position,
+		}},
+		FiredAt: time.Now(),
+	}
+	h.hub.Broadcast(ws.Event{Type: trigger.WSEventTriggerFired, Data: event})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // installBuiltinPack installs the named pre-built pack, replacing any existing
 // triggers for that pack.
 func (h *triggerHandler) installBuiltinPack(w http.ResponseWriter, r *http.Request) {

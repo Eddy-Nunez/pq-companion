@@ -561,6 +561,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Get("/test-overlay/active", triggerH.testOverlayActive)
 			r.Post("/test-overlay/position", triggerH.testOverlayPosition)
 			r.Post("/test-overlay/end", triggerH.testOverlayEnd)
+			r.Post("/timer-alert-overlay", triggerH.fireTimerAlertOverlay)
 		})
 	})
 

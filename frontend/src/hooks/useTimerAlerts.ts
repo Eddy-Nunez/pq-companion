@@ -1,7 +1,10 @@
 /**
  * useTimerAlerts — watches overlay:timers WebSocket events and fires
- * audio alerts when a timer's remaining_seconds crosses one of its
- * trigger-defined "fading soon" thresholds.
+ * audio or overlay-text alerts when a timer's remaining_seconds crosses one
+ * of its trigger-defined "fading soon" thresholds. Audio (play_sound/
+ * text_to_speech) fires directly from here; overlay_text instead POSTs to
+ * the backend so the popup can render in the separate trigger-overlay
+ * Electron window (see fireTimerAlertOverlay).
  *
  * Mount once at the App level (alongside useAudioEngine) so alerts fire
  * regardless of which page the user is on.
@@ -29,7 +32,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
-import { getConfig } from '../services/api'
+import { getConfig, fireTimerAlertOverlay } from '../services/api'
 import { playSound, speakText } from '../services/audio'
 import {
   BUFF_TIMER_ALERTS_KEY,
@@ -105,6 +108,19 @@ export function useTimerAlerts(): void {
             } else if (threshold.type === 'text_to_speech' && threshold.tts_template) {
               const text = threshold.tts_template.replace('{spell}', spellName)
               speakText(text, threshold.voice, threshold.tts_volume / 100)
+            } else if (threshold.type === 'overlay_text' && threshold.text) {
+              const text = threshold.text.replace('{spell}', spellName)
+              fireTimerAlertOverlay({
+                timer_id: timer.id,
+                text,
+                color: threshold.color || '',
+                duration_secs: threshold.duration_secs || 5,
+                font_size: threshold.font_size,
+                glow_color: threshold.glow_color,
+                font_family: threshold.font_family,
+                align: threshold.align,
+                position: threshold.position,
+              }).catch(() => {})
             }
           }
         }

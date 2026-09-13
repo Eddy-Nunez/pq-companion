@@ -7,7 +7,7 @@ export type ActionType =
 
 export type TimerType = 'none' | 'buff' | 'detrimental' | 'custom'
 
-export type TimerAlertType = 'play_sound' | 'text_to_speech'
+export type TimerAlertType = 'play_sound' | 'text_to_speech' | 'overlay_text'
 
 /**
  * One "fading soon" notification on a timer-bound trigger. Fires when the
@@ -23,6 +23,18 @@ export interface TimerAlertThreshold {
   tts_template: string // supports {spell} placeholder
   voice: string
   tts_volume: number   // 0–100
+
+  // Overlay-text fields, used only when type === 'overlay_text'. Mirror
+  // Action's overlay_text fields exactly — the same NotificationActionEditor
+  // renders both. text supports the same {spell} placeholder as tts_template.
+  text?: string
+  duration_secs?: number
+  color?: string
+  position?: ActionPosition | null
+  font_size?: number
+  glow_color?: string
+  font_family?: string
+  align?: string
 }
 
 /**

@@ -107,13 +107,17 @@ type Action struct {
 	WebhookID string `json:"webhook_id,omitempty"`
 }
 
-// TimerAlertType identifies the kind of audio alert fired when a timer-bound
+// TimerAlertType identifies the kind of alert fired when a timer-bound
 // trigger crosses one of its configured "fading soon" thresholds.
 type TimerAlertType string
 
 const (
 	TimerAlertTypePlaySound    TimerAlertType = "play_sound"
 	TimerAlertTypeTextToSpeech TimerAlertType = "text_to_speech"
+	// TimerAlertTypeOverlayText pops the same on-screen text alert a regular
+	// overlay_text Action would, in the trigger overlay window — see the
+	// overlay-text field block below.
+	TimerAlertTypeOverlayText TimerAlertType = "overlay_text"
 )
 
 // TimerAlert is a per-trigger "fading soon" notification that fires when the
@@ -129,6 +133,22 @@ type TimerAlert struct {
 	TTSTemplate string         `json:"tts_template"`
 	Voice       string         `json:"voice"`
 	TTSVolume   int            `json:"tts_volume"` // 0–100
+
+	// Overlay-text fields, used only when Type == TimerAlertTypeOverlayText.
+	// Mirror Action's overlay_text fields exactly (same shared editor renders
+	// both) so a fading-soon overlay alert looks and behaves identically to a
+	// regular trigger overlay_text action. Text supports the same {1}/$1/
+	// {target} capture substitution as TTSTemplate (resolved in
+	// marshalTimerAlerts) plus a {spell} token filled in client-side once the
+	// timer's resolved spell name is known — same convention as TTSTemplate.
+	Text         string          `json:"text,omitempty"`
+	DurationSecs float64         `json:"duration_secs,omitempty"`
+	Color        string          `json:"color,omitempty"`
+	Position     *ActionPosition `json:"position,omitempty"`
+	FontSize     int             `json:"font_size,omitempty"`
+	GlowColor    string          `json:"glow_color,omitempty"`
+	FontFamily   string          `json:"font_family,omitempty"`
+	Align        string          `json:"align,omitempty"`
 }
 
 // ExtraPattern is one additional match pattern on a log-source trigger,

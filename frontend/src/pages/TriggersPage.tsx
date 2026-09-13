@@ -218,7 +218,7 @@ function TimerAlertRow({ alert, voices, onChange, onRemove }: TimerAlertRowProps
           <NotificationTypeSelect
             value={alert.type}
             onChange={(t) => onChange({ ...alert, type: t as TimerAlertType })}
-            allowedTypes={['text_to_speech', 'play_sound']}
+            allowedTypes={['overlay_text', 'text_to_speech', 'play_sound']}
             className="rounded px-2 py-0.5 text-xs outline-none"
           />
         </div>
@@ -244,6 +244,26 @@ function TimerAlertRow({ alert, voices, onChange, onRemove }: TimerAlertRowProps
       <NotificationActionEditor
         type={alert.type}
         voices={voices}
+        overlayText={alert.text ?? ''}
+        overlayTextPlaceholder="{spell} expiring soon"
+        onOverlayTextChange={(v) => onChange({ ...alert, text: v })}
+        durationSecs={alert.duration_secs || 5}
+        onDurationSecsChange={(v) => onChange({ ...alert, duration_secs: v })}
+        color={alert.color ?? ''}
+        onColorChange={(v) => onChange({ ...alert, color: v })}
+        glowColor={alert.glow_color ?? ''}
+        onGlowColorChange={(v) => onChange({ ...alert, glow_color: v })}
+        fontFamily={alert.font_family ?? ''}
+        onFontFamilyChange={(v) => onChange({ ...alert, font_family: v })}
+        fontSize={alert.font_size ?? 0}
+        onFontSizeChange={(v) => onChange({ ...alert, font_size: v })}
+        align={alert.align ?? ''}
+        onAlignChange={(v) => onChange({ ...alert, align: v })}
+        onStyleReset={() =>
+          onChange({ ...alert, color: '', glow_color: '', font_family: '', font_size: 0, align: '' })
+        }
+        position={alert.position ?? null}
+        onPositionChange={(p) => onChange({ ...alert, position: p })}
         ttsText={alert.tts_template}
         onTtsTextChange={(v) => onChange({ ...alert, tts_template: v })}
         ttsTextPlaceholder="{spell} expiring soon"
