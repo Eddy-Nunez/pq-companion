@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
-import { getConfig, getTimerState } from '../services/api'
+import { getConfig, getTimerState, fireTimerAlertOverlay } from '../services/api'
 import { playSound, speakText } from '../services/audio'
 import {
   acceptNewAnchor,
@@ -64,12 +64,28 @@ function loadChainSelection(): ChainView {
   return localStorage.getItem(CHAIN_STORAGE_KEY) === 'ramp' ? 'ramp' : 'main'
 }
 
-function fire(pref: TimerAlertPref | undefined): void {
+// timerId distinguishes the start/cast cues in the trigger overlay window's
+// dedup key (see fireTimerAlertOverlay) — otherwise two alerts fired within
+// its 750ms window (unlikely but possible when delay is very short) would
+// suppress each other.
+function fire(pref: TimerAlertPref | undefined, timerId: string): void {
   if (!pref?.enabled) return
   if (pref.type === 'play_sound' && pref.sound_path) {
     playSound(pref.sound_path, pref.volume / 100)
   } else if (pref.type === 'text_to_speech' && pref.tts_template) {
     speakText(pref.tts_template, pref.voice, pref.tts_volume / 100)
+  } else if (pref.type === 'overlay_text' && pref.text) {
+    fireTimerAlertOverlay({
+      timer_id: timerId,
+      text: pref.text,
+      color: pref.color || '',
+      duration_secs: pref.duration_secs || 5,
+      font_size: pref.font_size,
+      glow_color: pref.glow_color,
+      font_family: pref.font_family,
+      align: pref.align,
+      position: pref.position,
+    }).catch(() => {})
   }
 }
 
@@ -231,11 +247,11 @@ export function useMetronomeAlerts(): void {
       const gated = !alertsEnabledRef.current || !overlayOpenRef.current
 
       if (startDue) {
-        if (!gated) fire(startPrefRef.current)
+        if (!gated) fire(startPrefRef.current, 'metronome-start')
         firedStartAnchorMsRef.current = anchor.anchorMs
       }
       if (castDue) {
-        if (!gated) fire(castPrefRef.current)
+        if (!gated) fire(castPrefRef.current, 'metronome-cast')
         firedCastAnchorMsRef.current = anchor.anchorMs
       }
     }, 100)

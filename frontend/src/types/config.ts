@@ -40,12 +40,25 @@ export const DEFAULT_NPC_OVERLAY_SECTIONS: NPCOverlaySections = {
 export interface TimerAlertPref {
   enabled: boolean
   seconds: number
-  type: 'play_sound' | 'text_to_speech'
+  type: 'play_sound' | 'text_to_speech' | 'overlay_text'
   sound_path: string
   volume: number
   tts_template: string
   voice: string
   tts_volume: number
+
+  // Overlay-text fields, used only when type === 'overlay_text'. Mirror
+  // TimerAlertThreshold's overlay-text fields exactly — the same
+  // NotificationActionEditor renders both. text supports the same
+  // {npc}/{spell} placeholder as tts_template.
+  text?: string
+  duration_secs?: number
+  color?: string
+  position?: { x: number; y: number } | null
+  font_size?: number
+  glow_color?: string
+  font_family?: string
+  align?: string
 }
 
 /**

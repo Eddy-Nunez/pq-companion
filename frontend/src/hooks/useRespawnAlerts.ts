@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
-import { getConfig } from '../services/api'
+import { getConfig, fireTimerAlertOverlay } from '../services/api'
 import { playSound, speakText } from '../services/audio'
 import { RESPAWN_ALERTS_KEY, loadAlertsEnabled } from '../lib/overlayAlertMute'
 import type { RespawnState } from '../types/respawn'
@@ -79,6 +79,19 @@ export function useRespawnAlerts(): void {
         } else if (pref.type === 'text_to_speech' && pref.tts_template) {
           const text = pref.tts_template.replace('{npc}', timer.npc_name)
           speakText(text, pref.voice, pref.tts_volume / 100)
+        } else if (pref.type === 'overlay_text' && pref.text) {
+          const text = pref.text.replace('{npc}', timer.npc_name)
+          fireTimerAlertOverlay({
+            timer_id: timer.id,
+            text,
+            color: pref.color || '',
+            duration_secs: pref.duration_secs || 5,
+            font_size: pref.font_size,
+            glow_color: pref.glow_color,
+            font_family: pref.font_family,
+            align: pref.align,
+            position: pref.position,
+          }).catch(() => {})
         }
       }
 

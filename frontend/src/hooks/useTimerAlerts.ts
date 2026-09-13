@@ -135,6 +135,19 @@ export function useTimerAlerts(): void {
             } else if (pref.type === 'text_to_speech' && pref.tts_template) {
               const text = pref.tts_template.replace('{spell}', spellName)
               speakText(text, pref.voice, pref.tts_volume / 100)
+            } else if (pref.type === 'overlay_text' && pref.text) {
+              const text = pref.text.replace('{spell}', spellName)
+              fireTimerAlertOverlay({
+                timer_id: timer.id,
+                text,
+                color: pref.color || '',
+                duration_secs: pref.duration_secs || 5,
+                font_size: pref.font_size,
+                glow_color: pref.glow_color,
+                font_family: pref.font_family,
+                align: pref.align,
+                position: pref.position,
+              }).catch(() => {})
             }
           }
         }

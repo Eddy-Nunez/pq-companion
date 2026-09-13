@@ -14,6 +14,14 @@ export function defaultTimerAlertPref(kind: TimerAlertKind): TimerAlertPref {
   // so they default louder than the other kinds' 80% to make sure they cut
   // through raid voice chat/game audio.
   const isMetronome = kind === 'metronome_start' || kind === 'metronome_cast'
+  // Shared across tts_template and text — an overlay_text alert should read
+  // exactly the same message a text_to_speech one would say.
+  const template =
+    kind === 'custom' ? '{spell} done'
+    : kind === 'respawn' ? '{npc} has re-spawned'
+    : kind === 'detrim' ? '{spell} fading soon'
+    : kind === 'metronome_start' ? 'Chain starting'
+    : 'Cast now'
   return {
     enabled: true,
     // Custom timers usually want a short heads-up before completion; respawns
@@ -25,14 +33,17 @@ export function defaultTimerAlertPref(kind: TimerAlertKind): TimerAlertPref {
     type: 'text_to_speech',
     sound_path: '',
     volume: isMetronome ? 100 : 80,
-    tts_template:
-      kind === 'custom' ? '{spell} done'
-      : kind === 'respawn' ? '{npc} has re-spawned'
-      : kind === 'detrim' ? '{spell} fading soon'
-      : kind === 'metronome_start' ? 'Chain starting'
-      : 'Cast now',
+    tts_template: template,
     voice: '',
     tts_volume: isMetronome ? 100 : 80,
+    text: template,
+    duration_secs: 5,
+    color: '',
+    position: null,
+    font_size: 0,
+    glow_color: '',
+    font_family: '',
+    align: '',
   }
 }
 
@@ -53,12 +64,23 @@ export function withTimerAlertDefaults(
   return {
     enabled: pref.enabled,
     seconds: Number.isFinite(pref.seconds) ? pref.seconds : d.seconds,
-    type: pref.type === 'play_sound' || pref.type === 'text_to_speech' ? pref.type : d.type,
+    type:
+      pref.type === 'play_sound' || pref.type === 'text_to_speech' || pref.type === 'overlay_text'
+        ? pref.type
+        : d.type,
     sound_path: pref.sound_path ?? d.sound_path,
     volume: pref.volume || d.volume,
     tts_template: pref.tts_template || d.tts_template,
     voice: pref.voice ?? d.voice,
     tts_volume: pref.tts_volume || d.tts_volume,
+    text: pref.text || d.text,
+    duration_secs: pref.duration_secs || d.duration_secs,
+    color: pref.color ?? d.color,
+    position: pref.position ?? d.position,
+    font_size: pref.font_size || d.font_size,
+    glow_color: pref.glow_color ?? d.glow_color,
+    font_family: pref.font_family ?? d.font_family,
+    align: pref.align ?? d.align,
   }
 }
 
@@ -82,6 +104,14 @@ export function customAlertThresholds(
       tts_template: pref.tts_template,
       voice: pref.voice,
       tts_volume: pref.tts_volume,
+      text: pref.text,
+      duration_secs: pref.duration_secs,
+      color: pref.color,
+      position: pref.position,
+      font_size: pref.font_size,
+      glow_color: pref.glow_color,
+      font_family: pref.font_family,
+      align: pref.align,
     },
   ]
 }

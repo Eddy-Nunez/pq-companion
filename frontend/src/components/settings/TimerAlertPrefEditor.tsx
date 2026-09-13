@@ -1,8 +1,8 @@
 // TimerAlertPrefEditor — settings control for a global TimerAlertPref (the
 // default fading-soon alert for the Custom Timer and Respawn overlays). It
-// reuses the trigger editor's NotificationActionEditor so the sound/TTS fields
-// (file picker, voice list, volume sliders, test buttons) match the per-trigger
-// experience exactly.
+// reuses the trigger editor's NotificationActionEditor so the sound/TTS/
+// overlay-text fields (file picker, voice list, volume sliders, style/
+// position controls, test buttons) match the per-trigger experience exactly.
 
 import React from 'react'
 import NotificationActionEditor, {
@@ -100,7 +100,7 @@ export default function TimerAlertPrefEditor({
               <NotificationTypeSelect
                 value={value.type}
                 onChange={(t) => onChange({ ...value, type: t as TimerAlertPref['type'] })}
-                allowedTypes={['text_to_speech', 'play_sound'] as NotificationActionType[]}
+                allowedTypes={['overlay_text', 'text_to_speech', 'play_sound'] as NotificationActionType[]}
                 className="rounded px-2 py-0.5 text-xs outline-none"
               />
             </div>
@@ -109,6 +109,26 @@ export default function TimerAlertPrefEditor({
           <NotificationActionEditor
             type={value.type}
             voices={voices}
+            overlayText={value.text ?? ''}
+            overlayTextPlaceholder={ttsPlaceholder}
+            onOverlayTextChange={(v) => onChange({ ...value, text: v })}
+            durationSecs={value.duration_secs || 5}
+            onDurationSecsChange={(v) => onChange({ ...value, duration_secs: v })}
+            color={value.color ?? ''}
+            onColorChange={(v) => onChange({ ...value, color: v })}
+            glowColor={value.glow_color ?? ''}
+            onGlowColorChange={(v) => onChange({ ...value, glow_color: v })}
+            fontFamily={value.font_family ?? ''}
+            onFontFamilyChange={(v) => onChange({ ...value, font_family: v })}
+            fontSize={value.font_size ?? 0}
+            onFontSizeChange={(v) => onChange({ ...value, font_size: v })}
+            align={value.align ?? ''}
+            onAlignChange={(v) => onChange({ ...value, align: v })}
+            onStyleReset={() =>
+              onChange({ ...value, color: '', glow_color: '', font_family: '', font_size: 0, align: '' })
+            }
+            position={value.position ?? null}
+            onPositionChange={(p) => onChange({ ...value, position: p })}
             ttsText={value.tts_template}
             onTtsTextChange={(v) => onChange({ ...value, tts_template: v })}
             ttsTextPlaceholder={ttsPlaceholder}

@@ -802,6 +802,20 @@ type TimerAlertPref struct {
 	TTSTemplate string `yaml:"tts_template,omitempty" json:"tts_template"`
 	Voice       string `yaml:"voice,omitempty" json:"voice"`
 	TTSVolume   int    `yaml:"tts_volume,omitempty" json:"tts_volume"`
+
+	// Overlay-text fields, used only when Type == "overlay_text". Mirror
+	// trigger.TimerAlert's overlay-text fields exactly (same shared editor
+	// renders both) — see that type's doc comment. Text supports the same
+	// {npc}/{spell} placeholder as TTSTemplate; substitution happens entirely
+	// client-side, same as every other field on this struct.
+	Text         string           `yaml:"text,omitempty" json:"text,omitempty"`
+	DurationSecs float64          `yaml:"duration_secs,omitempty" json:"duration_secs,omitempty"`
+	Color        string           `yaml:"color,omitempty" json:"color,omitempty"`
+	Position     *OverlayPosition `yaml:"position,omitempty" json:"position,omitempty"`
+	FontSize     int              `yaml:"font_size,omitempty" json:"font_size,omitempty"`
+	GlowColor    string           `yaml:"glow_color,omitempty" json:"glow_color,omitempty"`
+	FontFamily   string           `yaml:"font_family,omitempty" json:"font_family,omitempty"`
+	Align        string           `yaml:"align,omitempty" json:"align,omitempty"`
 }
 
 // Respawn-alert TTS default. The frontend mirrors these in
