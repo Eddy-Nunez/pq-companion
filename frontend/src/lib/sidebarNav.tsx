@@ -3,7 +3,7 @@ import {
   Sword, Sparkles, Skull, Map, Hammer, Activity, Layers, ScrollText, Zap,
   Users, Dice5, UserSearch, MessageSquare, Package, TrendingUp, BookOpen,
   Library, KeyRound, Hourglass, Star, Wand2, ListChecks, Percent, Store, PawPrint,
-  Flag, Swords, Keyboard, Route, Scale, Navigation,
+  Flag, Swords, Keyboard, Route, Scale, Navigation, ShieldCheck, PencilRuler,
 } from 'lucide-react'
 import type { Preferences } from '../types/config'
 
@@ -66,6 +66,14 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: '/pop-flags', label: 'PoP Flags', icon: <Flag size={16} />, flag: 'pop_flags_enabled' },
       { to: '/trader-tracker', label: 'Trader Tracker', icon: <Store size={16} /> },
       { to: '/characters/factions', label: 'Factions', icon: <Scale size={16} />, flag: 'faction_tracker_enabled' },
+    ],
+  },
+  {
+    id: 'raids',
+    label: 'Raids',
+    items: [
+      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} /> },
+      { to: '/raids/editor', label: 'Raid Editor', icon: <PencilRuler size={16} /> },
     ],
   },
   {

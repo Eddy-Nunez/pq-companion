@@ -25,6 +25,7 @@ import { useLogFeedSubscriber } from './hooks/useLogFeed'
 import ItemsPage from './pages/ItemsPage'
 import CombatLayout from './components/CombatLayout'
 import CharactersLayout from './components/CharactersLayout'
+import RaidsLayout from './components/RaidsLayout'
 import { DEV_HPS } from './lib/devFlags'
 import { ActiveCharacterProvider } from './contexts/ActiveCharacterContext'
 import { BackfillProvider } from './contexts/BackfillContext'
@@ -48,6 +49,8 @@ const SpellChecklistPage = lazy(() => import('./pages/SpellChecklistPage'))
 const InventoryTrackerPage = lazy(() => import('./pages/InventoryTrackerPage'))
 const KeyTrackerPage = lazy(() => import('./pages/KeyTrackerPage'))
 const LockoutTrackerPage = lazy(() => import('./pages/LockoutTrackerPage'))
+const RaidCheckPage = lazy(() => import('./pages/RaidCheckPage'))
+const RaidEditorPage = lazy(() => import('./pages/RaidEditorPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
 const FactionsPage = lazy(() => import('./pages/FactionsPage'))
 const LogFeedPage = lazy(() => import('./pages/LogFeedPage'))
@@ -351,6 +354,10 @@ export default function App(): React.ReactElement {
             <Route path="factions" element={<FactionsPage />} />
             <Route path="upgrades" element={<GearUpgradeFinderPage />} />
             <Route path="tasks" element={<CharacterTasksPage />} />
+          </Route>
+          <Route path="raids" element={<RaidsLayout />}>
+            <Route index element={<RaidCheckPage />} />
+            <Route path="editor" element={<RaidEditorPage />} />
           </Route>
           <Route path="character-progress" element={<Navigate to="/characters/progress" replace />} />
           <Route path="inventory-tracker" element={<Navigate to="/characters/inventory" replace />} />
