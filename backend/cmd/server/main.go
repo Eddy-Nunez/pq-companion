@@ -53,6 +53,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/trader"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/trigger"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/tts"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/wishlistauto"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/wishlistwatch"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/ws"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/zeal"
@@ -900,6 +901,57 @@ func main() {
 	)
 	wishlistWatcher.Rebuild()
 
+	// Wishlist auto-remover: clears an entry the moment its own character
+	// loots the item (see internal/wishlistauto for why this needs its own,
+	// stricter line match instead of reusing the watcher above). Entries
+	// flagged KeepAfterLoot — recurring farm targets — are left alone.
+	wishlistRemover := wishlistauto.NewRemover(
+		activeChar,
+		func() ([]wishlistauto.CharacterInfo, error) {
+			chars, err := charStore.List()
+			if err != nil {
+				return nil, err
+			}
+			out := make([]wishlistauto.CharacterInfo, len(chars))
+			for i, c := range chars {
+				out[i] = wishlistauto.CharacterInfo{ID: c.ID, Name: c.Name}
+			}
+			return out, nil
+		},
+		func(characterID int) ([]wishlistauto.WishlistEntry, error) {
+			entries, err := charStore.ListWishlist(characterID)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]wishlistauto.WishlistEntry, 0, len(entries))
+			for _, e := range entries {
+				it, err := database.GetItem(e.ItemID)
+				if err != nil || it == nil {
+					continue
+				}
+				out = append(out, wishlistauto.WishlistEntry{
+					EntryID:       e.ID,
+					ItemID:        e.ItemID,
+					ItemName:      it.Name,
+					KeepAfterLoot: e.KeepAfterLoot,
+				})
+			}
+			return out, nil
+		},
+		func(characterID, entryID int) error {
+			return charStore.DeleteWishlistEntry(characterID, entryID)
+		},
+	)
+	wishlistRemover.SetOnRemoved(func(rm wishlistauto.Removed) {
+		slog.Info("wishlistauto: removed looted item from wishlist",
+			"character", rm.CharacterName, "item", rm.Entry.ItemName)
+		hub.Broadcast(ws.Event{
+			Type: "wishlist:changed",
+			Data: map[string]int{"character_id": rm.CharacterID},
+		})
+		wishlistWatcher.Rebuild()
+	})
+
 	// Faction Tracker: a per-character tally of "Your faction standing with X
 	// got better/worse" lines for EVERY faction the character has killed
 	// toward or /con'd — not just pinned ones, the same "record everything
@@ -1677,6 +1729,7 @@ func main() {
 		}
 		triggerEngine.Handle(ts, msg)
 		wishlistWatcher.HandleLine(msg)
+		wishlistRemover.HandleLine(msg)
 		chChainMatcher.HandleLine(ts, msg)
 		chChainCastWatcher.HandleLine(ts, msg)
 		chChainInterruptWatcher.HandleLine(ts, msg)

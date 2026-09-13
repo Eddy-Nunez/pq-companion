@@ -3,6 +3,7 @@ package character
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,12 @@ type WishlistEntry struct {
 	SlotBucket  string `json:"slot_bucket"`
 	SortOrder   int    `json:"sort_order"`
 	CreatedAt   int64  `json:"created_at"`
+	// KeepAfterLoot marks an entry as a recurring target — tradeskill
+	// materials, quest turn-in components, anything the player wants more
+	// than one of — that auto-loot removal (see wishlistauto) must leave
+	// alone. Defaults to false: most wishlist entries are a single BiS gear
+	// piece the player wants exactly once, so looting it should clear it.
+	KeepAfterLoot bool `json:"keep_after_loot"`
 }
 
 // WishlistSlotLayout is the per-character layout for one slot bucket card:
@@ -28,6 +35,11 @@ type WishlistSlotLayout struct {
 	Position   int    `json:"position"`
 	Collapsed  bool   `json:"collapsed"`
 }
+
+// GeneralWishlistBucket holds non-equippable items (slots mask == 0) —
+// tradeskill materials, quest turn-in components, misc collectibles. Mirrors
+// frontend/src/lib/wishlistSlots.ts GENERAL_BUCKET — keep in sync.
+const GeneralWishlistBucket = "General"
 
 // CanonicalWishlistSlotOrder is the default top-to-bottom order of slot
 // buckets, mirroring the EQ character-sheet layout. Mirrors
@@ -63,6 +75,14 @@ func (s *Store) migrateWishlist() error {
 		)
 	`); err != nil {
 		return err
+	}
+	// keep_after_loot: added after initial release. 0/false for every
+	// pre-existing row, matching the "single BiS piece" default new entries
+	// get (see AddWishlistEntry).
+	if _, err := s.db.Exec(
+		`ALTER TABLE character_wishlist ADD COLUMN keep_after_loot INTEGER NOT NULL DEFAULT 0`,
+	); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("add keep_after_loot column: %w", err)
 	}
 	if _, err := s.db.Exec(
 		`CREATE INDEX IF NOT EXISTS idx_character_wishlist_char_sort
@@ -197,7 +217,7 @@ func (s *Store) backfillWishlistGlobalOrder() error {
 // order is preserved because items keep their relative global order.
 func (s *Store) ListWishlist(characterID int) ([]WishlistEntry, error) {
 	rows, err := s.db.Query(
-		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at
+		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at, keep_after_loot
 		 FROM character_wishlist
 		 WHERE character_id = ?
 		 ORDER BY sort_order, id`,
@@ -210,9 +230,11 @@ func (s *Store) ListWishlist(characterID int) ([]WishlistEntry, error) {
 	var out []WishlistEntry
 	for rows.Next() {
 		var e WishlistEntry
-		if err := rows.Scan(&e.ID, &e.CharacterID, &e.ItemID, &e.SlotBucket, &e.SortOrder, &e.CreatedAt); err != nil {
+		var keep int
+		if err := rows.Scan(&e.ID, &e.CharacterID, &e.ItemID, &e.SlotBucket, &e.SortOrder, &e.CreatedAt, &keep); err != nil {
 			return nil, err
 		}
+		e.KeepAfterLoot = keep != 0
 		out = append(out, e)
 	}
 	return out, rows.Err()
@@ -223,7 +245,7 @@ func (s *Store) ListWishlist(characterID int) ([]WishlistEntry, error) {
 // to render its current state.
 func (s *Store) ListWishlistForItem(characterID, itemID int) ([]WishlistEntry, error) {
 	rows, err := s.db.Query(
-		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at
+		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at, keep_after_loot
 		 FROM character_wishlist
 		 WHERE character_id = ? AND item_id = ?
 		 ORDER BY slot_bucket`,
@@ -236,9 +258,11 @@ func (s *Store) ListWishlistForItem(characterID, itemID int) ([]WishlistEntry, e
 	var out []WishlistEntry
 	for rows.Next() {
 		var e WishlistEntry
-		if err := rows.Scan(&e.ID, &e.CharacterID, &e.ItemID, &e.SlotBucket, &e.SortOrder, &e.CreatedAt); err != nil {
+		var keep int
+		if err := rows.Scan(&e.ID, &e.CharacterID, &e.ItemID, &e.SlotBucket, &e.SortOrder, &e.CreatedAt, &keep); err != nil {
 			return nil, err
 		}
+		e.KeepAfterLoot = keep != 0
 		out = append(out, e)
 	}
 	return out, rows.Err()
@@ -247,15 +271,17 @@ func (s *Store) ListWishlistForItem(characterID, itemID int) ([]WishlistEntry, e
 // AddWishlistEntry appends a new entry at the bottom of the character's
 // global ordering. Filtered into its slot card, it lands at the bottom of
 // that card too. On unique conflict returns the existing row unmodified.
-func (s *Store) AddWishlistEntry(characterID, itemID int, slotBucket string) (WishlistEntry, error) {
+func (s *Store) AddWishlistEntry(characterID, itemID int, slotBucket string, keepAfterLoot bool) (WishlistEntry, error) {
 	var existing WishlistEntry
+	var keep int
 	err := s.db.QueryRow(
-		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at
+		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at, keep_after_loot
 		 FROM character_wishlist
 		 WHERE character_id = ? AND item_id = ? AND slot_bucket = ?`,
 		characterID, itemID, slotBucket,
-	).Scan(&existing.ID, &existing.CharacterID, &existing.ItemID, &existing.SlotBucket, &existing.SortOrder, &existing.CreatedAt)
+	).Scan(&existing.ID, &existing.CharacterID, &existing.ItemID, &existing.SlotBucket, &existing.SortOrder, &existing.CreatedAt, &keep)
 	if err == nil {
+		existing.KeepAfterLoot = keep != 0
 		return existing, nil
 	}
 	if err != sql.ErrNoRows {
@@ -274,23 +300,95 @@ func (s *Store) AddWishlistEntry(characterID, itemID int, slotBucket string) (Wi
 		pos = int(maxPos.Int64) + 1
 	}
 	now := time.Now().Unix()
+	keepInt := 0
+	if keepAfterLoot {
+		keepInt = 1
+	}
 	res, err := s.db.Exec(
-		`INSERT INTO character_wishlist (character_id, item_id, slot_bucket, sort_order, created_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		characterID, itemID, slotBucket, pos, now,
+		`INSERT INTO character_wishlist (character_id, item_id, slot_bucket, sort_order, created_at, keep_after_loot)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		characterID, itemID, slotBucket, pos, now, keepInt,
 	)
 	if err != nil {
 		return WishlistEntry{}, fmt.Errorf("create wishlist entry: %w", err)
 	}
 	id, _ := res.LastInsertId()
 	return WishlistEntry{
-		ID:          int(id),
-		CharacterID: characterID,
-		ItemID:      itemID,
-		SlotBucket:  slotBucket,
-		SortOrder:   pos,
-		CreatedAt:   now,
+		ID:            int(id),
+		CharacterID:   characterID,
+		ItemID:        itemID,
+		SlotBucket:    slotBucket,
+		SortOrder:     pos,
+		CreatedAt:     now,
+		KeepAfterLoot: keepAfterLoot,
 	}, nil
+}
+
+// SetWishlistKeepAfterLoot toggles whether an entry survives auto-loot
+// removal (see wishlistauto) — the escape hatch for recurring farm targets
+// (tradeskill materials, quest components) that a gear-upgrade entry doesn't
+// need. Scoped to characterID so a malformed request can't touch another
+// character's entry.
+func (s *Store) SetWishlistKeepAfterLoot(characterID, entryID int, keep bool) error {
+	keepInt := 0
+	if keep {
+		keepInt = 1
+	}
+	_, err := s.db.Exec(
+		`UPDATE character_wishlist SET keep_after_loot = ? WHERE id = ? AND character_id = ?`,
+		keepInt, entryID, characterID,
+	)
+	return err
+}
+
+// RemoveLootedWishlistEntries deletes every entry for (characterID, itemID)
+// that isn't flagged KeepAfterLoot, and returns the entries it removed so the
+// caller can notify the player. Called from wishlistauto when the character's
+// own loot line names an item on their wishlist.
+func (s *Store) RemoveLootedWishlistEntries(characterID, itemID int) ([]WishlistEntry, error) {
+	rows, err := s.db.Query(
+		`SELECT id, character_id, item_id, slot_bucket, sort_order, created_at, keep_after_loot
+		 FROM character_wishlist
+		 WHERE character_id = ? AND item_id = ? AND keep_after_loot = 0`,
+		characterID, itemID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var removed []WishlistEntry
+	for rows.Next() {
+		var e WishlistEntry
+		var keep int
+		if err := rows.Scan(&e.ID, &e.CharacterID, &e.ItemID, &e.SlotBucket, &e.SortOrder, &e.CreatedAt, &keep); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		e.KeepAfterLoot = keep != 0
+		removed = append(removed, e)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	if len(removed) == 0 {
+		return nil, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	for _, e := range removed {
+		if _, err := tx.Exec(`DELETE FROM character_wishlist WHERE id = ?`, e.ID); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return removed, nil
 }
 
 // DeleteWishlistEntry removes a single entry by id. Scoped to characterID so

@@ -17,6 +17,11 @@ export interface WishlistEntry {
   // (filtered to a bucket) and the flat "All items" view.
   sort_order: number
   created_at: number
+  // When true, looting this item does NOT clear it from the wishlist — for
+  // recurring farm targets (tradeskill materials, quest components) the
+  // player wants to keep tracking after getting one. Defaults to false for
+  // equippable gear (a single BiS piece), true for the General bucket.
+  keep_after_loot: boolean
   item?: WishlistItemBrief
 }
 

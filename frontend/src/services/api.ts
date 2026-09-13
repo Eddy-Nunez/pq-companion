@@ -150,6 +150,21 @@ async function put<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const baseUrl = await getBackendBaseUrl()
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error ?? res.statusText)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
 async function del<T = void>(path: string): Promise<T> {
   const baseUrl = await getBackendBaseUrl()
   const res = await fetch(`${baseUrl}${path}`, { method: 'DELETE' })
@@ -2588,6 +2603,18 @@ export function addWishlistEntries(
 
 export function deleteWishlistEntry(charID: number, entryID: number): Promise<void> {
   return del(`/api/characters/${charID}/wishlist/${entryID}`)
+}
+
+// updateWishlistKeepAfterLoot toggles whether looting this item should leave
+// it on the wishlist (a recurring farm target) instead of auto-removing it.
+export function updateWishlistKeepAfterLoot(
+  charID: number,
+  entryID: number,
+  keepAfterLoot: boolean,
+): Promise<void> {
+  return patch<void>(`/api/characters/${charID}/wishlist/${entryID}`, {
+    keep_after_loot: keepAfterLoot,
+  })
 }
 
 // Sends the character's full ordered entry-id list. Backend rejects the call

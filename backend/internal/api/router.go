@@ -318,6 +318,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Put("/{id}/wishlist/reorder", wishlistH.reorder)
 			r.Put("/{id}/wishlist/slot-layout", wishlistH.updateSlotLayout)
 			r.Delete("/{id}/wishlist/{entryID}", wishlistH.del)
+			r.Patch("/{id}/wishlist/{entryID}", wishlistH.update)
 			r.Get("/{id}/faction-wishlist", factionsH.listWishlist)
 			r.Post("/{id}/faction-wishlist", factionsH.addWishlist)
 			r.Delete("/{id}/faction-wishlist/{factionID}", factionsH.deleteWishlist)

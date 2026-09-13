@@ -14,6 +14,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Bell,
+  Repeat,
 } from 'lucide-react'
 import {
   DndContext,
@@ -40,6 +41,7 @@ import {
   deleteWishlistEntry,
   reorderWishlist,
   updateWishlistSlotLayout,
+  updateWishlistKeepAfterLoot,
   getItem,
   getItemSources,
   type Character,
@@ -47,6 +49,8 @@ import {
 import type { Item, ItemSources } from '../types/item'
 import type { WishlistEntry, WishlistSlotLayout } from '../types/wishlist'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
+import { useWebSocket, type WsMessage } from '../hooks/useWebSocket'
+import { WSEvent } from '../lib/wsEvents'
 import CharacterSubTabs from '../components/CharacterSubTabs'
 import ItemSearchModal from '../components/ItemSearchModal'
 import WishlistSlotPicker from '../components/WishlistSlotPicker'
@@ -196,6 +200,7 @@ interface WishlistRowProps {
   showSlotBadge?: boolean
   onOpenItem: (item: { id: number; name: string; icon: number }) => void
   onDelete: () => void
+  onToggleKeep: () => void
 }
 
 function WishlistRow({
@@ -204,6 +209,7 @@ function WishlistRow({
   showSlotBadge,
   onOpenItem,
   onDelete,
+  onToggleKeep,
 }: WishlistRowProps): React.ReactElement {
   const item = entry.item
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -260,6 +266,18 @@ function WishlistRow({
         </div>
       </div>
       <button
+        onClick={onToggleKeep}
+        className="shrink-0 rounded p-1"
+        style={{ color: entry.keep_after_loot ? 'var(--color-primary)' : 'var(--color-muted)' }}
+        title={
+          entry.keep_after_loot
+            ? 'Kept on wishlist after looting (farm target) — click to auto-remove once looted instead'
+            : 'Auto-removed once looted — click to keep on wishlist instead (farm target)'
+        }
+      >
+        <Repeat size={14} />
+      </button>
+      <button
         onClick={onDelete}
         className="shrink-0 rounded p-1"
         style={{ color: 'var(--color-muted)' }}
@@ -281,6 +299,7 @@ interface WishlistCardProps {
   onToggleCollapsed: () => void
   onOpenItem: (item: { id: number; name: string; icon: number }) => void
   onDelete: (entry: WishlistEntry) => void
+  onToggleKeep: (entry: WishlistEntry) => void
 }
 
 function WishlistCard({
@@ -291,6 +310,7 @@ function WishlistCard({
   onToggleCollapsed,
   onOpenItem,
   onDelete,
+  onToggleKeep,
 }: WishlistCardProps): React.ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `${CARD_PREFIX}${bucket}`,
@@ -363,6 +383,7 @@ function WishlistCard({
                 sources={sourcesCache.get(entry.item_id) ?? null}
                 onOpenItem={onOpenItem}
                 onDelete={() => onDelete(entry)}
+                onToggleKeep={() => onToggleKeep(entry)}
               />
             ))}
           </SortableContext>
@@ -534,6 +555,20 @@ export default function WishlistPage(): React.ReactElement {
     load()
   }, [load])
 
+  // Auto-loot removal happens server-side off the log stream — not a click
+  // on this page — so pick up wishlist:changed live instead of only on our
+  // own add/delete calls, the same event useWishlistItemIds refreshes on.
+  useWebSocket(
+    useCallback(
+      (msg: WsMessage) => {
+        if (msg.type !== WSEvent.WishlistChanged) return
+        const data = msg.data as { character_id?: number } | undefined
+        if (!viewedCharID || data?.character_id === viewedCharID) load()
+      },
+      [viewedCharID, load],
+    ),
+  )
+
   useEffect(() => {
     const ids = new Set(entries.map((e) => e.item_id))
     for (const id of ids) {
@@ -614,6 +649,20 @@ export default function WishlistPage(): React.ReactElement {
 
   function handleOpenItem(brief: { id: number }) {
     getItem(brief.id).then(setDetailItem).catch(() => undefined)
+  }
+
+  // Optimistic: flip the icon immediately, and roll back only if the PATCH
+  // fails — matches how the rest of the page treats fast, low-stakes toggles.
+  function handleToggleKeep(entry: WishlistEntry) {
+    if (!viewedCharID) return
+    const next = !entry.keep_after_loot
+    setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, keep_after_loot: next } : e)))
+    updateWishlistKeepAfterLoot(viewedCharID, entry.id, next).catch((err: Error) => {
+      setEntries((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, keep_after_loot: entry.keep_after_loot } : e)),
+      )
+      setError(err.message)
+    })
   }
 
   // ── Layout persistence ──────────────────────────────────────────────────────
@@ -906,6 +955,7 @@ export default function WishlistPage(): React.ReactElement {
                     }
                     onOpenItem={handleOpenItem}
                     onDelete={(entry) => setPendingDelete(entry)}
+                    onToggleKeep={handleToggleKeep}
                   />
                 ))}
               </div>
@@ -933,6 +983,7 @@ export default function WishlistPage(): React.ReactElement {
                     showSlotBadge
                     onOpenItem={handleOpenItem}
                     onDelete={() => setPendingDelete(entry)}
+                    onToggleKeep={() => handleToggleKeep(entry)}
                   />
                 ))}
               </div>

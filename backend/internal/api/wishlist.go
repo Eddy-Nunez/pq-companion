@@ -61,12 +61,13 @@ type wishlistItemBrief struct {
 }
 
 type wishlistRow struct {
-	ID         int                `json:"id"`
-	ItemID     int                `json:"item_id"`
-	SlotBucket string             `json:"slot_bucket"`
-	SortOrder  int                `json:"sort_order"`
-	CreatedAt  int64              `json:"created_at"`
-	Item       *wishlistItemBrief `json:"item,omitempty"`
+	ID            int                `json:"id"`
+	ItemID        int                `json:"item_id"`
+	SlotBucket    string             `json:"slot_bucket"`
+	SortOrder     int                `json:"sort_order"`
+	CreatedAt     int64              `json:"created_at"`
+	KeepAfterLoot bool               `json:"keep_after_loot"`
+	Item          *wishlistItemBrief `json:"item,omitempty"`
 }
 
 type wishlistListResponse struct {
@@ -102,11 +103,12 @@ func (h *wishlistHandler) list(w http.ResponseWriter, r *http.Request) {
 	rows := make([]wishlistRow, 0, len(entries))
 	for _, e := range entries {
 		row := wishlistRow{
-			ID:         e.ID,
-			ItemID:     e.ItemID,
-			SlotBucket: e.SlotBucket,
-			SortOrder:  e.SortOrder,
-			CreatedAt:  e.CreatedAt,
+			ID:            e.ID,
+			ItemID:        e.ItemID,
+			SlotBucket:    e.SlotBucket,
+			SortOrder:     e.SortOrder,
+			CreatedAt:     e.CreatedAt,
+			KeepAfterLoot: e.KeepAfterLoot,
 		}
 		if it, err := h.db.GetItem(e.ItemID); err == nil && it != nil {
 			row.Item = &wishlistItemBrief{
@@ -126,6 +128,23 @@ func (h *wishlistHandler) list(w http.ResponseWriter, r *http.Request) {
 type wishlistAddRequest struct {
 	ItemID int      `json:"item_id"`
 	Slots  []string `json:"slots"`
+	// KeepAfterLoot overrides the default "auto-remove once looted" behavior
+	// for every slot in this request — a pointer so an omitted field falls
+	// back to the per-slot default (see defaultKeepAfterLoot) rather than
+	// forcing false. Used for recurring farm targets (tradeskill materials,
+	// quest turn-in components) the player wants to keep tracking after
+	// getting one.
+	KeepAfterLoot *bool `json:"keep_after_loot,omitempty"`
+}
+
+// defaultKeepAfterLoot picks the auto-remove default when the request
+// doesn't specify one: equippable gear (any real worn-slot bucket) is
+// almost always a single BiS piece, so looting it should clear the entry;
+// the General bucket (non-equippable — tradeskill mats, quest components,
+// misc collectibles) is more often something farmed repeatedly, so it
+// defaults to persisting instead.
+func defaultKeepAfterLoot(slotBucket string) bool {
+	return slotBucket == character.GeneralWishlistBucket
 }
 
 func (h *wishlistHandler) add(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +189,11 @@ func (h *wishlistHandler) add(w http.ResponseWriter, r *http.Request) {
 	}
 	created := make([]character.WishlistEntry, 0, len(req.Slots))
 	for _, slot := range req.Slots {
-		entry, err := h.store.AddWishlistEntry(charID, req.ItemID, slot)
+		keep := defaultKeepAfterLoot(slot)
+		if req.KeepAfterLoot != nil {
+			keep = *req.KeepAfterLoot
+		}
+		entry, err := h.store.AddWishlistEntry(charID, req.ItemID, slot, keep)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -197,6 +220,37 @@ func (h *wishlistHandler) del(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.broadcastChanged(charID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type wishlistUpdateRequest struct {
+	KeepAfterLoot bool `json:"keep_after_loot"`
+}
+
+// update handles PATCH /api/characters/{id}/wishlist/{entryID} — currently
+// just the KeepAfterLoot toggle (whether auto-loot removal should leave this
+// entry alone). Doesn't broadcast wishlist:changed: membership hasn't
+// changed, only a per-entry setting the frontend already holds locally.
+func (h *wishlistHandler) update(w http.ResponseWriter, r *http.Request) {
+	charID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid character id")
+		return
+	}
+	entryID, err := strconv.Atoi(chi.URLParam(r, "entryID"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid entry id")
+		return
+	}
+	var req wishlistUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.store.SetWishlistKeepAfterLoot(charID, entryID, req.KeepAfterLoot); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
