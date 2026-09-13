@@ -9,6 +9,19 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.21.2 — 2026-09-12
+
+Overlay Text joins the fading-soon alert types for both triggers and the global spell-timer defaults, timer overlays get bottom-up stacking and a white urgent-text option, and the Wishlist can auto-clear an entry when you loot it yourself.
+
+### Highlights
+- **Overlay Text as a fading-soon alert type** — a trigger's "fading soon" threshold alerts previously only offered Play Sound and Text to Speech; Overlay Text is now a third option, with the same style/position controls as a regular trigger action. Settings → Spell Timers' four global fading-soon defaults (Custom timer, Respawn, Detrimental timer, and CH Metronome start/cast cues) gained the same option.
+- **Bottom-up stacking and white urgent-text for timer overlays** — two new toggles under Settings → Spell Timers → Timer bar appearance: rows can stack upward from the bottom of the window instead of growing down from the header, and the red urgent-text color that kicks in under 20% time remaining can be turned off in favor of the row's normal color (still bolds) for legibility. The white-text toggle now covers the countdown digits as well as the spell name — an initial pass only caught the name, since the digits' color is driven independently by the same 20%-threshold logic that reddens the depleting fill bar.
+- **Wishlist entries can auto-remove themselves on self-loot** — an entry now clears automatically when your own character loots that item, detected off the same anchored self-loot log line the loot tracker uses (a raid drop call or chat mention of the item never triggers it). Since recurring farm targets like tradeskill materials shouldn't vanish after one loot, each entry has a "keep after loot" toggle — off by default for equippable-gear buckets, on by default for the General (non-equippable) bucket.
+- **Built-in Slows trigger pack** — covers Beastlord, Shaman, Enchanter, Bard, Ranger, Necromancer, and Rogue slows plus a few NPC-cast ones, converted from a community NAG export and fixed up after in-game testing: per-target timers now actually key off the slowed mob's name instead of colliding into one row, two durations were corrected against the level-60 spell formula (Ranger's Earthcall, Rogue's Paralyzing Poison I), and a "Generic Slow (Vas Ren)" trigger was added for the raid-mob slow line that no single spell ID covers.
+
+### Fixes
+- **Gear Upgrade Finder no longer suggests a LORE item you already have equipped in the paired slot** — some LORE items exist as several duplicate-name database rows with identical stats; the finder's worn/lore dedup check compared a live character's raw item id directly against its canonicalized candidate list and missed the match, so a ring or item already worn on one slot (e.g. Finger 2) could still be suggested as an "upgrade" for the other (Finger 1).
+
 ## v0.21.1 — 2026-09-09
 
 Log Backfill can now replay your archived logs, not just the live file, and AA gains are counted correctly on the Project Quarm client.
