@@ -50,10 +50,15 @@ func (r CompRow) Path() string {
 // Strategy are child tables. ZoneID is the EQ zoneidnumber (what the Zeal
 // pipe reports as Zone), resolved from the zone catalog; 0 = not set.
 type Encounter struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Zone      string            `json:"zone"`
-	ZoneID    int               `json:"zone_id,omitempty"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Zone   string `json:"zone"`
+	ZoneID int    `json:"zone_id,omitempty"`
+	// NPCID links this encounter to its boss's npc_types row (quarm.db), so
+	// the checker page can pull resists / HP / special abilities / signature
+	// spells straight from the game database instead of duplicating them.
+	// 0 = not linked.
+	NPCID     int               `json:"npc_id,omitempty"`
 	Status    Status            `json:"status"`
 	Trigger   string            `json:"trigger,omitempty"`
 	Reqs      []string          `json:"reqs,omitempty"`
@@ -87,6 +92,9 @@ func (e *Encounter) Validate() error {
 	}
 	if e.ZoneID < 0 {
 		return errors.New("raidcomp: zone_id must be >= 0")
+	}
+	if e.NPCID < 0 {
+		return errors.New("raidcomp: npc_id must be >= 0")
 	}
 	if e.Status != StatusActive && e.Status != StatusPlaceholder {
 		return fmt.Errorf("raidcomp: invalid status %q (want active|placeholder)", e.Status)
@@ -201,14 +209,19 @@ func (s *Store) migrate() error {
 		}
 	}
 	// Versioned column adds — CREATE IF NOT EXISTS doesn't evolve existing
-	// tables, so ADD COLUMN guards run separately.
-	for _, col := range []string{"zone_id"} {
+	// tables, so ADD COLUMN guards run separately. DDL can't be parameterized,
+	// so each column carries its own ALTER statement.
+	addColumns := map[string]string{
+		"zone_id": `ALTER TABLE raid_encounters ADD COLUMN zone_id INTEGER NOT NULL DEFAULT 0`,
+		"npc_id":  `ALTER TABLE raid_encounters ADD COLUMN npc_id INTEGER NOT NULL DEFAULT 0`,
+	}
+	for _, col := range []string{"zone_id", "npc_id"} {
 		var n int
 		if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('raid_encounters') WHERE name = ?`, col).Scan(&n); err != nil {
 			return err
 		}
 		if n == 0 {
-			if _, err := s.db.Exec(`ALTER TABLE raid_encounters ADD COLUMN zone_id INTEGER NOT NULL DEFAULT 0`); err != nil {
+			if _, err := s.db.Exec(addColumns[col]); err != nil {
 				return fmt.Errorf("raidcomp migrate add column %s: %w", col, err)
 			}
 		}
@@ -444,13 +457,13 @@ func (s *Store) SaveEncounter(e *Encounter) error {
 		return err
 	}
 	if _, err := tx.Exec(`
-		INSERT INTO raid_encounters (id, name, zone, zone_id, status, trigger, source, notes, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO raid_encounters (id, name, zone, zone_id, npc_id, status, trigger, source, notes, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			name = excluded.name, zone = excluded.zone, zone_id = excluded.zone_id,
+			name = excluded.name, zone = excluded.zone, zone_id = excluded.zone_id, npc_id = excluded.npc_id,
 			status = excluded.status, trigger = excluded.trigger, source = excluded.source,
 			notes = excluded.notes, updated_at = excluded.updated_at
-	`, e.ID, e.Name, e.Zone, e.ZoneID, string(e.Status), e.Trigger, e.Source, e.Notes, created, now); err != nil {
+	`, e.ID, e.Name, e.Zone, e.ZoneID, e.NPCID, string(e.Status), e.Trigger, e.Source, e.Notes, created, now); err != nil {
 		return fmt.Errorf("insert encounter %q: %w", e.ID, err)
 	}
 
@@ -511,7 +524,7 @@ type encounterRow struct {
 // ListEncounters returns all encounters with full children, ordered by id.
 func (s *Store) ListEncounters() ([]Encounter, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, zone, zone_id, status, trigger, source, notes, created_at, updated_at
+		SELECT id, name, zone, zone_id, npc_id, status, trigger, source, notes, created_at, updated_at
 		FROM raid_encounters ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -520,7 +533,7 @@ func (s *Store) ListEncounters() ([]Encounter, error) {
 	var out []encounterRow
 	for rows.Next() {
 		var er encounterRow
-		if err := rows.Scan(&er.e.ID, &er.e.Name, &er.e.Zone, &er.e.ZoneID, &er.e.Status, &er.e.Trigger,
+		if err := rows.Scan(&er.e.ID, &er.e.Name, &er.e.Zone, &er.e.ZoneID, &er.e.NPCID, &er.e.Status, &er.e.Trigger,
 			&er.e.Source, &er.e.Notes, &er.e.CreatedAt, &er.e.UpdatedAt); err != nil {
 			return nil, err
 		}
