@@ -9,6 +9,19 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.22.0-beta.2 — 2026-09-13
+
+Second unofficial dogfood build of the Raid Composition feature set, built from the `feat/raid-composition` branch on a fork of PQ Companion. The maintainer's release notes remain authoritative for the app as a whole.
+
+### Fixes since v0.22.0-beta.1
+- **Live encounter detection** — the roster snapshot's zone went stale whenever the raid zoned without a membership change (and read as "no zone" when a raid arrived before the first player tick), so detection silently failed. Detection now always compares against the zone Zeal is currently reporting. The Raid Composition page also polls the roster every 5 s, so joining a raid is picked up without a manual Refresh.
+- **Encounter dropdown ordering** — encounters in your current zone now sort to the top of the dropdown (exact zone-id matches first, then name matches); detection and the auto-run first check use the same ordering.
+- **Refresh button** — always enabled, with a spinning icon while it re-checks Zeal connectivity and the roster (it previously gave no feedback and looked disabled).
+- The "Detected encounter for zone …" banner is now a dev-only diagnostic and no longer shown in normal builds.
+
+### Notes
+- Pre-release fork build for guild dogfooding; not the official release. Auto-updates are not effective on this build — install new builds manually.
+
 ## v0.22.0-beta.1 — 2026-09-13
 
 Unofficial dogfood build of the Raid Composition feature set, built from the `feat/raid-composition` branch on a fork of PQ Companion. The maintainer's release notes remain authoritative for the app as a whole.
