@@ -141,6 +141,10 @@ function FlagsPanel(): React.ReactElement {
   const raidThreatEnabled = Boolean(config?.preferences?.raid_threat_enabled)
   const toggleRaidThreat = (): void => savePrefs({ raid_threat_enabled: !raidThreatEnabled })
 
+  // ── Raid Composition ──────────────────────────────────────────────────
+  const raidsEnabled = Boolean(config?.preferences?.raids_enabled)
+  const toggleRaids = (): void => savePrefs({ raids_enabled: !raidsEnabled })
+
   return (
     <div className="flex flex-col gap-4">
       <div
@@ -320,6 +324,48 @@ function FlagsPanel(): React.ReactElement {
             }}
           >
             {factionTrackerEnabled ? 'Enabled' : 'Disabled'}
+          </button>
+        </div>
+      </section>
+
+      {/* ── Raid Composition ────────────────────────────────────── */}
+      <section
+        className="rounded-lg p-4"
+        style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <FlaskConical size={14} style={{ color: 'var(--color-primary)' }} />
+          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+            Raid Composition
+          </h2>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+            Adds a <strong>Raids</strong> section: a user-editable role taxonomy,
+            an encounter knowledge base, and a MIN/REC composition checker
+            compared against the live Zeal raid roster (or a manually-entered
+            one). Contributed by Eddy Nunez (Intervention), ported from his
+            eqmon project. The knowledge base ships with a single seeded
+            encounter (Avatar of War) — add your own via the Raid Editor.
+            Candidate names on a short row are class-eligible members, not
+            actual assignments, so the same person can be counted toward more
+            than one role&rsquo;s need at once; treat the report as a staffing
+            guide, not a final call.
+          </p>
+          <button
+            type="button"
+            onClick={toggleRaids}
+            disabled={!config || saving}
+            className="shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: raidsEnabled ? 'var(--color-primary)' : 'var(--color-surface-2)',
+              color: raidsEnabled ? 'var(--color-background)' : 'var(--color-muted-foreground)',
+              border: '1px solid var(--color-border)',
+              cursor: !config || saving ? 'default' : 'pointer',
+              opacity: !config || saving ? 0.6 : 1,
+            }}
+          >
+            {raidsEnabled ? 'Enabled' : 'Disabled'}
           </button>
         </div>
       </section>
