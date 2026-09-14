@@ -73,6 +73,16 @@ a future data source fix this?" column against the new capabilities.
   gnoll" line. Combat holding distinct per-instance rows keyed by `target_id`
   is a possible future step; true multi-same-name AoE splitting still needs a
   per-hit id the log will never have.
+- **Spell-timer update (2026-09-14):** the same `target_id` now separates
+  same-named *detrimental timer* rows (e.g. two "a gnoll"s both slowed by
+  the built-in Slows pack) in the one case it actually can: the caster's
+  own client, for their own self-cast detrimental, correlated to their live
+  target at the moment of their "You begin casting" line
+  (`spelltimer.Engine.keyTargetTokenLocked`). It does nothing for a
+  detrimental cast by someone else in the raid (no cast-start line for
+  their cast reaches this client) or an NPC-cast one (no cast-start line at
+  all) — those still collide on name, for the same reason as everything
+  else in this section.
 
 ### 1.4 Pet / charmed-pet damage attribution requires inference
 
