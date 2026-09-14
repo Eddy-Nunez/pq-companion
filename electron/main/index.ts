@@ -3306,6 +3306,32 @@ ipcMain.handle('overlay:position-mode:set', (_event, enabled: boolean) => {
   setOverlayPositionMode(Boolean(enabled))
 })
 
+// ── IPC handlers — raid selection relay ──────────────────────────────────────
+
+// The Raid Composition check page is the only surface with an encounter
+// picker; both Raid Readiness views (dashboard panel + popout overlay)
+// render the same useRaidReadiness hook in their own window and must mirror
+// whatever it selects. Relay manual picks to every window that renders the
+// hook, and remember the last pick so a popout opened later can adopt it.
+let lastRaidSelection = ''
+
+function broadcastRaidSelection(id: string): void {
+  lastRaidSelection = id
+  const targets: Array<BrowserWindow | null> = [mainWindow, raidReadinessWindow]
+  for (const win of customTimerGroupWindows.values()) targets.push(win)
+  for (const win of targets) {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('overlay:raid-selection-changed', id)
+    }
+  }
+}
+
+ipcMain.handle('overlay:raid-selection:set', (_event, id: string) => {
+  if (typeof id === 'string') broadcastRaidSelection(id)
+})
+
+ipcMain.handle('overlay:raid-selection:get', () => lastRaidSelection)
+
 // ── IPC handlers — dialogs ────────────────────────────────────────────────────
 
 ipcMain.handle('dialog:select-folder', async () => {

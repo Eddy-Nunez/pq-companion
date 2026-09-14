@@ -64,13 +64,15 @@ export default function RaidReadinessPanel({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', fontSize: 11, borderBottom: '1px solid var(--color-border)', flexShrink: 0, backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted)' }}>
         <Circle size={10} style={{ color: roster?.in_raid ? '#22c55e' : '#6b7280' }} />
-        {encounter ? `${encounter.name} — ${encounter.zone}` : 'No encounter detected'}
+        {encounter ? `${encounter.name} — ${encounter.zone}` : 'No encounter selected'}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         {!report ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-muted)', padding: 16 }}>
             <ShieldCheck size={28} style={{ opacity: 0.2 }} />
-            <p style={{ fontSize: 12, margin: 0, textAlign: 'center' }}>Waiting for a raid + encounter…</p>
+            <p style={{ fontSize: 12, margin: 0, textAlign: 'center' }}>
+              Pick an encounter on the Raid Composition page
+            </p>
           </div>
         ) : gapRows.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-muted)', padding: 16 }}>
