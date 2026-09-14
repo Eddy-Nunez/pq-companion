@@ -45,6 +45,31 @@ test.describe('GET /api/raids/roster', () => {
    expect(typeof m.code === 'string' || m.code === undefined).toBe(true)
     }
   })
+  test('connected pipe always reports the live zone (live-zone overlay)', async ({
+    request,
+  }) => {
+    const res = await request.get('/api/raids/roster')
+    expect(res.status()).toBe(200)
+    const body = await res.json()
+    if (!body.zeal_connected) return // no EQ/Zeal running (CI) — nothing to pin
+    // The snapshot's own zone is stamped when a MsgRaid arrives and goes
+    // stale when the raid zones without a membership change, so the endpoint
+    // overlays the CURRENT pipe zone on read (liveZone atomic publish from
+    // MsgPlayer). A connected pipe must therefore always report a resolvable
+    // zone for encounter context, regardless of MsgRaid cadence.
+    expect(body.zone_id).toBeGreaterThan(0)
+    expect(typeof body.zone).toBe('string')
+    expect(body.zone.length).toBeGreaterThan(0)
+    // Decode contract (d6d385fb): Zeal's raid wire format carries class as a
+    // display NAME ("Wizard") and level as a STRING ("60"); the decoder
+    // normalizes both, so members expose numeric level/class plus the
+    // taxonomy code resolved at capture time (code omitted when unknown).
+    for (const m of body.members) {
+      expect(typeof m.level).toBe('number')
+      expect(typeof m.class).toBe('number')
+      expect(typeof m.code === 'string' || m.code === undefined).toBe(true)
+    }
+  })
 })
 
 test.describe('GET /api/raids/encounters', () => {
