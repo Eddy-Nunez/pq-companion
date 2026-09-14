@@ -28,6 +28,21 @@ export default defineConfig({
   use: {
     trace: 'retain-on-failure',
   },
+  // NOTE: webServer must live at the TOP LEVEL — Playwright silently ignores
+  // a webServer nested inside a project. It starts vite for any run (the
+  // api project doesn't need it; npm run test:e2e:api sets PQ_NO_WEBSERVER
+  // to skip it).
+  webServer: process.env.PQ_NO_WEBSERVER
+    ? undefined
+    : {
+        // Invoke vite's entry point directly rather than via npx — one less
+        // cmd-wrapper layer on Windows.
+        command:
+          'node node_modules/vite/bin/vite.js --config vite.e2e.config.ts --port 5174 --strictPort',
+        url: 'http://localhost:5174',
+        reuseExistingServer: true,
+        timeout: 120_000,
+      },
   projects: [
     {
       name: 'api',
@@ -42,14 +57,6 @@ export default defineConfig({
       use: {
         baseURL: 'http://localhost:5174',
       },
-      webServer: process.env.PQ_NO_WEBSERVER
-        ? undefined
-        : {
-            command: 'npx vite --config vite.e2e.config.ts --port 5174 --strictPort',
-            url: 'http://localhost:5174',
-            reuseExistingServer: true,
-            timeout: 120_000,
-          },
     },
   ],
 })
