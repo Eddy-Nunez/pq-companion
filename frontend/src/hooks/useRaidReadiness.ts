@@ -110,13 +110,18 @@ export function useRaidReadiness(): RaidReadinessState {
     [],
   )
 
-  // Auto-run a first check once data is loaded and an encounter is selectable.
-  const autoRan = useRef(false)
+  // Auto-run against the live Zeal roster whenever the selected encounter
+  // changes (including the very first selection) or the encounter/roster
+  // data is reloaded — no manual "Check composition" click required. The
+  // Zeal pipe already tells the app the raid's composition and members, so
+  // the checker should just reflect that live, the same way the NPC overlay
+  // reflects the live target. The explicit "Check composition" button (in
+  // RaidCheckPage) stays only for applying a manually-entered roster, which
+  // this auto-run intentionally doesn't touch.
   useEffect(() => {
-    if (autoRan.current || busy || encounters.length === 0) return
+    if (busy || encounters.length === 0) return
     const id = selectedId || (encounters.length === 1 ? encounters[0].id : '')
     if (!id) return
-    autoRan.current = true
     if (!selectedId) setSelectedId(id)
     void runCheck(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,16 +129,15 @@ export function useRaidReadiness(): RaidReadinessState {
 
   // Live refresh: the backend broadcasts raid.roster on every MsgRaid update
   // and on pipe disconnect (no payload — same "trigger, don't carry state"
-  // shape as lockouts.snapshot/keyring.snapshot). Re-fetch the roster and,
-  // if an encounter is already selected, re-run the check against it so the
-  // report tracks the live raid without the user hitting Refresh.
+  // shape as lockouts.snapshot/keyring.snapshot). Re-fetching here updates
+  // `encounters`/`roster` state, which retriggers the auto-run effect above
+  // so the report tracks the live raid without the user hitting Refresh.
   const handleWsMessage = useCallback(
     (msg: { type: string; data: unknown }) => {
       if (msg.type !== 'raid.roster') return
       void refresh()
-      if (selectedRef.current) void runCheck(selectedRef.current)
     },
-    [refresh, runCheck],
+    [refresh],
   )
   useWebSocket(handleWsMessage)
 

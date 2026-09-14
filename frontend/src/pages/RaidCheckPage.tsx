@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { RefreshCw, Play, ShieldCheck, Radio, UserRoundPlus, Trash2 } from 'lucide-react'
 import { useRaidReadiness } from '../hooks/useRaidReadiness'
 import type { CheckRosterInput } from '../types/raid'
 import CompReport from '../components/raids/CompReport'
+import EncounterNPCInfo from '../components/raids/EncounterNPCInfo'
 
 const selectCls =
   'rounded px-2 py-1.5 text-sm outline-none border focus:ring-1 focus:ring-(--color-primary)'
@@ -33,6 +34,10 @@ export default function RaidCheckPage(): React.ReactElement {
   }
 
   const liveCount = roster?.members.length ?? 0
+  const selectedEncounter = useMemo(
+    () => encounters.find((e) => e.id === selectedId) ?? null,
+    [encounters, selectedId],
+  )
 
   return (
     <div className="flex flex-col gap-4 px-6 py-4 overflow-auto" style={{ height: '100%' }}>
@@ -54,17 +59,19 @@ export default function RaidCheckPage(): React.ReactElement {
             </option>
           ))}
         </select>
-        <button
-          onClick={() => void runCheck(selectedId, useManual && manualRows.length > 0 ? manualRows : undefined)}
-          disabled={busy || !selectedId}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
-          style={{
-            backgroundColor: busy ? 'var(--color-muted)' : 'var(--color-primary)',
-            color: 'var(--color-primary-foreground, #fff)',
-          }}
-        >
-          <Play size={14} /> {busy ? 'Checking…' : 'Check composition'}
-        </button>
+        {useManual ? (
+          <button
+            onClick={() => void runCheck(selectedId, manualRows.length > 0 ? manualRows : undefined)}
+            disabled={busy || !selectedId}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
+            style={{
+              backgroundColor: busy ? 'var(--color-muted)' : 'var(--color-primary)',
+              color: 'var(--color-primary-foreground, #fff)',
+            }}
+          >
+            <Play size={14} /> {busy ? 'Checking…' : 'Check with manual roster'}
+          </button>
+        ) : null}
         <button
           onClick={() => void refresh()}
           className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded"
@@ -73,6 +80,12 @@ export default function RaidCheckPage(): React.ReactElement {
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
+      {!useManual ? (
+        <p className="text-xs -mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
+          Composition updates automatically from the live Zeal roster as members join, leave, or change class —
+          no need to re-run the check by hand.
+        </p>
+      ) : null}
 
       {error ? (
         <div className="px-3 py-2 text-sm rounded" style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}>
@@ -190,6 +203,8 @@ export default function RaidCheckPage(): React.ReactElement {
           Pick an encounter and run a check to see its MIN / REC composition report.
         </div>
       )}
+
+      {selectedEncounter?.npc_id ? <EncounterNPCInfo npcId={selectedEncounter.npc_id} /> : null}
     </div>
   )
 }
