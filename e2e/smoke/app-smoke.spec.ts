@@ -9,8 +9,6 @@
 //
 // Note: the app may pop a "what's new" changelog dialog on a fresh user.db;
 // these tests assume the dev machine's store, where it is already dismissed.
-// Note: the app may pop a "what's new" changelog dialog on a fresh user.db;
-// these tests assume the dev machine's store, where it is already dismissed.
 //
 // The Raids sidebar section (and its routes) are gated behind the
 // raids_enabled developer flag (upstream gates the feature for live
@@ -83,6 +81,30 @@ test.describe.serial('Raid Composition page', () => {
       .getByPlaceholder(/class code or name/i)
       .first()
       .fill('cleric')
+  })
+
+  test('manual pick survives Refresh and the report re-runs (regression: live-raids feedback)', async ({
+    page,
+  }) => {
+    const select = page.locator('select').first()
+    await expect(select).toBeVisible()
+    // Need at least two encounters to prove the pick isn't reset.
+    test.skip((await select.locator('option').count()) < 2, 'needs ≥2 encounters')
+
+    // Zone-based auto-detection was removed: multiple encounters can share a
+    // zone (Kael has two), so detection kept clobbering manual picks. Pick
+    // the SECOND encounter (not the store-order first), run a check, then
+    // hit Refresh — the pick must hold AND the report must re-render from
+    // the re-run check, not clear back to the placeholder.
+    await select.selectOption({ index: 1 })
+    const picked = await select.inputValue()
+    await page.getByRole('button', { name: 'Check composition' }).click()
+    await expect(page.getByText('MIN — Hard floor')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Refresh' }).click()
+    await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled()
+    await expect(select).toHaveValue(picked)
+    await expect(page.getByText('MIN — Hard floor')).toBeVisible()
   })
 })
 
