@@ -10,6 +10,7 @@
 //	go run ./cmd/zealdump            # summary line per target change
 //	go run ./cmd/zealdump -raw       # every player payload, verbatim
 //	go run ./cmd/zealdump -every     # every tick, not just on change
+//	go run ./cmd/zealdump -types     # count envelopes per type; sample per type
 //	go run ./cmd/zealdump -file cap  # replay a capture instead of dialing
 //
 // To keep a capture for later: go run ./cmd/zealdump -raw > capture.txt
@@ -58,6 +59,7 @@ var spawnTypeNames = map[int]string{
 func main() {
 	raw := flag.Bool("raw", false, "print every player payload verbatim")
 	every := flag.Bool("every", false, "print every tick, not just when the target changes")
+	types := flag.Bool("types", false, "count envelopes per type; print one sample payload per type (diagnoses which message types a Zeal build actually emits — e.g. raid/type 5)")
 	pipeName := flag.String("pipe", "", "pipe to read (default: first one discovered)")
 	fromFile := flag.String("file", "", "read a saved capture instead of dialing a pipe")
 	flag.Parse()
@@ -79,7 +81,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	run(ctx, conn, *raw, *every)
+	run(ctx, conn, *raw, *every, *types)
 }
 
 // dialPipe discovers and opens a live Zeal pipe, exiting with a diagnostic if
@@ -113,8 +115,15 @@ func dialPipe(ctx context.Context, pipeName string) io.ReadCloser {
 }
 
 // run stream-decodes envelopes until EOF, error or cancellation, printing a
-// line per player message and a coverage checklist at the end.
-func run(ctx context.Context, conn io.Reader, raw, every bool) {
+// line per player message and a coverage checklist at the end. With types,
+// it instead counts every envelope by type and prints one verbatim sample
+// payload per type — the "which types does this Zeal build actually emit"
+// diagnostic. Prints a running summary line each time a count updates.
+func run(ctx context.Context, conn io.Reader, raw, every, types bool) {
+	if types {
+		runTypes(ctx, conn)
+		return
+	}
 	seen := newCoverage()
 	last := ""
 	dec := json.NewDecoder(conn)
@@ -184,6 +193,48 @@ func formatPlayer(p map[string]any) string {
 		parts = append(parts, "MISSING["+strings.Join(missing, ",")+"]")
 	}
 	return strings.Join(parts, " ")
+}
+
+// runTypes counts envelopes per pipe type and prints a running tally plus one
+// verbatim sample payload per type. Built to answer "is Zeal emitting type 5
+// (raid) at all?" on a live client without flooding the console.
+func runTypes(ctx context.Context, conn io.Reader) {
+	counts := map[zealpipe.PipeMessageType]int{}
+	samples := map[zealpipe.PipeMessageType]string{}
+	dec := json.NewDecoder(conn)
+	for {
+		if ctx.Err() != nil {
+			break
+		}
+		var env zealpipe.Envelope
+		if err := dec.Decode(&env); err != nil {
+			if !errors.Is(err, io.EOF) && ctx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "\nread ended: %v\n", err)
+			}
+			break
+		}
+		counts[env.Type]++
+		if _, ok := samples[env.Type]; !ok {
+			s := env.Data
+			if len(s) > 400 {
+				s = s[:400] + " …"
+			}
+			samples[env.Type] = s
+			fmt.Printf("FIRST %v (type %d) char=%s: %s\n", env.Type, env.Type, env.Character, s)
+		}
+		if counts[env.Type]%100 == 0 {
+			fmt.Printf("… %v count=%d\n", env.Type, counts[env.Type])
+		}
+	}
+	fmt.Println("\n=== envelope type totals ===")
+	for t := zealpipe.MsgLog; t <= 20; t++ {
+		if c, ok := counts[t]; ok {
+			fmt.Printf("type %d (%v): %d\n", t, t, c)
+		}
+	}
+	if len(counts) == 0 {
+		fmt.Println("(no envelopes decoded)")
+	}
 }
 
 // formatLoc renders Zeal's {x,y,z} object. Zeal's x/y are transposed relative
