@@ -19,7 +19,7 @@ function StampTime({ ts }: { ts?: number }): React.ReactElement {
 
 export default function RaidCheckPage(): React.ReactElement {
   const {
-    orderedEncounters, roster, selectedId, setSelectedId, report, busy, refreshing, error, refresh, runCheck,
+    encounters, roster, selectedId, pickEncounter, report, busy, refreshing, error, refresh, runCheck,
   } = useRaidReadiness()
   const [manualRows, setManualRows] = useState<CheckRosterInput[]>([])
   const [useManual, setUseManual] = useState(false)
@@ -44,10 +44,10 @@ export default function RaidCheckPage(): React.ReactElement {
           className={selectCls}
           style={selectStyle}
           value={selectedId}
-          onChange={(e) => setSelectedId(e.target.value)}
+          onChange={(e) => pickEncounter(e.target.value)}
         >
-          {orderedEncounters.length === 0 ? <option value="">No encounters</option> : null}
-          {orderedEncounters.map((e) => (
+          {encounters.length === 0 ? <option value="">No encounters</option> : null}
+          {encounters.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name} — {e.zone}
               {e.status !== 'active' ? ' (placeholder)' : ''}

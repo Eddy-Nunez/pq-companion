@@ -193,6 +193,18 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('overlay:placing-changed', listener)
       return () => ipcRenderer.removeListener('overlay:placing-changed', listener)
     },
+    // Raid Composition ↔ Raid Readiness sync: publish a manual encounter pick
+    // so every surface rendering the shared raid-readiness hook (check page,
+    // dashboard panel, popout overlay) mirrors the same selection.
+    setRaidSelection: (id: string): Promise<void> =>
+      ipcRenderer.invoke('overlay:raid-selection:set', id),
+    getRaidSelection: (): Promise<string> =>
+      ipcRenderer.invoke('overlay:raid-selection:get'),
+    onRaidSelectionChanged: (cb: (id: string) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, id: string): void => cb(id)
+      ipcRenderer.on('overlay:raid-selection-changed', listener)
+      return () => ipcRenderer.removeListener('overlay:raid-selection-changed', listener)
+    },
   },
   screen: {
     triggerDefaultCenter: (): Promise<{ x: number; y: number }> =>
