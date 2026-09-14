@@ -1,28 +1,33 @@
 /**
- * useRaidReadiness — shared data/detection logic for every surface that shows
+ * useRaidReadiness — shared data/check logic for every surface that shows
  * the raid composition check: the full RaidCheckPage, the dashboard panel,
- * and the popout overlay window. Centralized here so all three read the same
- * zone-detection and auto-run behavior instead of drifting out of sync.
+ * and the popout overlay window. Centralized here so all three render the
+ * same selection and report instead of drifting out of sync.
+ *
+ * There is deliberately no zone-based encounter auto-detection: multiple
+ * encounters can share a zone (Kael has two), so a live zone can't pick an
+ * encounter unambiguously. The user picks, the pick holds until they change
+ * it, and it is relayed to every surface via the main process (see
+ * pickEncounter / adoptSelection). The roster's live zone is display-only
+ * (roster banner), and the backend still stamps it from the Zeal pipe.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWebSocket } from './useWebSocket'
 import { getRaidEncounters, getRaidRoster, checkRaidComp } from '../services/api'
 import type { CheckReport, CheckRosterInput, RaidEncounter, RaidRosterSnapshot } from '../types/raid'
 
-// normalizeZone makes zone-name comparisons forgiving across Zeal's short
-// names vs the knowledge base's display names (letters+digits only, lowercase).
-function normalizeZone(s: string): string {
-  return (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')
-}
-
 export interface RaidReadinessState {
   encounters: RaidEncounter[]
   roster: RaidRosterSnapshot | null
   selectedId: string
-  setSelectedId: (id: string) => void
-  detectedZone: string
+  // The UI-facing selector (Raid Composition page's dropdown — the only
+  // picker). Publishes the pick so the dashboard panel and the popout
+  // overlay mirror it, and runs the check immediately.
+  pickEncounter: (id: string) => void
   report: CheckReport | null
   busy: boolean
+  // True while refresh() is in flight — the Refresh button spins on it.
+  refreshing: boolean
   error: string
   refresh: () => Promise<void>
   // id defaults to the current selection; manualRoster overrides the live
@@ -34,55 +39,14 @@ export function useRaidReadiness(): RaidReadinessState {
   const [encounters, setEncounters] = useState<RaidEncounter[]>([])
   const [roster, setRoster] = useState<RaidRosterSnapshot | null>(null)
   const [selectedId, setSelectedId] = useState<string>('')
-  const [detectedZone, setDetectedZone] = useState<string>('')
   const [report, setReport] = useState<CheckReport | null>(null)
   const [busy, setBusy] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      const [encRes, rosterRes] = await Promise.all([getRaidEncounters(), getRaidRoster()])
-      setEncounters(encRes.encounters)
-      setRoster(rosterRes)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  // Encounter detection: prefer an exact zoneidnumber match with the live
-  // roster (what Zeal reports); fall back to normalized-name comparison for
-  // encounters without a resolved zone id. The dropdown/selection stays
-  // authoritative — this only ever proposes a value, never fights a manual pick.
-  useEffect(() => {
-    if (!roster || encounters.length === 0) return
-    if (roster.zone_id && roster.zone_id > 0) {
-      const hit = encounters.find((e) => e.zone_id === roster.zone_id)
-      if (hit) {
-        setSelectedId(hit.id)
-        setDetectedZone(roster.zone ?? String(roster.zone_id))
-        return
-      }
-    }
-    if (roster.zone === undefined) return
-    const zoneKey = normalizeZone(roster.zone)
-    if (!zoneKey) return
-    const hit = encounters.find((e) => normalizeZone(e.zone) === zoneKey)
-    if (hit) {
-      setSelectedId(hit.id)
-      setDetectedZone(roster.zone)
-    }
-  }, [roster, encounters])
-
-  // runCheck takes the encounter id explicitly rather than always reading
-  // `selectedId` from closure — the auto-run effect below needs to check
-  // against an id it just resolved this tick, before the corresponding
-  // setSelectedId has re-rendered the component. selectedRef mirrors the
-  // latest id for the WS-triggered re-check below, which fires outside any
-  // render and would otherwise close over a stale value.
+  // selectedRef mirrors the latest selected id for callbacks that fire
+  // outside a render (WS events, refresh) and would otherwise close over a
+  // stale value.
   const selectedRef = useRef(selectedId)
   selectedRef.current = selectedId
 
@@ -110,28 +74,84 @@ export function useRaidReadiness(): RaidReadinessState {
     [],
   )
 
-  // Auto-run against the live Zeal roster whenever the selected encounter
-  // changes (including the very first selection) or the encounter/roster
-  // data is reloaded — no manual "Check composition" click required. The
-  // Zeal pipe already tells the app the raid's composition and members, so
-  // the checker should just reflect that live, the same way the NPC overlay
-  // reflects the live target. The explicit "Check composition" button (in
-  // RaidCheckPage) stays only for applying a manually-entered roster, which
-  // this auto-run intentionally doesn't touch.
-  useEffect(() => {
-    if (busy || encounters.length === 0) return
-    const id = selectedId || (encounters.length === 1 ? encounters[0].id : '')
-    if (!id) return
-    if (!selectedId) setSelectedId(id)
-    void runCheck(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounters, selectedId])
+  // Re-pull encounters + roster, then re-run the check for the current
+  // selection so Refresh visibly updates the report too — not just the
+  // roster banner.
+  const refresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true)
+    try {
+      const [encRes, rosterRes] = await Promise.all([getRaidEncounters(), getRaidRoster()])
+      setEncounters(encRes.encounters)
+      setRoster(rosterRes)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRefreshing(false)
+    }
+    if (selectedRef.current) void runCheck(selectedRef.current)
+  }, [runCheck])
 
-  // Live refresh: the backend broadcasts raid.roster on every MsgRaid update
-  // and on pipe disconnect (no payload — same "trigger, don't carry state"
-  // shape as lockouts.snapshot/keyring.snapshot). Re-fetching here updates
-  // `encounters`/`roster` state, which retriggers the auto-run effect above
-  // so the report tracks the live raid without the user hitting Refresh.
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  // adoptSelection applies a selection that arrived from another surface
+  // (IPC relay or mount-time catch-up) and runs a check. Never re-publishes
+  // — the sender already has it.
+  const adoptSelection = useCallback(
+    (id: string) => {
+      if (!id || id === selectedRef.current) return
+      setSelectedId(id)
+      void runCheck(id)
+    },
+    [runCheck],
+  )
+
+  // The check page's dropdown is the only picker. Selecting sets state,
+  // runs the check right away (this surface doesn't wait for an echo of its
+  // own pick), and publishes so the dashboard panel and the popout overlay
+  // (separate windows, separate hook instances) mirror the selection.
+  // window.electron is optional — plain-browser runs (smoke tests) have no
+  // electron bridge and just stay local.
+  const pickEncounter = useCallback(
+    (id: string) => {
+      setSelectedId(id)
+      void runCheck(id)
+      void window.electron?.overlay?.setRaidSelection(id)
+    },
+    [runCheck],
+  )
+
+  // Mirror the Raid Composition page's picks across windows. The sender's
+  // own instance already ran the check via pickEncounter above and ignores
+  // the echo (same id); every other surface adopts it.
+  useEffect(() => {
+    const off = window.electron?.overlay?.onRaidSelectionChanged(adoptSelection)
+    return off
+  }, [adoptSelection])
+
+  // Catch up on mount: a popout opened after a pick (or a re-mounted check
+  // page) starts from the last selection the main process knows about.
+  useEffect(() => {
+    void window.electron?.overlay?.getRaidSelection().then(adoptSelection)
+  }, [adoptSelection])
+
+  // Auto-run a first check once data is loaded, when the knowledge base has
+  // exactly one encounter — no ambiguity, so pre-selecting it is safe. With
+  // more than one, the user picks (and the pick syncs everywhere).
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current || busy || encounters.length !== 1) return
+    autoRan.current = true
+    setSelectedId(encounters[0].id)
+    void runCheck(encounters[0].id)
+  }, [encounters, busy, runCheck])
+
+  // Live refresh: the backend broadcasts raid.roster when the roster or zone
+  // CHANGES (change-deduped backend-side — Zeal re-sends MsgRaid every tick,
+  // so a naive per-envelope broadcast would refetch 10x/sec). No payload —
+  // same "trigger, don't carry state" shape as lockouts.snapshot — refresh()
+  // re-fetches the roster and re-runs the check for the current selection.
   const handleWsMessage = useCallback(
     (msg: { type: string; data: unknown }) => {
       if (msg.type !== 'raid.roster') return
@@ -141,5 +161,5 @@ export function useRaidReadiness(): RaidReadinessState {
   )
   useWebSocket(handleWsMessage)
 
-  return { encounters, roster, selectedId, setSelectedId, detectedZone, report, busy, error, refresh, runCheck }
+  return { encounters, roster, selectedId, pickEncounter, report, busy, refreshing, error, refresh, runCheck }
 }

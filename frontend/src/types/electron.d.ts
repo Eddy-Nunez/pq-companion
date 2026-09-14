@@ -113,6 +113,10 @@ export interface ElectronAPI {
     amIPlacing: () => Promise<boolean>
     placingNames: () => Promise<string[]>
     onPlacing: (cb: (placing: boolean) => void) => () => void
+    // Raid Composition ↔ Raid Readiness selection sync (see useRaidReadiness).
+    setRaidSelection: (id: string) => Promise<void>
+    getRaidSelection: () => Promise<string>
+    onRaidSelectionChanged: (cb: (id: string) => void) => () => void
   }
   screen: {
     triggerDefaultCenter: () => Promise<{ x: number; y: number }>

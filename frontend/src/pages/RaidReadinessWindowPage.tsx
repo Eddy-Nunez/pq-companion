@@ -108,7 +108,7 @@ export default function RaidReadinessWindowPage(): React.ReactElement {
           >
             <Circle size={22} style={{ opacity: 0.15 }} />
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', margin: 0, textAlign: 'center' }}>
-              Waiting for a raid + encounter…
+              Pick an encounter on the Raid Composition page
             </p>
           </div>
         ) : gapRows.length === 0 ? (

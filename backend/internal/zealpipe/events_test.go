@@ -122,6 +122,62 @@ func TestDecodePlayerPre146NoIDs(t *testing.T) {
 	}
 }
 
+func TestDecodeRaidRosterLiveCapture(t *testing.T) {
+	// Live capture 2026-09-14 (Zeal v1.4.6, real raid in Kael Drakkel):
+	// class arrives as the display NAME ("Necromancer"), level as a STRING
+	// ("60") — the opposite of what the pre-live fixtures assumed. This test
+	// pins the real wire shape so a decoder regression can't silently drop
+	// the whole roster again (the original bug: every MsgRaid failed to
+	// unmarshal into Class int / Level int and was debug-logged away).
+	payload := `[` +
+		`{"class":"Wizard","group":"1","level":"60","name":"Tenchi","rank":"Raid Leader"},` +
+		`{"class":"Necromancer","group":"0","heading":238.19,"hp_current":5151,"hp_max":5151,"level":"60","loc":{"x":-122.64,"y":3163.95,"z":-395.78},"name":"Kravija","rank":"","spawn_id":287,"zone_id":113}` +
+		`]`
+	line := []byte(`{"type":5,"data":` + jsonString(payload) + `,"character":"Kravija"}`)
+	env, err := DecodeEnvelope(line)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	members, err := DecodeRaid(env.Data)
+	if err != nil {
+		t.Fatalf("decode raid: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("len(members) = %d, want 2", len(members))
+	}
+	// "Wizard" → Zeal id 12; "60" (string) → 60.
+	if members[0].Name != "Tenchi" || int(members[0].Class) != 12 || int(members[0].Level) != 60 ||
+		members[0].Group != "1" || members[0].Rank != "Raid Leader" {
+		t.Errorf("members[0] = %+v", members[0])
+	}
+	// "Necromancer" → 11; string level; in-zone entity fields intact.
+	if int(members[1].Class) != 11 || int(members[1].Level) != 60 || members[1].SpawnID == nil ||
+		members[1].ZoneID == nil || *members[1].ZoneID != 113 {
+		t.Errorf("members[1] = %+v", members[1])
+	}
+	if members[1].HPCur == nil || *members[1].HPCur != 5151 {
+		t.Errorf("members[1].HPCur = %v, want 5151", members[1].HPCur)
+	}
+}
+
+func TestDecodeRaidUnknownClassName(t *testing.T) {
+	// An unrecognized class name must not drop the envelope — the member
+	// decodes with Class 0 (unknown) and the rest of the roster survives.
+	payload := `[` +
+		`{"class":"Frobnicator","group":"1","level":"60","name":"Odd","rank":""},` +
+		`{"class":"Cleric","group":"1","level":"60","name":"Heals","rank":""}` +
+		`]`
+	line := []byte(`{"type":5,"data":` + jsonString(payload) + `,"character":"Osui"}`)
+	env, _ := DecodeEnvelope(line)
+	members, err := DecodeRaid(env.Data)
+	if err != nil {
+		t.Fatalf("decode raid: %v", err)
+	}
+	if len(members) != 2 || int(members[0].Class) != 0 || int(members[1].Class) != 2 {
+		t.Errorf("members = %+v", members)
+	}
+}
+
 func TestDecodeRaidRosterNoVerbose(t *testing.T) {
 	// MsgRaid with PipeVerbose off: name/level/class/group/rank always present;
 	// spawn_id/loc/heading only for the member in your zone; no hp fields.
