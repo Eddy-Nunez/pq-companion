@@ -49,6 +49,7 @@ const SpellChecklistPage = lazy(() => import('./pages/SpellChecklistPage'))
 const InventoryTrackerPage = lazy(() => import('./pages/InventoryTrackerPage'))
 const KeyTrackerPage = lazy(() => import('./pages/KeyTrackerPage'))
 const LockoutTrackerPage = lazy(() => import('./pages/LockoutTrackerPage'))
+const RaidSummaryPage = lazy(() => import('./pages/RaidSummaryPage'))
 const RaidCheckPage = lazy(() => import('./pages/RaidCheckPage'))
 const RaidEditorPage = lazy(() => import('./pages/RaidEditorPage'))
 const WishlistPage = lazy(() => import('./pages/WishlistPage'))
@@ -358,7 +359,8 @@ export default function App(): React.ReactElement {
             <Route path="tasks" element={<CharacterTasksPage />} />
           </Route>
           <Route path="raids" element={<RaidsLayout />}>
-            <Route index element={<RaidCheckPage />} />
+            <Route index element={<RaidSummaryPage />} />
+            <Route path="check" element={<RaidCheckPage />} />
             <Route path="editor" element={<RaidEditorPage />} />
           </Route>
           <Route path="character-progress" element={<Navigate to="/characters/progress" replace />} />
