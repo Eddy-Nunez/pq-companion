@@ -9,6 +9,22 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.22.0-beta.4 — 2026-09-14
+
+Fourth unofficial dogfood build — the first validated end-to-end in a **live raid** (Kael Drakkel, real Zeal pipe). Fixes everything that surfaced during that live test.
+
+### Raid fixes found in live-raids testing
+- **Raid roster now actually populates** — Zeal's raid messages carry class *names* (`"Wizard"`) and *string* levels (`"60"`); the app's decoder expected numeric ids, so every raid message was silently dropped and the roster stayed empty forever. Fixed: `in_raid`, member lists, the comp checker, and the Players-tab raid feed all work in a live raid now.
+- **Your encounter pick is the single source of truth** — zone-based auto-detection is gone (two encounters can share a zone — Kael has two — so "the" zone match was ambiguous and kept clobbering manual picks). Whatever you select in the dropdown holds across roster updates and Refreshes.
+- **Raid Readiness stays in sync with Raid Composition** — the dashboard panel and the popout overlay now mirror whatever encounter you pick on the check page, instantly, including a popout opened *after* the pick.
+- **Refresh refreshes everything** — the Refresh button re-runs the comp check too, so the report updates along with the roster banner; live roster changes re-check the report automatically without touching anything.
+- **Live zone keeps tracking** — the roster banner always shows the zone Zeal is reporting *right now* (stamped per player tick), not a snapshot that goes stale when the raid zones.
+
+### Notes
+- Raids still ship behind the developer flag: **Settings → Ctrl+Shift+D → Developer → Flags → raids_enabled** (same as beta.3).
+- Pre-release fork build for guild dogfooding; not the official release. Auto-updates are not effective on this build — install new builds manually.
+- Based on upstream `main` (b78b3046) + the raid fix set above, awaiting their upstream PR.
+
 ## v0.22.0-beta.3 — 2026-09-14
 
 Third unofficial dogfood build, now based on **upstream main** — the Raid Composition feature set as merged upstream (reviewed and refined by the maintainer), plus four follow-up fixes awaiting their own upstream PR. The maintainer's release notes remain authoritative for the app as a whole.
