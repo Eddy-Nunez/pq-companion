@@ -1616,6 +1616,7 @@ func main() {
 		posTracker.Reset()
 		posTracker.ResetGroup()
 		lastRaidSeen = map[string]string{}
+		rosterKeeper.Clear()
 		hub.Broadcast(ws.Event{Type: "player:position", Data: nil})
 		timerEngine.SetPipeCasting("")
 		timerEngine.SetPipeBuffSlots(nil)

@@ -361,8 +361,7 @@ func (s *Store) SaveRole(r Role) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	//nolint:errcheck
+	defer tx.Rollback() //nolint:errcheck
 
 	var existingPos int
 	err = tx.QueryRow(`SELECT position FROM raid_roles WHERE role = ? AND sub_role = ?`, r.Role, r.Sub).Scan(&existingPos)
@@ -657,7 +656,7 @@ func (s *Store) loadChildren(rows []encounterRow) error {
 	return stratRows.Err()
 }
 
-// GetEncounter returns one incounter with full children, or ErrNotFound.
+// GetEncounter returns one encounter with full children, or ErrNotFound.
 func (s *Store) GetEncounter(id string) (*Encounter, error) {
 	encs, err := s.ListEncounters()
 	if err != nil {
@@ -679,7 +678,7 @@ func (s *Store) DeleteEncounter(id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() //nolint:rrcheck
+	defer tx.Rollback() //nolint:errcheck
 	for _, table := range []string{"raid_encounter_comps", "raid_encounter_reqs", "raid_encounter_strategy"} {
 		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE encounter_id = ?`, id); err != nil {
 			return err

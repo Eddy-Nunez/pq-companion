@@ -16,6 +16,14 @@ export interface NavItem {
   label: string
   icon: React.ReactNode
   flag?: string
+  // end: use exact-match highlighting (react-router's NavLink `end` prop)
+  // instead of the default prefix match. Needed only for a parent route that
+  // also owns child routes with their own sidebar entries (e.g. /raids vs
+  // /raids/editor) — otherwise the parent's row stays lit while on a child
+  // tab. Do NOT default this to true for every item: most sidebar entries
+  // (e.g. /combat, whose child routes /combat/log and /combat/history are
+  // NOT separate sidebar rows) rely on prefix matching to stay highlighted.
+  end?: boolean
 }
 
 // A labeled group of side tabs. Visibility/ordering preferences apply to the
@@ -72,8 +80,8 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'raids',
     label: 'Raids',
     items: [
-      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} /> },
-      { to: '/raids/editor', label: 'Raid Editor', icon: <PencilRuler size={16} /> },
+      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} />, end: true, flag: 'raids_enabled' },
+      { to: '/raids/editor', label: 'Raid Editor', icon: <PencilRuler size={16} />, flag: 'raids_enabled' },
     ],
   },
   {
@@ -100,6 +108,7 @@ export function navFlags(prefs?: Partial<Preferences>): Record<string, boolean> 
   return {
     pop_flags_enabled: Boolean(prefs?.pop_flags_enabled),
     faction_tracker_enabled: Boolean(prefs?.faction_tracker_enabled),
+    raids_enabled: Boolean(prefs?.raids_enabled),
   }
 }
 

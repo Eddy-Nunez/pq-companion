@@ -17,6 +17,7 @@ type RowReport struct {
 	Path           string   `json:"path"` // "tank.defensive"
 	Role           string   `json:"role"`
 	Sub            string   `json:"sub_role,omitempty"`
+	Label          string   `json:"label"` // live taxonomy label, e.g. "Tank / Defensive"
 	Need           int      `json:"need"`
 	Have           int      `json:"have"`
 	Candidates     []string `json:"candidates,omitempty"` // class-eligible member names (max 8)
@@ -121,11 +122,12 @@ func Check(leaves []RoleLeaf, enc *Encounter, members []RosterMember) CheckRepor
 				}
 			}
 			rr := RowReport{
-				Path: leaf.Path(),
-				Role: leaf.Role,
-				Sub:  leaf.Sub,
-				Need: need,
-				Have: have,
+				Path:  leaf.Path(),
+				Role:  leaf.Role,
+				Sub:   leaf.Sub,
+				Label: leaf.Label,
+				Need:  need,
+				Have:  have,
 			}
 			if have < need && len(cands) > 0 {
 				sort.Slice(cands, func(i, j int) bool { return cands[i].Name < cands[j].Name })

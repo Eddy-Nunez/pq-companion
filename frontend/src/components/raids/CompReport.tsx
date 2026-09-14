@@ -37,8 +37,12 @@ function Row({ row, className }: { row: CheckRowReport; className: string }): Re
       className={`grid grid-cols-[1fr_auto_auto_auto_1.4fr] gap-3 items-center px-3 py-1.5 ${className}`}
     >
       <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-        {roleLabel(row.role)}
-        {row.sub_role ? <span className="opacity-70"> / {subLabel(row.sub_role)}</span> : null}
+        {row.label || (
+          <>
+            {roleLabel(row.role)}
+            {row.sub_role ? <span className="opacity-70"> / {subLabel(row.sub_role)}</span> : null}
+          </>
+        )}
       </span>
       <span className="text-sm tabular-nums" style={{ color: 'var(--color-muted-foreground)' }}>
         {row.have}

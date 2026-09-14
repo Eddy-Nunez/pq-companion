@@ -27,6 +27,14 @@ type Snapshot struct {
 	Members   []Member `json:"members"`
 }
 
+// rosterStaleAfter is how long a MsgRaid snapshot is trusted with no refresh
+// before Get treats it as gone. Zeal re-sends MsgRaid on every roster change
+// and periodically besides, so a gap this long means the pipe died without
+// a clean disconnect (or Zeal itself hung) — same failure shape documented
+// for the NPC overlay pipe. Clear on OnDisconnect handles the clean case;
+// this is the belt-and-suspenders fallback for the unclean one.
+const rosterStaleAfter = 5 * time.Minute
+
 // Roster keeps the latest live raid roster in memory. It is written from the
 // Zeal pipe dispatch in cmd/server/main.go and read by the checker API. The
 // roster is intentionally not persisted — it is live state, like the current
@@ -50,10 +58,24 @@ func (r *Roster) Set(zoneID int, zone string, members []Member) {
 	r.seen = true
 }
 
-// Get returns the latest snapshot. seen is false until the first Set (no
-// live roster has ever arrived — the frontend shows a fallback source).
+// Clear drops the current snapshot. Called from the pipe's OnDisconnect
+// handler so a stale roster doesn't keep reporting "in a raid" after Zeal
+// goes away — same cleanup every other pipe-only consumer does there.
+func (r *Roster) Clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.snap = Snapshot{}
+	r.seen = false
+}
+
+// Get returns the latest snapshot. seen is false until the first Set, or once
+// the snapshot has gone stale (see rosterStaleAfter) — either way, the
+// frontend shows a fallback source rather than a roster that's actually gone.
 func (r *Roster) Get() (Snapshot, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if r.seen && time.Since(time.Unix(r.snap.UpdatedAt, 0)) > rosterStaleAfter {
+		return Snapshot{}, false
+	}
 	return r.snap, r.seen
 }

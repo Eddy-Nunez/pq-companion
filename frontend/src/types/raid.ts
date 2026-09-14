@@ -86,6 +86,7 @@ export interface CheckRowReport {
   path: string
   role: string
   sub_role?: string
+  label: string // live taxonomy label, e.g. "Tank / Defensive"
   need: number
   have: number
   candidates?: string[]

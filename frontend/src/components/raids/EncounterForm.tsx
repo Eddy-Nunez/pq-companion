@@ -294,7 +294,10 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
             type="submit"
             disabled={saving}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
-            style={{ backgroundColor: saving ? 'var(--color-muted)' : 'var(--color-primary)', color: '#fff' }}
+            style={{
+              backgroundColor: saving ? 'var(--color-muted)' : 'var(--color-primary)',
+              color: 'var(--color-primary-foreground, #fff)',
+            }}
           >
             <Save size={14} /> {saving ? 'Saving…' : 'Save Encounter'}
           </button>

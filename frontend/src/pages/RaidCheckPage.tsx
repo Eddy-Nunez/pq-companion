@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshCw, Play, ShieldCheck, Radio, UserRoundPlus, Trash2 } from 'lucide-react'
 import {
   getRaidEncounters,
@@ -80,8 +80,12 @@ export default function RaidCheckPage(): React.ReactElement {
     }
   }, [roster, encounters])
 
-  async function runCheck(): Promise<void> {
-    if (!selectedId) {
+  // runCheck takes the encounter id explicitly rather than always reading
+  // `selectedId` from closure — the auto-run effect below needs to check
+  // against an id it just resolved this tick, before the corresponding
+  // setSelectedId has re-rendered the component.
+  async function runCheck(id: string = selectedId): Promise<void> {
+    if (!id) {
       setError('Pick an encounter first')
       return
     }
@@ -90,7 +94,7 @@ export default function RaidCheckPage(): React.ReactElement {
     try {
       // When a manual roster is entered it replaces the live one entirely.
       const rep = await checkRaidComp({
-        encounter_id: selectedId,
+        encounter_id: id,
         roster: useManual && manualRows.length > 0 ? manualRows : undefined,
       })
       setReport(rep)
@@ -103,13 +107,14 @@ export default function RaidCheckPage(): React.ReactElement {
   }
 
   // Auto-run a first check once data is loaded and an encounter is selectable.
-  const autoRan = useMemo(() => ({ done: false }), [])
+  const autoRan = useRef(false)
   useEffect(() => {
-    if (!autoRan.done && !busy && (selectedId || encounters.length === 1) && encounters.length > 0) {
-      autoRan.done = true
-      setSelectedId(selectedId || encounters[0].id)
-      void runCheck()
-    }
+    if (autoRan.current || busy || encounters.length === 0) return
+    const id = selectedId || (encounters.length === 1 ? encounters[0].id : '')
+    if (!id) return
+    autoRan.current = true
+    if (!selectedId) setSelectedId(id)
+    void runCheck(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encounters, selectedId])
 
@@ -147,7 +152,10 @@ export default function RaidCheckPage(): React.ReactElement {
           onClick={() => void runCheck()}
           disabled={busy || !selectedId}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
-          style={{ backgroundColor: busy ? 'var(--color-muted)' : 'var(--color-primary)', color: '#fff' }}
+          style={{
+            backgroundColor: busy ? 'var(--color-muted)' : 'var(--color-primary)',
+            color: 'var(--color-primary-foreground, #fff)',
+          }}
         >
           <Play size={14} /> {busy ? 'Checking…' : 'Check composition'}
         </button>

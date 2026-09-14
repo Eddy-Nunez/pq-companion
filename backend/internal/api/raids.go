@@ -19,6 +19,17 @@ type raidsHandler struct {
 	pipe   *zealpipe.Supervisor
 }
 
+// unavailable responds 503 and reports true when the raid store failed to
+// open at startup (store is nil in that case) — same non-fatal pattern as
+// lockouts/combat-history/emotes.
+func (h *raidsHandler) unavailable(w http.ResponseWriter) bool {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "raid knowledge base unavailable")
+		return true
+	}
+	return false
+}
+
 // ── Taxonomy ───────────────────────────────────────────────────────────────
 
 type taxonomySubDTO struct {
@@ -40,6 +51,9 @@ type taxonomyResponse struct {
 }
 
 func (h *raidsHandler) taxonomy(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	rows, err := h.store.ListRoles()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load role taxonomy: "+err.Error())
@@ -47,7 +61,6 @@ func (h *raidsHandler) taxonomy(w http.ResponseWriter, r *http.Request) {
 	}
 	roles := make(map[string]taxonomyRoleDTO)
 	var roleOrder []string
-	seenRole := map[string]bool{}
 	for _, row := range rows {
 		dto, ok := roles[row.Role]
 		if !ok {
@@ -66,9 +79,7 @@ func (h *raidsHandler) taxonomy(w http.ResponseWriter, r *http.Request) {
 			dto.SubRoles[row.Sub] = taxonomySubDTO{Label: row.Label, Classes: row.Classes}
 		}
 		roles[row.Role] = dto
-		seenRole[row.Role] = true
 	}
-	_ = seenRole
 	writeJSON(w, http.StatusOK, taxonomyResponse{
 		RoleOrder:     roleOrder,
 		Roles:         roles,
@@ -78,6 +89,9 @@ func (h *raidsHandler) taxonomy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) listRoles(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	rows, err := h.store.ListRoles()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load role taxonomy: "+err.Error())
@@ -87,6 +101,9 @@ func (h *raidsHandler) listRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) saveRole(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	var role raidcomp.Role
 	if err := decodeJSON(r, &role); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -100,6 +117,9 @@ func (h *raidsHandler) saveRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) deleteRole(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	role := r.URL.Query().Get("role")
 	sub := r.URL.Query().Get("sub")
 	if err := h.store.DeleteRole(role, sub); err != nil {
@@ -139,6 +159,9 @@ func (h *raidsHandler) getRoster(w http.ResponseWriter, r *http.Request) {
 // ── Encounter CRUD ─────────────────────────────────────────────────────────
 
 func (h *raidsHandler) listEncounters(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	encs, err := h.store.ListEncounters()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load raid encounters: "+err.Error())
@@ -148,6 +171,9 @@ func (h *raidsHandler) listEncounters(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) getEncounter(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	enc, err := h.store.GetEncounter(id)
 	if errors.Is(err, raidcomp.ErrNotFound) {
@@ -162,6 +188,9 @@ func (h *raidsHandler) getEncounter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) createEncounter(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	var enc raidcomp.Encounter
 	if err := decodeJSON(r, &enc); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -180,6 +209,9 @@ func (h *raidsHandler) createEncounter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) updateEncounter(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var enc raidcomp.Encounter
 	if err := decodeJSON(r, &enc); err != nil {
@@ -200,6 +232,9 @@ func (h *raidsHandler) updateEncounter(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *raidsHandler) deleteEncounter(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := h.store.DeleteEncounter(id); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete raid encounter: "+err.Error())
@@ -222,6 +257,9 @@ type checkCompRequest struct {
 }
 
 func (h *raidsHandler) checkComp(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
 	var req checkCompRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

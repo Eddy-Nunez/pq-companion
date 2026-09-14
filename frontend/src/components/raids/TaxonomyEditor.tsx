@@ -135,7 +135,7 @@ export default function TaxonomyEditor({ classNames }: Props): React.ReactElemen
           type="submit"
           disabled={busy}
           className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded font-medium justify-center"
-          style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
+          style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }}
         >
           {editing ? <Save size={13} /> : <Plus size={13} />} {editing ? 'Update' : 'Add'}
         </button>

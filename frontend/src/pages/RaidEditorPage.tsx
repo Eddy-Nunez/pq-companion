@@ -12,10 +12,97 @@ import type { RaidEncounter, RaidTaxonomy } from '../types/raid'
 import type { Zone } from '../types/zone'
 import EncounterForm from '../components/raids/EncounterForm'
 import TaxonomyEditor from '../components/raids/TaxonomyEditor'
-import { roleLabel, subLabel } from '../lib/raidLabels'
 
 function asChip(s: string): React.ReactElement {
   return <span key={s} className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}>{s}</span>
+}
+
+// Hoisted to module scope (rather than defined inside RaidEditorPage's render
+// body) so React doesn't treat it as a new component type — and remount the
+// whole list, discarding DOM state like scroll position — on every parent
+// state change.
+interface EncounterListProps {
+  items: RaidEncounter[]
+  confirmDelete: string | null
+  onEdit: (e: RaidEncounter) => void
+  onRequestDelete: (id: string) => void
+  onCancelDelete: () => void
+  onConfirmDelete: (id: string) => void
+}
+
+function EncounterList({
+  items,
+  confirmDelete,
+  onEdit,
+  onRequestDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: EncounterListProps): React.ReactElement {
+  if (items.length === 0) return <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>None</span>
+  return (
+    <div className="flex flex-col gap-1.5">
+      {items.map((e) => (
+        <div
+          key={e.id}
+          className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
+          style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+        >
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium" style={{ color: 'var(--color-foreground)' }}>{e.name}</span>
+              {e.id !== e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') ? (
+                <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}>{e.id}</span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {asChip(e.zone)}
+              {asChip(`${e.comps.length} comp${e.comps.length === 1 ? '' : 's'}`)}
+              {e.reqs && e.reqs.length > 0 ? asChip(`${e.reqs.length} req${e.reqs.length === 1 ? '' : 's'}`) : null}
+              {e.source ? asChip(e.source) : null}
+            </div>
+            {e.notes ? (
+              <span className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--color-muted-foreground)' }}>{e.notes}</span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => onEdit(e)}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded"
+              style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+            >
+              <Edit3 size={13} /> Edit
+            </button>
+            {confirmDelete === e.id ? (
+              <>
+                <button
+                  onClick={() => onConfirmDelete(e.id)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded font-medium"
+                  style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={onCancelDelete}
+                  className="px-2 py-1 text-xs rounded"
+                  style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+                >
+                  Keep
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => onRequestDelete(e.id)}
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded"
+                style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-danger)' }}
+              >
+                <Trash2 size={13} /> Delete
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function RaidEditorPage(): React.ReactElement {
@@ -77,74 +164,6 @@ export default function RaidEditorPage(): React.ReactElement {
   const active = encounters.filter((e) => e.status === 'active')
   const placeholder = encounters.filter((e) => e.status !== 'active')
 
-  function EncounterList({ items }: { items: RaidEncounter[] }): React.ReactElement {
-    if (items.length === 0) return <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>None</span>
-    return (
-      <div className="flex flex-col gap-1.5">
-        {items.map((e) => (
-          <div
-            key={e.id}
-            className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
-            style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-          >
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium" style={{ color: 'var(--color-foreground)' }}>{e.name}</span>
-                {e.id !== e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') ? (
-                  <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}>{e.id}</span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {asChip(e.zone)}
-                {asChip(`${e.comps.length} comp${e.comps.length === 1 ? '' : 's'}`)}
-                {e.reqs && e.reqs.length > 0 ? asChip(`${e.reqs.length} req${e.reqs.length === 1 ? '' : 's'}`) : null}
-                {e.source ? asChip(e.source) : null}
-              </div>
-              {e.notes ? (
-                <span className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--color-muted-foreground)' }}>{e.notes}</span>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => setEditing(e)}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded"
-                style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
-              >
-                <Edit3 size={13} /> Edit
-              </button>
-              {confirmDelete === e.id ? (
-                <>
-                  <button
-                    onClick={() => void handleDelete(e.id)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs rounded font-medium"
-                    style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => setConfirmDelete(null)}
-                    className="px-2 py-1 text-xs rounded"
-                    style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
-                  >
-                    Keep
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setConfirmDelete(e.id)}
-                  className="flex items-center gap-1 px-2 py-1 text-xs rounded"
-                  style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-danger)' }}
-                >
-                  <Trash2 size={13} /> Delete
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
   if (editing !== null) {
     if (!taxonomy) {
       return <div className="px-6 py-4 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Loading…</div>
@@ -171,7 +190,7 @@ export default function RaidEditorPage(): React.ReactElement {
         <button
           onClick={() => setEditing('new')}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
-          style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}
+          style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }}
         >
           <Plus size={14} /> New Encounter
         </button>
@@ -191,7 +210,14 @@ export default function RaidEditorPage(): React.ReactElement {
             <h2 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--color-success)' }}>
               Active · {active.length}
             </h2>
-            <EncounterList items={active} />
+            <EncounterList
+              items={active}
+              confirmDelete={confirmDelete}
+              onEdit={setEditing}
+              onRequestDelete={setConfirmDelete}
+              onCancelDelete={() => setConfirmDelete(null)}
+              onConfirmDelete={(id) => void handleDelete(id)}
+            />
           </section>
 
           {placeholder.length > 0 && (
@@ -199,7 +225,14 @@ export default function RaidEditorPage(): React.ReactElement {
               <h2 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
                 Placeholders · {placeholder.length}
               </h2>
-              <EncounterList items={placeholder} />
+              <EncounterList
+                items={placeholder}
+                confirmDelete={confirmDelete}
+                onEdit={setEditing}
+                onRequestDelete={setConfirmDelete}
+                onCancelDelete={() => setConfirmDelete(null)}
+                onConfirmDelete={(id) => void handleDelete(id)}
+              />
             </section>
           )}
 
@@ -217,7 +250,6 @@ export default function RaidEditorPage(): React.ReactElement {
               game catalog the Zeal pipe reports.
             </span>
           </section>
-          <span className="sr-only">{roleLabel('tank')} {subLabel('ch_cleric')}</span>
         </div>
       )}
     </div>

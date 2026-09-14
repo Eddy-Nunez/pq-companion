@@ -23,6 +23,12 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-info: #3b82f6;
+  /* Alias of --color-destructive: ~20 call sites already reference
+     --color-danger (mostly `color:` with a `#ef4444` fallback, so those
+     degraded gracefully), but it was never defined here — the Raids feature's
+     GAP pill and error banners use it as a `backgroundColor` with no
+     fallback, which painted nothing at all. Defining it fixes both. */
+  --color-danger: #ef4444;
 
   /* Scrollbar — 12px is the minimum comfortable mouse target; a 6px bar was
      hard to grab. Thumb colour is lifted slightly for contrast on the dark
