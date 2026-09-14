@@ -60,4 +60,27 @@ test.describe('Raid Composition page', () => {
     // placeholder on a fresh store).
     await expect(page.locator('select').first()).toBeVisible()
   })
+
+  test('manual roster form adds a member row', async ({ page }) => {
+    await page.getByRole('button', { name: 'Add member' }).click()
+    await expect(page.getByPlaceholder('Member name').first()).toHaveValue(
+      'Tank',
+    )
+    await page
+      .getByPlaceholder(/class code or name/i)
+      .first()
+      .fill('cleric')
+  })
+})
+
+test.describe('Raid Editor page', () => {
+  test('lists encounters and offers the taxonomy editor', async ({ page }) => {
+    await page.goto('/#/raids/editor', { waitUntil: 'domcontentloaded' })
+    // The seeded AoW encounter must appear in the encounter list.
+    await expect(page.getByText('Avatar of War').first()).toBeVisible()
+    // The taxonomy editor section renders (seeded labels, not raw ids).
+    await expect(
+      page.getByText(/Role Taxonomy|Remove Greater Curse|Tank/i).first(),
+    ).toBeVisible()
+  })
 })
