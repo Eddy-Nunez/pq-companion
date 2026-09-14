@@ -15,7 +15,7 @@
     "dist:win": "npm run build:backend:win && npm run build && node scripts/verify-backend-fresh.cjs && node scripts/verify-maps-db.cjs && electron-builder --win",
     "typecheck": "tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.main.json && tsc --noEmit -p tsconfig.preload.json",
     "test:e2e": "playwright test --project=smoke",
-    "test:e2e:api": "playwright test --project=api",
+    "test:e2e:api": "cross-env PQ_NO_WEBSERVER=1 playwright test --project=api",
     "build:backend": "cd backend && cross-env CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags=\"-s -w\" -o bin/pq-companion-server.exe ./cmd/server",
     "build:backend:win": "cd backend && cross-env CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags=\"-s -w\" -o bin/pq-companion-server.exe ./cmd/server"
   },
