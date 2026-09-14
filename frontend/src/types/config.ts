@@ -224,6 +224,10 @@ export interface Preferences {
   // faction's absolute value or point amount, so this is always an
   // approximate session-only view, not a real faction number.
   faction_tracker_enabled?: boolean
+  // Raids section: role taxonomy editor, encounter knowledge base, and the
+  // live MIN/REC composition checker (dev-gated, off by default while it's
+  // tested against real raids).
+  raids_enabled?: boolean
   npc_overlay_dashboard_sections: NPCOverlaySections
   npc_overlay_popout_sections: NPCOverlaySections
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing

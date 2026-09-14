@@ -559,6 +559,14 @@ type Preferences struct {
 	// view, not a real faction number — see LIMITATIONS.md.
 	FactionTrackerEnabled bool `yaml:"faction_tracker_enabled,omitempty" json:"faction_tracker_enabled"`
 
+	// RaidsEnabled gates the Raids section (role taxonomy editor, encounter
+	// knowledge base, and the live MIN/REC composition checker). Dev-gated,
+	// off by default while it's tested against real raids: the knowledge base
+	// ships with a single seeded encounter (Avatar of War), and the checker's
+	// candidate counts are class-eligibility, not actual assignments — one
+	// member can be counted toward more than one role's need at once.
+	RaidsEnabled bool `yaml:"raids_enabled,omitempty" json:"raids_enabled"`
+
 	// NPCOverlayDashboardSections controls which optional sections of the
 	// NPC overlay are visible in the dashboard panel. Name, zone, pet
 	// owner, raid/rare badges, and the HP bar are always shown regardless

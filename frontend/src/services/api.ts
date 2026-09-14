@@ -1413,6 +1413,7 @@ export interface BackfillArchiveInfo {
   count: number
   bytes: number // total uncompressed size
   oldest: string // YYYY-MM-DD, or ''
+  legacy_count: number // of count, how many are still uncompressed .bak.txt
 }
 
 export interface BackfillInfo {
@@ -1439,6 +1440,18 @@ export function runBackfill(
     sections,
     scope,
   })
+}
+
+// compressLegacyArchives retroactively zips old uncompressed .bak.txt
+// archives (from before Archive & Trim moved to .bak.zip) into .bak.zip in
+// place. Omit character to sweep every character with a log file.
+export function compressLegacyArchives(
+  character?: string,
+): Promise<{ compressed: number; failed: { path: string; error: string }[] }> {
+  return post<{ compressed: number; failed: { path: string; error: string }[] }>(
+    '/api/backfill/compress-archives',
+    character ? { character } : {},
+  )
 }
 
 // ── App Backup (export/import full app state) ──────────────────────────────────
@@ -3267,4 +3280,60 @@ export function getEmotePendingImport(): Promise<SpellEmoteDiff[]> {
 // ones; omit/empty to import everything pending.
 export function importExistingEmotes(spellIds?: number[]): Promise<{ imported: number }> {
   return post<{ imported: number }>('/api/emotes/import-existing', spellIds ? { spell_ids: spellIds } : undefined)
+}
+
+// ── Raid knowledge base + composition checker ──────────────────────────────
+import type {
+  RaidTaxonomy,
+  RaidRosterSnapshot,
+  RaidEncounter,
+  RaidRole,
+  CheckReport,
+  CheckRequest,
+} from '../types/raid'
+
+export function getRaidTaxonomy(): Promise<RaidTaxonomy> {
+  return get<RaidTaxonomy>('/api/raids/taxonomy')
+}
+
+export function getRaidRoles(): Promise<{ roles: RaidRole[] }> {
+  return get<{ roles: RaidRole[] }>('/api/raids/roles')
+}
+
+export function saveRaidRole(role: RaidRole): Promise<{ saved: boolean }> {
+  return post<{ saved: boolean }>('/api/raids/roles', role)
+}
+
+export function deleteRaidRole(role: string, sub?: string): Promise<void> {
+  const q = new URLSearchParams({ role })
+  if (sub) q.set('sub', sub)
+  return del<void>(`/api/raids/roles?${q.toString()}`)
+}
+
+export function getRaidRoster(): Promise<RaidRosterSnapshot> {
+  return get<RaidRosterSnapshot>('/api/raids/roster')
+}
+
+export function getRaidEncounters(): Promise<{ encounters: RaidEncounter[] }> {
+  return get<{ encounters: RaidEncounter[] }>('/api/raids/encounters')
+}
+
+export function getRaidEncounter(id: string): Promise<RaidEncounter> {
+  return get<RaidEncounter>(`/api/raids/encounters/${encodeURIComponent(id)}`)
+}
+
+export function createRaidEncounter(enc: RaidEncounter): Promise<RaidEncounter> {
+  return post<RaidEncounter>('/api/raids/encounters', enc)
+}
+
+export function updateRaidEncounter(id: string, enc: RaidEncounter): Promise<RaidEncounter> {
+  return put<RaidEncounter>(`/api/raids/encounters/${encodeURIComponent(id)}`, enc)
+}
+
+export function deleteRaidEncounter(id: string): Promise<void> {
+  return del<void>(`/api/raids/encounters/${encodeURIComponent(id)}`)
+}
+
+export function checkRaidComp(req: CheckRequest): Promise<CheckReport> {
+  return post<CheckReport>('/api/raids/check', req)
 }

@@ -8,10 +8,11 @@ import { useWindowDrag } from '../hooks/useWindowDrag'
 import { visibleNavSections, orderItems, favoriteItems, type NavItem } from '../lib/sidebarNav'
 import { useSidebarPrefs } from '../hooks/useSidebarPrefs'
 
-function SidebarLink({ to, label, icon }: NavItem): React.ReactElement {
+function SidebarLink({ to, label, icon, end }: NavItem): React.ReactElement {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         [
           'no-drag flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors',

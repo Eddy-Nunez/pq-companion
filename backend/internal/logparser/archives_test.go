@@ -108,3 +108,71 @@ func TestOpenArchive(t *testing.T) {
 		t.Errorf("plain content = %q", string(b2))
 	}
 }
+
+func TestCompressLegacyArchive(t *testing.T) {
+	dir := t.TempDir()
+	txtPath := filepath.Join(dir, "eqlog_Grok_pq.proj.2026-04-20.bak.txt")
+	content := "april legacy content\nline two\n"
+	if err := os.WriteFile(txtPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newPath, err := CompressLegacyArchive(txtPath)
+	if err != nil {
+		t.Fatalf("CompressLegacyArchive: %v", err)
+	}
+	wantPath := filepath.Join(dir, "eqlog_Grok_pq.proj.2026-04-20.bak.zip")
+	if newPath != wantPath {
+		t.Errorf("newPath = %s, want %s", newPath, wantPath)
+	}
+	if _, err := os.Stat(txtPath); !os.IsNotExist(err) {
+		t.Errorf("original .bak.txt should be removed, stat err = %v", err)
+	}
+	rc, err := OpenArchive(newPath)
+	if err != nil {
+		t.Fatalf("OpenArchive on compressed result: %v", err)
+	}
+	b, _ := io.ReadAll(rc)
+	rc.Close()
+	if string(b) != content {
+		t.Errorf("compressed content = %q, want %q", string(b), content)
+	}
+
+	if _, err := CompressLegacyArchive(filepath.Join(dir, "not-an-archive.txt")); err == nil {
+		t.Error("expected error for a non-archive path")
+	}
+}
+
+func TestCompressLegacyArchives(t *testing.T) {
+	dir := t.TempDir()
+	writeArchiveZip(t, filepath.Join(dir, "eqlog_Grok_pq.proj.2026-06-15.bak.zip"), "eqlog_Grok_pq.proj.txt", "already zipped")
+	if err := os.WriteFile(filepath.Join(dir, "eqlog_Grok_pq.proj.2026-03-01.bak.txt"), []byte("legacy one"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "eqlog_Grok_pq.proj.2026-04-20.bak.txt"), []byte("legacy two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results := CompressLegacyArchives(dir, "Grok")
+	if len(results) != 2 {
+		t.Fatalf("expected 2 legacy archives compressed, got %d: %+v", len(results), results)
+	}
+	for _, res := range results {
+		if res.Err != nil {
+			t.Errorf("unexpected error compressing %s: %v", res.OldPath, res.Err)
+		}
+		if _, err := os.Stat(res.OldPath); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed after compression", res.OldPath)
+		}
+	}
+
+	got := DiscoverArchives(dir, "Grok")
+	if len(got) != 3 {
+		t.Fatalf("expected 3 archives after compression, got %d", len(got))
+	}
+	for _, a := range got {
+		if !a.Compressed {
+			t.Errorf("archive %s should be compressed after sweep", a.Path)
+		}
+	}
+}
