@@ -12,6 +12,7 @@ import type {
   RaidRosterSnapshot,
 } from '../types/raid'
 import CompReport from '../components/raids/CompReport'
+import { DEV_RAID_DEBUG } from '../lib/devFlags'
 
 const selectCls =
   'rounded px-2 py-1.5 text-sm outline-none border focus:ring-1 focus:ring-(--color-primary)'
@@ -216,7 +217,10 @@ export default function RaidCheckPage(): React.ReactElement {
         </div>
       ) : null}
 
-      {detectedZone ? (
+      {/* Dev-only diagnostic: end users see detection via the dropdown
+          ordering instead (current-zone encounters sort first). Gate behind
+          VITE_DEV_RAID_DEBUG so production shows no debug banner. */}
+      {DEV_RAID_DEBUG && detectedZone ? (
         <div
           className="px-3 py-2 text-sm rounded flex items-center gap-2"
           style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)', border: '1px solid var(--color-primary)' }}

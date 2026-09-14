@@ -11,3 +11,9 @@ export const DEV_HPS = import.meta.env.VITE_DEV_HPS === 'true'
 // skill-snapshot data source exists. Set VITE_DEV_SKILLS=true in .env.local to
 // re-enable during development. See LIMITATIONS.md §7.2.
 export const DEV_SKILLS = import.meta.env.VITE_DEV_SKILLS === 'true'
+
+// Raid debug affordances (e.g. the "Detected encounter for zone …" banner on
+// the Raid Composition page) are developer-only diagnostics; end users get
+// the detection silently via the dropdown ordering. Set
+// VITE_DEV_RAID_DEBUG=true in .env.local to show them.
+export const DEV_RAID_DEBUG = import.meta.env.VITE_DEV_RAID_DEBUG === 'true'
