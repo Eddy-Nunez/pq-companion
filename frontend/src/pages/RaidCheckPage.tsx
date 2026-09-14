@@ -41,15 +41,23 @@ export default function RaidCheckPage(): React.ReactElement {
   const [manualRows, setManualRows] = useState<CheckRosterInput[]>([])
   const [useManual, setUseManual] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
+  // Re-pulls the encounter list and the live roster snapshot from the backend,
+  // which is what re-evaluates the Zeal connectivity state (disconnected /
+  // connected-but-not-in-raid / live roster). Always enabled — safe to smash
+  // at any time; the spinner is the only feedback it needs.
   const refresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true)
     try {
       const [encRes, rosterRes] = await Promise.all([getRaidEncounters(), getRaidRoster()])
       setEncounters(encRes.encounters)
       setRoster(rosterRes)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRefreshing(false)
     }
   }, [])
 
@@ -153,10 +161,17 @@ export default function RaidCheckPage(): React.ReactElement {
         </button>
         <button
           onClick={() => void refresh()}
+          disabled={refreshing}
           className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded"
-          style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+          style={{
+            backgroundColor: 'var(--color-surface-2)',
+            color: 'var(--color-foreground)',
+            border: '1px solid var(--color-border)',
+            cursor: refreshing ? 'wait' : 'pointer',
+          }}
+          title="Re-check encounters and the live Zeal raid roster"
         >
-          <RefreshCw size={14} /> Refresh
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 
