@@ -9,6 +9,19 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.22.0-beta.1 — 2026-09-13
+
+Unofficial dogfood build of the Raid Composition feature set, built from the `feat/raid-composition` branch on a fork of PQ Companion. The maintainer's release notes remain authoritative for the app as a whole.
+
+### Highlights
+- **Raid Composition Checker** — a new Raids tab compares your raid roster against an encounter's minimum (hard floor) and recommended staffing plans: per-role have/need with GAP badges, class-eligible candidate names, and a live roster fed by the Zeal pipe (with clear states when Zeal is disconnected or you're not in a raid — a manual roster form fills the gap).
+- **Raid Editor** — define encounters with zones (type-ahead over the game's zone catalog, linked to the EQ zone id Zeal reports), prerequisites, strategy notes, and per-role MIN/REC staffing counts in a grid that auto-focuses and defaults counts as you toggle roles on.
+- **Editable role taxonomy** — the role definitions (which classes cover tanking, CH clerics, resist debuffs, etc.) are user-editable with friendly labels, and both the editor grid and the checker follow changes immediately.
+- **Encounter detection** — the checker auto-suggests the encounter for your current zone, matching by the zone id Zeal reports for exactness.
+
+### Notes
+- Pre-release fork build for guild dogfooding; not the official release. Auto-updates are not effective on this build — install new builds manually.
+
 ## v0.21.2 — 2026-09-12
 
 Overlay Text joins the fading-soon alert types for both triggers and the global spell-timer defaults, timer overlays get bottom-up stacking and a white urgent-text option, and the Wishlist can auto-clear an entry when you loot it yourself.
