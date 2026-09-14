@@ -109,3 +109,8 @@ backend/internal/trigger/testdata/import/*
 !backend/internal/emote/testdata/
 backend/internal/emote/testdata/*
 !backend/internal/emote/testdata/spells_en.txt
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
