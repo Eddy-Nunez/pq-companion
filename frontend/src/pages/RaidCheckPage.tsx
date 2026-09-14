@@ -79,29 +79,46 @@ export default function RaidCheckPage(): React.ReactElement {
     return () => clearInterval(t)
   }, [refresh])
 
+  // Encounter ranking + detection share one notion of "how close is this
+  // encounter to the live zone": 0 = exact zoneidnumber match, 1 =
+  // normalized-name match, 2 = no match. Stable-sorting the dropdown by that
+  // rank keeps the current zone's encounters as the first options while
+  // preserving the knowledge-base order everywhere else.
+  const rank = useCallback(
+    (e: RaidEncounter): number => {
+      if (!roster) return 2
+      if (roster.zone_id && roster.zone_id > 0 && e.zone_id === roster.zone_id) {
+        return 0
+      }
+      const zoneKey = normalizeZone(roster.zone ?? '')
+      if (zoneKey && normalizeZone(e.zone) === zoneKey) return 1
+      return 2
+    },
+    [roster],
+  )
+
+  // Dropdown order: current-zone encounters first (rank 0, then 1), rest in
+  // knowledge-base order. Stable sort — encounters within a rank keep their
+  // store order, so ties are deterministic.
+  const orderedEncounters = useMemo(() => {
+    return encounters
+      .map((e, i) => ({ e, i }))
+      .sort((a, b) => rank(a.e) - rank(b.e) || a.i - b.i)
+      .map((x) => x.e)
+  }, [encounters, rank])
+
   // Encounter detection: prefer an exact zoneidnumber match with the live
   // roster (what Zeal reports); fall back to normalized-name comparison for
   // encounters without a resolved zone id. The dropdown stays authoritative.
   useEffect(() => {
     if (!roster || encounters.length === 0) return
     if (userPickedRef.current) return
-    if (roster.zone_id && roster.zone_id > 0) {
-      const hit = encounters.find((e) => e.zone_id === roster.zone_id)
-      if (hit) {
-        setSelectedId(hit.id)
-        setDetectedZone(roster.zone ?? String(roster.zone_id))
-        return
-      }
-    }
-    if (roster.zone === undefined) return
-    const zoneKey = normalizeZone(roster.zone)
-    if (!zoneKey) return
-    const hit = encounters.find((e) => normalizeZone(e.zone) === zoneKey)
+    const hit = orderedEncounters.find((e) => rank(e) < 2)
     if (hit) {
       setSelectedId(hit.id)
-      setDetectedZone(roster.zone)
+      setDetectedZone(roster.zone ?? String(roster.zone_id ?? ''))
     }
-  }, [roster, encounters])
+  }, [roster, encounters, orderedEncounters, rank])
 
   async function runCheck(): Promise<void> {
     if (!selectedId) {
@@ -130,11 +147,11 @@ export default function RaidCheckPage(): React.ReactElement {
   useEffect(() => {
     if (!autoRan.done && !busy && (selectedId || encounters.length === 1) && encounters.length > 0) {
       autoRan.done = true
-      setSelectedId(selectedId || encounters[0].id)
+      setSelectedId(selectedId || orderedEncounters[0].id)
       void runCheck()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounters, selectedId])
+  }, [encounters, selectedId, orderedEncounters])
 
   function addManualRow(): void {
     setManualRows((rows) => [...rows, { name: 'Tank', class: 'war' }])
@@ -162,7 +179,7 @@ export default function RaidCheckPage(): React.ReactElement {
           }}
         >
           {encounters.length === 0 ? <option value="">No encounters</option> : null}
-          {encounters.map((e) => (
+          {orderedEncounters.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name} — {e.zone}
               {e.status !== 'active' ? ' (placeholder)' : ''}
