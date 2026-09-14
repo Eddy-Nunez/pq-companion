@@ -29,6 +29,7 @@ var (
 	ErrCategoryNotFound  = errors.New("category not found")
 	ErrCategoryDepth     = errors.New("categories can only be nested one level deep")
 	ErrCategoryCycle     = errors.New("a category can't be moved under its own subcategory")
+	ErrCategoryNoSplit   = errors.New(`category name has no "/" to split on`)
 )
 
 // Category is a trigger grouping surfaced to the UI, backed by an id-keyed
@@ -541,6 +542,98 @@ func (s *Store) ResolveOrCreateCategory(parentID, name string) (Category, error)
 		return Category{}, fmt.Errorf("resolve category %s: %w", norm, err)
 	}
 	return Category{ID: id, Name: norm, ParentID: parentID}, nil
+}
+
+// categoryHasChildren reports whether any category has id as its parent.
+func (s *Store) categoryHasChildren(id string) (bool, error) {
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM trigger_categories WHERE parent_id = ?`, id).Scan(&n); err != nil {
+		return false, fmt.Errorf("check category children: %w", err)
+	}
+	return n > 0, nil
+}
+
+// SplitCategoryName splits a top-level category's slash-containing name —
+// left untouched, verbatim, by the id-hierarchy migration and by any GINA
+// import predating real nested-category support — into an actual parent/
+// child pair: a top-level category named by the part before the first "/"
+// (created if it doesn't already exist, reused otherwise) and this category,
+// renamed to the part after the "/" and reparented under it.
+//
+// Only a top-level category with no children of its own can be split, same
+// as any other reparent (see ReorderCategories); built-in packs can't be
+// split here. A name with nothing after the "/" (a bare trailing slash) just
+// has it trimmed off — there's no child part to create.
+//
+// This isn't fully atomic: resolving/creating the parent happens before the
+// rename+reparent step. If the parent had to be created and that later step
+// fails, the parent is left behind rather than rolled back — but that's just
+// an ordinary empty custom category, harmless and deletable like any other,
+// not a broken intermediate state.
+func (s *Store) SplitCategoryName(id string) (Category, error) {
+	row, err := s.getCategoryRow(id)
+	if err != nil {
+		return Category{}, err
+	}
+	if builtinPackNames()[row.Name] {
+		return Category{}, ErrCategoryBuiltin
+	}
+	if row.ParentID != "" {
+		return Category{}, ErrCategoryDepth
+	}
+	idx := strings.Index(row.Name, "/")
+	if idx < 0 {
+		return Category{}, ErrCategoryNoSplit
+	}
+	parentName := strings.TrimSpace(row.Name[:idx])
+	leafName := strings.TrimSpace(row.Name[idx+1:])
+	if parentName == "" {
+		return Category{}, ErrCategoryNoSplit
+	}
+	if leafName == "" {
+		// Trailing slash with nothing after it — just drop it, no real split.
+		if err := s.RenameCategory(id, parentName); err != nil {
+			return Category{}, err
+		}
+		return s.CategoryByID(id)
+	}
+	hasChildren, err := s.categoryHasChildren(id)
+	if err != nil {
+		return Category{}, err
+	}
+	if hasChildren {
+		return Category{}, ErrCategoryDepth
+	}
+
+	parent, err := s.ResolveOrCreateCategory("", parentName)
+	if err != nil {
+		return Category{}, err
+	}
+	taken, err := s.categoryNameTaken(parent.ID, leafName)
+	if err != nil {
+		return Category{}, err
+	}
+	if taken {
+		return Category{}, ErrCategoryExists
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Category{}, fmt.Errorf("begin split category: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
+		`UPDATE trigger_categories SET name=?, parent_id=? WHERE id=?`, leafName, parent.ID, id,
+	); err != nil {
+		return Category{}, fmt.Errorf("split category %s: %w", id, err)
+	}
+	if _, err := tx.Exec(`UPDATE triggers SET pack_name=? WHERE category_id=?`, leafName, id); err != nil {
+		return Category{}, fmt.Errorf("refresh split category pack_name cache: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Category{}, err
+	}
+	return s.CategoryByID(id)
 }
 
 // resolveCategoryID returns the id of a top-level category named name,

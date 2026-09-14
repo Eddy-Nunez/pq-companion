@@ -734,6 +734,125 @@ func TestNextTriggerSortOrder_AppendsPerCategory(t *testing.T) {
 	}
 }
 
+func TestSplitCategoryName_CreatesParentAndReparents(t *testing.T) {
+	s := openTestStore(t)
+	cat, err := s.CreateCategory("Raid/Boss Mechanics", "")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	a := makeTrigger("a", "")
+	a.CategoryID = cat.ID
+	if err := s.Insert(a); err != nil {
+		t.Fatalf("Insert a: %v", err)
+	}
+
+	split, err := s.SplitCategoryName(cat.ID)
+	if err != nil {
+		t.Fatalf("SplitCategoryName: %v", err)
+	}
+	if split.Name != "Boss Mechanics" {
+		t.Fatalf("split.Name = %q, want %q", split.Name, "Boss Mechanics")
+	}
+	if split.ID != cat.ID {
+		t.Fatalf("split changed the category's id: got %q, want %q", split.ID, cat.ID)
+	}
+
+	got := catByName(mustList(t, s))
+	parent, ok := got["Raid"]
+	if !ok || parent.ParentID != "" {
+		t.Fatalf("parent %q not created at top level: %+v", "Raid", parent)
+	}
+	child, ok := got["Boss Mechanics"]
+	if !ok || child.ParentID != parent.ID || child.ID != cat.ID {
+		t.Fatalf("child not reparented correctly: %+v (want ParentID=%q, ID=%q)", child, parent.ID, cat.ID)
+	}
+
+	// The trigger's pack_name cache follows the rename, and its category_id
+	// (hence its actual link) is untouched by the split.
+	tr, err := s.Get(a.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if tr.CategoryID != cat.ID || tr.PackName != "Boss Mechanics" {
+		t.Fatalf("trigger not updated correctly: category_id=%q pack_name=%q", tr.CategoryID, tr.PackName)
+	}
+}
+
+func TestSplitCategoryName_ReusesExistingParent(t *testing.T) {
+	s := openTestStore(t)
+	if _, err := s.CreateCategory("Raid", ""); err != nil {
+		t.Fatalf("create existing parent: %v", err)
+	}
+	cat, err := s.CreateCategory("Raid/Adds", "")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	if _, err := s.SplitCategoryName(cat.ID); err != nil {
+		t.Fatalf("SplitCategoryName: %v", err)
+	}
+	cats := mustList(t, s)
+	var raidCount int
+	for _, c := range cats {
+		if c.Name == "Raid" && c.ParentID == "" {
+			raidCount++
+		}
+	}
+	if raidCount != 1 {
+		t.Fatalf("expected exactly one top-level %q category, found %d", "Raid", raidCount)
+	}
+}
+
+func TestSplitCategoryName_Rejects(t *testing.T) {
+	s := openTestStore(t)
+
+	// No "/" in the name.
+	plain, err := s.CreateCategory("Plain", "")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	if _, err := s.SplitCategoryName(plain.ID); !errors.Is(err, ErrCategoryNoSplit) {
+		t.Fatalf("no slash: want ErrCategoryNoSplit, got %v", err)
+	}
+
+	// Already nested (can't gain another level).
+	parent, err := s.CreateCategory("Parent", "")
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	child, err := s.CreateCategory("A/B", parent.ID)
+	if err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	if _, err := s.SplitCategoryName(child.ID); !errors.Is(err, ErrCategoryDepth) {
+		t.Fatalf("already nested: want ErrCategoryDepth, got %v", err)
+	}
+
+	// Has children of its own.
+	withChild, err := s.CreateCategory("Raid/Group", "")
+	if err != nil {
+		t.Fatalf("create withChild: %v", err)
+	}
+	if _, err := s.CreateCategory("Sub", withChild.ID); err != nil {
+		t.Fatalf("create sub: %v", err)
+	}
+	if _, err := s.SplitCategoryName(withChild.ID); !errors.Is(err, ErrCategoryDepth) {
+		t.Fatalf("has children: want ErrCategoryDepth, got %v", err)
+	}
+
+	// Trailing slash with nothing after it just trims it, no split.
+	trailing, err := s.CreateCategory("Trailing/", "")
+	if err != nil {
+		t.Fatalf("create trailing: %v", err)
+	}
+	got, err := s.SplitCategoryName(trailing.ID)
+	if err != nil {
+		t.Fatalf("SplitCategoryName trailing: %v", err)
+	}
+	if got.Name != "Trailing" || got.ParentID != "" {
+		t.Fatalf("trailing slash split: got %+v, want Name=Trailing ParentID=''", got)
+	}
+}
+
 func TestResolveOrCreateCategory_ReusesExisting(t *testing.T) {
 	s := openTestStore(t)
 	first, err := s.ResolveOrCreateCategory("", "Raid Triggers")

@@ -807,6 +807,20 @@ func (h *triggerHandler) renameCategory(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// splitCategory splits a top-level category's slash-containing name (e.g.
+// left over from a GINA import, or from the pre-nesting flat category model)
+// into a real parent/child pair. See trigger.Store.SplitCategoryName.
+func (h *triggerHandler) splitCategory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	cat, err := h.store.SplitCategoryName(id)
+	if err != nil {
+		writeCategoryError(w, err)
+		return
+	}
+	h.engine.Reload()
+	writeJSON(w, http.StatusOK, cat)
+}
+
 // deleteCategory removes a category. The ?triggers= query selects what
 // happens to its own triggers: "delete" removes them outright (cascading to
 // any children's triggers too), anything else (the default) moves just this
@@ -969,7 +983,8 @@ func writeTimerGroupError(w http.ResponseWriter, err error) {
 func writeCategoryError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, trigger.ErrCategoryNameEmpty), errors.Is(err, trigger.ErrCategoryReserved),
-		errors.Is(err, trigger.ErrCategoryDepth), errors.Is(err, trigger.ErrCategoryCycle):
+		errors.Is(err, trigger.ErrCategoryDepth), errors.Is(err, trigger.ErrCategoryCycle),
+		errors.Is(err, trigger.ErrCategoryNoSplit):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, trigger.ErrCategoryExists):
 		writeError(w, http.StatusConflict, err.Error())

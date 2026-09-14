@@ -3050,6 +3050,16 @@ export function exportTriggerCategory(id: string): Promise<TriggerPack> {
   return get<TriggerPack>(`/api/triggers/categories/${encodeURIComponent(id)}/export`)
 }
 
+// splitTriggerCategory splits a top-level category's slash-containing name
+// (left over from a GINA import, or from before nested categories existed)
+// into a real parent/child pair: a top-level category named by the part
+// before the first "/" (created if it doesn't already exist, reused
+// otherwise) and this category, renamed to the part after the "/" and
+// reparented under it.
+export function splitTriggerCategory(id: string): Promise<TriggerCategory> {
+  return post<TriggerCategory>(`/api/triggers/categories/${encodeURIComponent(id)}/split`)
+}
+
 export interface TriggerTestOverlayRequest {
   test_id: string
   text: string

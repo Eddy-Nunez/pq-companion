@@ -24,6 +24,7 @@ import {
   Check,
   SlidersHorizontal,
   Pin,
+  Scissors,
 } from 'lucide-react'
 import {
   DndContext,
@@ -74,6 +75,7 @@ import {
   listActionTemplates,
   exportTriggerPack,
   exportTriggerCategory,
+  splitTriggerCategory,
   listCharacters,
   listTriggerCategories,
   createTriggerCategory,
@@ -2017,6 +2019,7 @@ interface CategorySectionProps {
   onExportCategory: (id: string) => void
   onAddSubcategory: (parentId: string) => void
   onReparentCategory: (cat: TriggerCategory, newParentId: string) => void
+  onSplitCategory: (cat: TriggerCategory) => void
   onTriggerDeleted: (id: string) => void
   onTriggerUpdated: (t: Trigger) => void
   onCategoriesChanged: () => void
@@ -2040,6 +2043,7 @@ function CategorySection({
   onExportCategory,
   onAddSubcategory,
   onReparentCategory,
+  onSplitCategory,
   onTriggerDeleted,
   onTriggerUpdated,
   onCategoriesChanged,
@@ -2230,6 +2234,17 @@ function CategorySection({
                   style={{ color: 'var(--color-muted-foreground)', cursor: 'pointer' }}
                 >
                   <Plus size={12} />
+                </button>
+              )}
+              {!isChild && !hasChildren && cat?.name.includes('/') && (
+                <button
+                  type="button"
+                  onClick={() => cat && onSplitCategory(cat)}
+                  className="p-0.5 rounded"
+                  title={`Split into "${cat.name.split('/')[0].trim()}" → "${cat.name.split('/').slice(1).join('/').trim()}"`}
+                  style={{ color: 'var(--color-muted-foreground)', cursor: 'pointer' }}
+                >
+                  <Scissors size={12} />
                 </button>
               )}
               {group.items.length > 0 && (
@@ -3350,6 +3365,14 @@ export default function TriggersPage(): React.ReactElement {
       .catch((err: Error) => setError(err.message))
   }
 
+  // Split a slash-named category (left over from a GINA import, or from
+  // before nested categories existed) into a real parent/child pair.
+  const handleSplitCategory = (cat: TriggerCategory) => {
+    splitTriggerCategory(cat.id)
+      .then(() => load())
+      .catch((err: Error) => setError(err.message))
+  }
+
   // ── Drag-and-drop (dnd-kit) ──
   // A section keyed by categoryKey ('__uncategorized__' or a category id)
   // accepts the active trigger when it isn't already filed there. Pack
@@ -4057,6 +4080,7 @@ export default function TriggersPage(): React.ReactElement {
                       onExportCategory={handleExportCategory}
                       onAddSubcategory={handleAddSubcategory}
                       onReparentCategory={handleReparentCategory}
+                      onSplitCategory={handleSplitCategory}
                       onTriggerDeleted={handleDeleted}
                       onTriggerUpdated={handleUpdated}
                       onCategoriesChanged={reloadCategories}
