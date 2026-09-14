@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Envelope is the outer JSON shape on every pipe message line.
@@ -78,8 +80,76 @@ type Player struct {
 	PetID      *int     `json:"pet_id,omitempty"`
 }
 
+// flexInt accepts a JSON number or a numeric string. Zeal emits roster
+// scalars as strings in live captures ("level":"60") while some fixtures and
+// older ZealPipes-derived docs show numbers — accept both rather than
+// dropping the whole envelope over one field's formatting.
+type flexInt int
+
+func (f *flexInt) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `" `)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("zealpipe: not an int: %q", s)
+	}
+	*f = flexInt(n)
+	return nil
+}
+
+// zealClassIDsByName maps the folded class NAME Zeal emits in raid/group
+// rosters ("Wizard", "Shadow Knight") to its 1-indexed Zeal class id.
+// Live capture 2026-09-14: MsgRaid emits class as the display NAME, not the
+// id. Same 1..15 ordering raidcomp.zealClassIDs uses (1=Warrior ..
+// 15=Beastlord); keys are folded with foldClass (lowercase, letters only),
+// so "Shadow Knight" == "shadowknight".
+var zealClassIDsByName = map[string]int{
+	"warrior": 1, "cleric": 2, "paladin": 3, "ranger": 4, "shadowknight": 5,
+	"druid": 6, "monk": 7, "bard": 8, "rogue": 9, "shaman": 10,
+	"necromancer": 11, "wizard": 12, "magician": 13, "enchanter": 14, "beastlord": 15,
+}
+
+func foldClass(s string) string {
+	var sb strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
+// classID is a Zeal 1-indexed class id that also accepts the class NAME as a
+// JSON string. Numbers pass through; names resolve through
+// zealClassIDsByName. Unknown names decode to 0 (unknown), never an error —
+// Zeal is upstream-developed and a shifted name must not drop the roster.
+type classID int
+
+func (c *classID) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `" `)
+	if s == "" || s == "null" {
+		*c = 0
+		return nil
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		*c = classID(n)
+		return nil
+	}
+	if id, ok := zealClassIDsByName[foldClass(s)]; ok {
+		*c = classID(id)
+		return nil
+	}
+	*c = 0
+	return nil
+}
+
 // RaidMember is one entry in a MsgRaid (type 5) payload. Zeal emits this
-// array whenever the client is in a raid; we drop the whole message today.
+// array every main-loop tick while the client is in a raid (verified live
+// 2026-09-14: ~10 envelopes/sec — consumers must change-dedup, not assume
+// per-tick is meaningful).
 //
 // name/level/class/group/rank are always present. spawn_id/loc/heading are
 // present only for members currently in your zone (Zeal resolves them through
@@ -87,12 +157,12 @@ type Player struct {
 // members AND only when the user has run "/pipe verbose on" (PipeVerbose,
 // which defaults off). SpawnID was added in v1.4.6.
 type RaidMember struct {
-	Name    string    `json:"name"`
-	Level   int       `json:"level"`
-	Class   int       `json:"class"`
-	Group   string    `json:"group"` // "0" = ungrouped, "1".."12"
-	Rank    string    `json:"rank"`  // "Raid Leader" | "Group Leader" | ""
-	SpawnID *int      `json:"spawn_id,omitempty"`
+	Name    string  `json:"name"`
+	Level   flexInt `json:"level"`
+	Class   classID `json:"class"`
+	Group   string  `json:"group"` // "0" = ungrouped, "1".."12"
+	Rank    string  `json:"rank"`  // "Raid Leader" | "Group Leader" | ""
+	SpawnID *int    `json:"spawn_id,omitempty"`
 	Loc     *Location `json:"loc,omitempty"`
 	Heading *float64  `json:"heading,omitempty"`
 	HPCur   *int      `json:"hp_current,omitempty"` // PipeVerbose only
@@ -110,8 +180,8 @@ type GroupMember struct {
 	Heading *float64  `json:"heading,omitempty"`
 	HPCur   *int      `json:"hp_current,omitempty"` // PipeVerbose only
 	HPMax   *int      `json:"hp_max,omitempty"`     // PipeVerbose only
-	Class   *int      `json:"class,omitempty"`      // PipeVerbose only
-	Level   *int      `json:"level,omitempty"`      // PipeVerbose only
+	Class   *classID  `json:"class,omitempty"`      // PipeVerbose only
+	Level   *flexInt  `json:"level,omitempty"`      // PipeVerbose only
 	ZoneID  *int      `json:"zone_id,omitempty"`    // PipeVerbose only
 }
 

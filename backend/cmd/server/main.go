@@ -1376,6 +1376,21 @@ func main() {
 	var pipeZoneID int
 	lastRaidSeen := map[string]string{}
 
+	// Fingerprint of the last raid.roster broadcast — see the MsgRaid case.
+	var lastRaidRosterFP string
+
+	// raidFingerprint summarizes a raid roster + zone into a change-detection
+	// key. Member order follows the wire (Zeal's raid list order), which is
+	// stable tick-to-tick; only genuine roster/zone changes produce a new key.
+	raidFingerprint := func(zoneID int, members []raidcomp.Member) string {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "z%d;", zoneID)
+		for _, m := range members {
+			fmt.Fprintf(&sb, "%s/%d/%d/%s/%s;", m.Name, m.Level, m.Class, m.Group, m.Rank)
+		}
+		return sb.String()
+	}
+
 	// Live pipe zone, published atomically so API handlers can read the
 	// CURRENT zone at request time. The raid roster snapshot stamps the zone
 	// when a MsgRaid arrives, but Zeal only re-emits the roster on raid
@@ -1499,9 +1514,9 @@ func main() {
 			}
 			raidMembers := make([]raidcomp.Member, 0, len(members))
 			for _, m := range members {
-				code, _ := raidcomp.CodeForZealID(m.Class)
+				code, _ := raidcomp.CodeForZealID(int(m.Class))
 				raidMembers = append(raidMembers, raidcomp.Member{
-					Name: m.Name, Level: m.Level, Class: m.Class, Code: code,
+					Name: m.Name, Level: int(m.Level), Class: int(m.Class), Code: code,
 					Group: m.Group, Rank: m.Rank,
 				})
 			}
@@ -1511,7 +1526,15 @@ func main() {
 			// the roster + re-runs the comp check rather than trusting a
 			// WS-carried snapshot to stay in sync with the taxonomy/encounter
 			// edits it also depends on.
-			hub.Broadcast(ws.Event{Type: "raid.roster", Data: map[string]any{"zone_id": pipeZoneID}})
+			// Change-deduped: Zeal emits MsgRaid every main-loop tick (~10/sec
+			// verified live 2026-09-14), and each tick re-stamps UpdatedAt, so
+			// broadcasting every envelope would make every connected client
+			// re-fetch + re-check ten times a second. Broadcast only when the
+			// roster fingerprint (members + zone) actually changes.
+			if fp := raidFingerprint(pipeZoneID, raidMembers); fp != lastRaidRosterFP {
+				lastRaidRosterFP = fp
+				hub.Broadcast(ws.Event{Type: "raid.roster", Data: map[string]any{"zone_id": pipeZoneID}})
+			}
 			if playerStore == nil {
 				return
 			}
@@ -1522,17 +1545,17 @@ func main() {
 					continue
 				}
 				class := ""
-				if m.Class >= 1 && m.Class <= 15 {
-					class = players.ClassNameByIndex(m.Class - 1) // Zeal class ids are 1-indexed
+				if c := int(m.Class); c >= 1 && c <= 15 {
+					class = players.ClassNameByIndex(c - 1) // Zeal class ids are 1-indexed
 				}
-				fp := fmt.Sprintf("%d:%s", m.Level, class)
+				fp := fmt.Sprintf("%d:%s", int(m.Level), class)
 				if lastRaidSeen[m.Name] == fp {
 					continue
 				}
 				lastRaidSeen[m.Name] = fp
 				if err := playerStore.Upsert(players.SightingInput{
 					Name:       m.Name,
-					Level:      m.Level,
+					Level:      int(m.Level),
 					Class:      class,
 					Zone:       pipeZoneShort,
 					ObservedAt: now,
