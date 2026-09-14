@@ -3,7 +3,7 @@ import {
   Sword, Sparkles, Skull, Map, Hammer, Activity, Layers, ScrollText, Zap,
   Users, Dice5, UserSearch, MessageSquare, Package, TrendingUp, BookOpen,
   Library, KeyRound, Hourglass, Star, Wand2, ListChecks, Percent, Store, PawPrint,
-  Flag, Swords, Keyboard, Route, Scale, Navigation, ShieldCheck, PencilRuler,
+  Flag, Swords, Keyboard, Route, Scale, Navigation, ShieldCheck,
 } from 'lucide-react'
 import type { Preferences } from '../types/config'
 
@@ -80,8 +80,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: 'raids',
     label: 'Raids',
     items: [
-      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} />, end: true, flag: 'raids_enabled' },
-      { to: '/raids/editor', label: 'Raid Editor', icon: <PencilRuler size={16} />, flag: 'raids_enabled' },
+      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} />, flag: 'raids_enabled' },
     ],
   },
   {
