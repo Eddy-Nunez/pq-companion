@@ -435,13 +435,39 @@ func (s *Store) ReorderCategories(items []CategoryPlacement) error {
 			if grandParent != "" {
 				return ErrCategoryDepth
 			}
-			continue
+		} else {
+			parentRow, err := getCategoryRowWith(tx, parentID)
+			if err != nil {
+				return err
+			}
+			if parentRow.ParentID != "" {
+				return ErrCategoryDepth
+			}
 		}
-		parentRow, err := getCategoryRowWith(tx, parentID)
+		// id is becoming a child, so it can't keep children of its own — any
+		// existing child not ALSO being relocated out by this same batch would
+		// end up two levels deep once id's own parent_id is set below.
+		childRows, err := tx.Query(`SELECT id FROM trigger_categories WHERE parent_id = ?`, id)
 		if err != nil {
+			return fmt.Errorf("check existing children of %s: %w", id, err)
+		}
+		var stillAChild bool
+		for childRows.Next() {
+			var childID string
+			if err := childRows.Scan(&childID); err != nil {
+				childRows.Close()
+				return err
+			}
+			if newParentForChild, movedInBatch := newParent[childID]; !movedInBatch || newParentForChild == id {
+				stillAChild = true
+			}
+		}
+		if err := childRows.Err(); err != nil {
+			childRows.Close()
 			return err
 		}
-		if parentRow.ParentID != "" {
+		childRows.Close()
+		if stillAChild {
 			return ErrCategoryDepth
 		}
 	}

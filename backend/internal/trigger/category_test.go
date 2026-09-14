@@ -638,6 +638,19 @@ func TestReorderCategories_RejectsCyclesAndDepth(t *testing.T) {
 	if err := s.ReorderCategories([]CategoryPlacement{{ID: other.ID, ParentID: child.ID}}); !errors.Is(err, ErrCategoryDepth) {
 		t.Fatalf("grandchild via reorder: want ErrCategoryDepth, got %v", err)
 	}
+	// "Parent" (which has "Child") can't itself become a child of "Other" —
+	// that would leave Child two levels deep.
+	if err := s.ReorderCategories([]CategoryPlacement{{ID: parent.ID, ParentID: other.ID}}); !errors.Is(err, ErrCategoryDepth) {
+		t.Fatalf("parent-with-children-becomes-child: want ErrCategoryDepth, got %v", err)
+	}
+	// ...unless Child is ALSO relocated out in the same batch, so nothing ends
+	// up two levels deep.
+	if err := s.ReorderCategories([]CategoryPlacement{
+		{ID: parent.ID, ParentID: other.ID},
+		{ID: child.ID, ParentID: ""},
+	}); err != nil {
+		t.Fatalf("parent-becomes-child with child promoted in same batch should succeed: %v", err)
+	}
 }
 
 func TestReorderCategories_MaterializesPackRow(t *testing.T) {
