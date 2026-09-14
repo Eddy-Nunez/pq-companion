@@ -19,7 +19,7 @@ function StampTime({ ts }: { ts?: number }): React.ReactElement {
 
 export default function RaidCheckPage(): React.ReactElement {
   const {
-    encounters, roster, selectedId, setSelectedId, detectedZone, report, busy, error, refresh, runCheck,
+    orderedEncounters, roster, selectedId, setSelectedId, report, busy, refreshing, error, refresh, runCheck,
   } = useRaidReadiness()
   const [manualRows, setManualRows] = useState<CheckRosterInput[]>([])
   const [useManual, setUseManual] = useState(false)
@@ -46,8 +46,8 @@ export default function RaidCheckPage(): React.ReactElement {
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
         >
-          {encounters.length === 0 ? <option value="">No encounters</option> : null}
-          {encounters.map((e) => (
+          {orderedEncounters.length === 0 ? <option value="">No encounters</option> : null}
+          {orderedEncounters.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name} — {e.zone}
               {e.status !== 'active' ? ' (placeholder)' : ''}
@@ -67,26 +67,23 @@ export default function RaidCheckPage(): React.ReactElement {
         </button>
         <button
           onClick={() => void refresh()}
+          disabled={refreshing}
           className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded"
-          style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+          style={{
+            backgroundColor: 'var(--color-surface-2)',
+            color: 'var(--color-foreground)',
+            border: '1px solid var(--color-border)',
+            cursor: refreshing ? 'wait' : 'pointer',
+          }}
+          title="Re-check encounters and the live Zeal raid roster"
         >
-          <RefreshCw size={14} /> Refresh
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 
       {error ? (
         <div className="px-3 py-2 text-sm rounded" style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}>
           {error}
-        </div>
-      ) : null}
-
-      {detectedZone ? (
-        <div
-          className="px-3 py-2 text-sm rounded flex items-center gap-2"
-          style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)', border: '1px solid var(--color-primary)' }}
-        >
-          <Radio size={14} style={{ color: 'var(--color-primary)' }} />
-          Detected encounter for zone &quot;{detectedZone}&quot; — change it above if wrong.
         </div>
       ) : null}
 

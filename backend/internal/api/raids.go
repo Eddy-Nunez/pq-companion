@@ -17,6 +17,11 @@ type raidsHandler struct {
 	store  *raidcomp.Store
 	roster *raidcomp.Roster
 	pipe   *zealpipe.Supervisor
+	// liveZone returns the player's CURRENT pipe zone (zoneidnumber, short
+	// name). The roster snapshot's own zone is stamped when a MsgRaid arrives
+	// and goes stale when the raid zones without a membership change, so the
+	// roster endpoint overlays the live zone on read.
+	liveZone func() (int, string)
 }
 
 // unavailable responds 503 and reports true when the raid store failed to
@@ -145,6 +150,16 @@ type rosterResponse struct {
 
 func (h *raidsHandler) getRoster(w http.ResponseWriter, r *http.Request) {
 	snap, _ := h.roster.Get()
+	// Overlay the live pipe zone: the snapshot's zone was captured at the last
+	// MsgRaid, which can be stale (zoned since) or zero (raid arrived before
+	// the first player tick). The live zone is what encounter detection should
+	// match against.
+	if h.liveZone != nil {
+		if id, short := h.liveZone(); id > 0 {
+			snap.ZoneID = id
+			snap.Zone = short
+		}
+	}
 	connected := h.pipe != nil && h.pipe.Status().State == zealpipe.StateConnected
 	if snap.Members == nil {
 		snap.Members = []raidcomp.Member{}

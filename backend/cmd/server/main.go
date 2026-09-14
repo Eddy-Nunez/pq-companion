@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jasonsoprovich/pq-companion/backend/internal/api"
@@ -1375,6 +1376,25 @@ func main() {
 	var pipeZoneID int
 	lastRaidSeen := map[string]string{}
 
+	// Live pipe zone, published atomically so API handlers can read the
+	// CURRENT zone at request time. The raid roster snapshot stamps the zone
+	// when a MsgRaid arrives, but Zeal only re-emits the roster on raid
+	// membership changes (periodic re-sends aside) — zoning while raiding
+	// would otherwise leave the snapshot on a stale (or zero, if the raid
+	// arrived before the first player tick) zone and encounter detection
+	// would lag by up to one roster re-send.
+	type liveZone struct {
+		id    int
+		short string
+	}
+	var curPipeZone atomic.Value // liveZone
+	liveZoneFn := func() (int, string) {
+		if z, ok := curPipeZone.Load().(liveZone); ok {
+			return z.id, z.short
+		}
+		return 0, ""
+	}
+
 	// Live raid roster keeper: latest MsgRaid snapshot, consumed by the raid
 	// composition checker. Separate from the players-store upserts below, which
 	// feed the Players tab.
@@ -1422,6 +1442,7 @@ func main() {
 			}
 			pipeZoneShort = zoneShort
 			pipeZoneID = p.Zone
+			curPipeZone.Store(liveZone{id: p.Zone, short: zoneShort})
 			posTracker.Update(
 				zoneShort, p.Location.GameX(), p.Location.GameY(), p.Location.Z, p.Heading)
 			// Zeal v1.4.6+ pet spawn id: a stable, collision-proof identity for
@@ -1979,7 +2000,7 @@ func main() {
 	}
 	defer mapStore.Close()
 
-	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, actualPort)
+	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, liveZoneFn, actualPort)
 
 	slog.Info("server starting", "addr", listener.Addr().String(), "db", *dbPath)
 	if err := http.Serve(listener, router); err != nil {
