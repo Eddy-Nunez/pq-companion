@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw, Play, ShieldCheck, Radio, UserRoundPlus, Trash2 } from 'lucide-react'
 import {
   getRaidEncounters,
@@ -43,6 +43,9 @@ export default function RaidCheckPage(): React.ReactElement {
   const [busy, setBusy] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  // Set when the user picks an encounter in the dropdown; detection then stops
+  // auto-selecting so polling can't clobber the user's choice.
+  const userPickedRef = useRef(false)
 
   // Re-pulls the encounter list and the live roster snapshot from the backend,
   // which is what re-evaluates the Zeal connectivity state (disconnected /
@@ -65,11 +68,23 @@ export default function RaidCheckPage(): React.ReactElement {
     void refresh()
   }, [refresh])
 
+  // Poll the roster while the page is open: the live raid state (Zeal
+  // connectivity, in-raid, current zone) only arrives through this endpoint,
+  // so without polling a raid joined after page load would never be
+  // detected until a manual Refresh.
+  useEffect(() => {
+    const t = setInterval(() => {
+      void refresh()
+    }, 5000)
+    return () => clearInterval(t)
+  }, [refresh])
+
   // Encounter detection: prefer an exact zoneidnumber match with the live
   // roster (what Zeal reports); fall back to normalized-name comparison for
   // encounters without a resolved zone id. The dropdown stays authoritative.
   useEffect(() => {
     if (!roster || encounters.length === 0) return
+    if (userPickedRef.current) return
     if (roster.zone_id && roster.zone_id > 0) {
       const hit = encounters.find((e) => e.zone_id === roster.zone_id)
       if (hit) {
@@ -141,7 +156,10 @@ export default function RaidCheckPage(): React.ReactElement {
           className={selectCls}
           style={selectStyle}
           value={selectedId}
-          onChange={(e) => setSelectedId(e.target.value)}
+          onChange={(e) => {
+            userPickedRef.current = true
+            setSelectedId(e.target.value)
+          }}
         >
           {encounters.length === 0 ? <option value="">No encounters</option> : null}
           {encounters.map((e) => (
