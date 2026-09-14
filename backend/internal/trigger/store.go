@@ -133,15 +133,22 @@ func (s *Store) migrate() error {
 	}
 
 	// Persists user-created custom categories so an empty, freshly-created
-	// group survives a restart. The category key is the triggers.pack_name
-	// column; built-in (class) and imported packs are NOT recorded here —
-	// they're derived from in-use pack_name values. See category.go.
+	// group survives a restart, and holds the tree structure for nested
+	// categories. Id-keyed (not name-keyed) so renames never cascade and
+	// sibling categories under different parents can share a name — same
+	// reasoning as trigger_timer_groups below. triggers.category_id is the
+	// authoritative link; built-in (class) and imported packs still get a row
+	// here (explicit=0), materialized by migrateCategoryHierarchy, so every
+	// in-use category always resolves to one. See category.go.
 	if _, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS trigger_categories (
-			name       TEXT    NOT NULL PRIMARY KEY,
+			id         TEXT    NOT NULL PRIMARY KEY,
+			name       TEXT    NOT NULL,
+			parent_id  TEXT    NOT NULL DEFAULT '',
 			created_at INTEGER NOT NULL,
 			explicit   INTEGER NOT NULL DEFAULT 1,
-			sort_order INTEGER NOT NULL DEFAULT 0
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			UNIQUE (parent_id, name)
 		)
 	`); err != nil {
 		return err
@@ -188,6 +195,9 @@ func (s *Store) migrate() error {
 		`ALTER TABLE triggers ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE triggers ADD COLUMN custom_group_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE triggers ADD COLUMN timer_stack INTEGER NOT NULL DEFAULT 0`,
+		// category_id is the authoritative category link (see trigger_categories
+		// above); pack_name is kept in sync as a display/compat cache.
+		`ALTER TABLE triggers ADD COLUMN category_id TEXT NOT NULL DEFAULT ''`,
 		// trigger_categories columns for databases created before category
 		// ordering. Existing rows were all user-created → explicit defaults 1.
 		`ALTER TABLE trigger_categories ADD COLUMN explicit INTEGER NOT NULL DEFAULT 1`,
@@ -198,6 +208,9 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("add column: %w", err)
 		}
 	}
+	if err := s.migrateCategoryHierarchy(); err != nil {
+		return err
+	}
 	if err := s.backfillSourcePack(); err != nil {
 		return err
 	}
@@ -206,6 +219,206 @@ func (s *Store) migrate() error {
 	}
 	if err := s.migratePatternAudits(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// columnExists reports whether table has a column named col, via PRAGMA
+// table_info. Used to self-detect one-time schema conversions that a plain
+// ALTER TABLE ADD COLUMN can't express, such as changing a primary key.
+// table must be a fixed, code-controlled identifier — it's interpolated
+// directly into the PRAGMA statement, which doesn't accept bind parameters.
+func (s *Store) columnExists(table, col string) (bool, error) {
+	rows, err := s.db.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return false, fmt.Errorf("table_info(%s): %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == col {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+// migrateCategoryHierarchy converts the pre-hierarchy trigger_categories table
+// (keyed by name — one flat, global namespace) to the id-keyed, parent_id-
+// capable shape, and backfills triggers.category_id. This is what makes
+// nested categories possible: RenameCategory no longer has to cascade, and
+// sibling categories under different parents can share a name.
+//
+// Self-detecting via the presence of the id column, so it's idempotent and
+// needs no ledger — it runs on every startup but only ever does real work
+// once. A fresh install's CREATE TABLE IF NOT EXISTS above already has the
+// id-keyed shape and skips the conversion step below.
+func (s *Store) migrateCategoryHierarchy() error {
+	hasID, err := s.columnExists("trigger_categories", "id")
+	if err != nil {
+		return err
+	}
+	if !hasID {
+		if err := s.convertCategoriesTableToIDKeyed(); err != nil {
+			return err
+		}
+	}
+	if err := s.materializePackCategoryRows(); err != nil {
+		return err
+	}
+	return s.backfillTriggerCategoryIDs()
+}
+
+// convertCategoriesTableToIDKeyed rebuilds trigger_categories with an id
+// primary key and a parent_id column, carrying every existing row across
+// unchanged (name, created_at, explicit, sort_order) with parent_id=” —
+// i.e. every pre-existing category becomes a top-level category, exactly
+// preserving today's flat list. SQLite can't change a primary key via ALTER
+// TABLE, hence the create/copy/drop/rename inside one transaction.
+func (s *Store) convertCategoriesTableToIDKeyed() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin category id migration: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		CREATE TABLE trigger_categories_new (
+			id         TEXT    NOT NULL PRIMARY KEY,
+			name       TEXT    NOT NULL,
+			parent_id  TEXT    NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL,
+			explicit   INTEGER NOT NULL DEFAULT 1,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			UNIQUE (parent_id, name)
+		)
+	`); err != nil {
+		return fmt.Errorf("create trigger_categories_new: %w", err)
+	}
+
+	rows, err := tx.Query(`SELECT name, created_at, explicit, sort_order FROM trigger_categories`)
+	if err != nil {
+		return fmt.Errorf("read old trigger_categories: %w", err)
+	}
+	type oldCategoryRow struct {
+		name      string
+		createdAt int64
+		explicit  int
+		sortOrder int
+	}
+	var old []oldCategoryRow
+	for rows.Next() {
+		var r oldCategoryRow
+		if err := rows.Scan(&r.name, &r.createdAt, &r.explicit, &r.sortOrder); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan old trigger_categories: %w", err)
+		}
+		old = append(old, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	for _, r := range old {
+		id, err := NewID()
+		if err != nil {
+			return fmt.Errorf("generate category id: %w", err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO trigger_categories_new (id, name, parent_id, created_at, explicit, sort_order)
+			 VALUES (?, ?, '', ?, ?, ?)`,
+			id, r.name, r.createdAt, r.explicit, r.sortOrder,
+		); err != nil {
+			return fmt.Errorf("migrate category %s: %w", r.name, err)
+		}
+	}
+
+	if _, err := tx.Exec(`DROP TABLE trigger_categories`); err != nil {
+		return fmt.Errorf("drop old trigger_categories: %w", err)
+	}
+	if _, err := tx.Exec(`ALTER TABLE trigger_categories_new RENAME TO trigger_categories`); err != nil {
+		return fmt.Errorf("rename trigger_categories_new: %w", err)
+	}
+	return tx.Commit()
+}
+
+// materializePackCategoryRows ensures every in-use pack_name (built-in class
+// packs and imported packs, which never got a persisted trigger_categories
+// row before this migration) has a root-level id-keyed row, so
+// triggers.category_id can always resolve. Inserted rows are explicit=0 —
+// the existing "pack categories vanish from the list when empty" display
+// rule (ListCategories) is unaffected.
+func (s *Store) materializePackCategoryRows() error {
+	rows, err := s.db.Query(`
+		SELECT DISTINCT pack_name FROM triggers
+		WHERE pack_name <> ''
+		  AND pack_name NOT IN (SELECT name FROM trigger_categories WHERE parent_id = '')
+	`)
+	if err != nil {
+		return fmt.Errorf("find unmaterialized pack categories: %w", err)
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	now := time.Now().UTC().Unix()
+	for _, n := range names {
+		id, err := NewID()
+		if err != nil {
+			return fmt.Errorf("generate category id: %w", err)
+		}
+		if _, err := s.db.Exec(
+			`INSERT INTO trigger_categories (id, name, parent_id, created_at, explicit, sort_order)
+			 VALUES (?, ?, '', ?, 0, 0)
+			 ON CONFLICT(parent_id, name) DO NOTHING`,
+			id, n, now,
+		); err != nil {
+			return fmt.Errorf("materialize category %s: %w", n, err)
+		}
+	}
+	return nil
+}
+
+// backfillTriggerCategoryIDs links every trigger whose pack_name resolves to
+// a root-level category row but has no category_id yet — the normal path for
+// an upgrade, and a safety net for a pack installed before this migration
+// (or before resolveCategoryID) ran. category_id is authoritative from here
+// on; pack_name is kept in sync as a read cache for compatibility (see
+// resolveCategoryID in category.go). Only touches unlinked rows, so this is
+// safe to run on every startup without a ledger.
+func (s *Store) backfillTriggerCategoryIDs() error {
+	_, err := s.db.Exec(`
+		UPDATE triggers
+		SET category_id = (
+			SELECT id FROM trigger_categories
+			WHERE trigger_categories.name = triggers.pack_name AND trigger_categories.parent_id = ''
+		)
+		WHERE category_id = '' AND pack_name <> ''
+		  AND EXISTS (
+			SELECT 1 FROM trigger_categories
+			WHERE trigger_categories.name = triggers.pack_name AND trigger_categories.parent_id = ''
+		  )
+	`)
+	if err != nil {
+		return fmt.Errorf("backfill trigger category_id: %w", err)
 	}
 	return nil
 }
@@ -374,7 +587,7 @@ func (s *Store) ListBySourcePack(sourcePack string) ([]*Trigger, error) {
 		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
 		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
-		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
 		 FROM triggers WHERE source_pack = ? ORDER BY created_at ASC`, sourcePack,
 	)
 	if err != nil {
@@ -400,11 +613,48 @@ func (s *Store) ListByCategory(category string) ([]*Trigger, error) {
 		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
 		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
-		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
 		 FROM triggers WHERE pack_name = ? ORDER BY sort_order ASC, created_at ASC`, category,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list triggers for category %s: %w", category, err)
+	}
+	defer rows.Close()
+	var triggers []*Trigger
+	for rows.Next() {
+		t, err := scanTrigger(rows)
+		if err != nil {
+			return nil, err
+		}
+		triggers = append(triggers, t)
+	}
+	return triggers, rows.Err()
+}
+
+// ListByCategoryIDs returns every trigger filed directly under any of the
+// given category ids, ordered by sort_order then created_at. Used to export
+// a top-level category together with its children in one pack (see
+// exportCategory).
+func (s *Store) ListByCategoryIDs(ids []string) ([]*Trigger, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := s.db.Query(
+		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
+		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
+		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
+		 FROM triggers WHERE category_id IN (`+strings.Join(placeholders, ",")+`) ORDER BY sort_order ASC, created_at ASC`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list triggers for categories: %w", err)
 	}
 	defer rows.Close()
 	var triggers []*Trigger
@@ -912,17 +1162,20 @@ func (s *Store) insertWith(ex execer, t *Trigger) error {
 		t.TimerType = TimerTypeNone
 	}
 	source, pipeJSON := normalizeSourceAndCondition(t)
+	if err := s.resolveCategoryLink(t); err != nil {
+		return fmt.Errorf("resolve category link: %w", err)
+	}
 	_, err = ex.Exec(
 		`INSERT INTO triggers (id, name, enabled, pattern, actions, pack_name, created_at,
 		                       timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		                       display_threshold_secs, characters, timer_alerts, exclude_patterns,
 		                       extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition,
-		                       dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                       dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, t.Name, boolToInt(t.Enabled), t.Pattern, string(actJSON), t.PackName, t.CreatedAt.Unix(),
 		string(t.TimerType), t.TimerDurationSecs, t.WornOffPattern, t.SpellID,
 		t.DisplayThresholdSecs, string(charJSON), string(alertJSON), string(excludeJSON),
-		string(extraJSON), t.TimerDurationCapture, t.TimerKeyCapture, t.TimerTargetCapture, source, pipeJSON, t.DedupKey, t.CooldownSecs, t.SortOrder, t.SourcePack, t.BarColor, t.RefireCooldownSecs, t.PackKey, boolToInt(t.Pinned), t.CustomGroupID, boolToInt(t.TimerStack),
+		string(extraJSON), t.TimerDurationCapture, t.TimerKeyCapture, t.TimerTargetCapture, source, pipeJSON, t.DedupKey, t.CooldownSecs, t.SortOrder, t.SourcePack, t.BarColor, t.RefireCooldownSecs, t.PackKey, boolToInt(t.Pinned), t.CustomGroupID, boolToInt(t.TimerStack), t.CategoryID,
 	)
 	if err != nil {
 		return fmt.Errorf("insert trigger: %w", err)
@@ -956,7 +1209,7 @@ func (s *Store) List() ([]*Trigger, error) {
 		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
 		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
-		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
 		 FROM triggers ORDER BY created_at ASC`,
 	)
 	if err != nil {
@@ -981,7 +1234,7 @@ func (s *Store) Get(id string) (*Trigger, error) {
 		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
 		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
-		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
 		 FROM triggers WHERE id = ?`, id,
 	)
 	t, err := scanTrigger(row)
@@ -1032,17 +1285,20 @@ func (s *Store) Update(t *Trigger) error {
 		t.TimerType = TimerTypeNone
 	}
 	source, pipeJSON := normalizeSourceAndCondition(t)
+	if err := s.resolveCategoryLink(t); err != nil {
+		return fmt.Errorf("resolve category link: %w", err)
+	}
 	res, err := s.db.Exec(
 		`UPDATE triggers SET name=?, enabled=?, pattern=?, actions=?, pack_name=?,
 		                     timer_type=?, timer_duration_secs=?, worn_off_pattern=?, spell_id=?,
 		                     display_threshold_secs=?, characters=?, timer_alerts=?, exclude_patterns=?,
 		                     extra_patterns=?, timer_duration_capture=?, timer_key_capture=?, timer_target_capture=?, source=?, pipe_condition=?,
-		                     dedup_key=?, cooldown_secs=?, sort_order=?, source_pack=?, bar_color=?, refire_cooldown_secs=?, pack_key=?, pinned=?, custom_group_id=?, timer_stack=?
+		                     dedup_key=?, cooldown_secs=?, sort_order=?, source_pack=?, bar_color=?, refire_cooldown_secs=?, pack_key=?, pinned=?, custom_group_id=?, timer_stack=?, category_id=?
 		 WHERE id=?`,
 		t.Name, boolToInt(t.Enabled), t.Pattern, string(actJSON), t.PackName,
 		string(t.TimerType), t.TimerDurationSecs, t.WornOffPattern, t.SpellID,
 		t.DisplayThresholdSecs, string(charJSON), string(alertJSON), string(excludeJSON),
-		string(extraJSON), t.TimerDurationCapture, t.TimerKeyCapture, t.TimerTargetCapture, source, pipeJSON, t.DedupKey, t.CooldownSecs, t.SortOrder, t.SourcePack, t.BarColor, t.RefireCooldownSecs, t.PackKey, boolToInt(t.Pinned), t.CustomGroupID, boolToInt(t.TimerStack),
+		string(extraJSON), t.TimerDurationCapture, t.TimerKeyCapture, t.TimerTargetCapture, source, pipeJSON, t.DedupKey, t.CooldownSecs, t.SortOrder, t.SourcePack, t.BarColor, t.RefireCooldownSecs, t.PackKey, boolToInt(t.Pinned), t.CustomGroupID, boolToInt(t.TimerStack), t.CategoryID,
 		t.ID,
 	)
 	if err != nil {
@@ -1078,7 +1334,7 @@ func (s *Store) FindByPackAndName(packName, name string) (*Trigger, error) {
 		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
 		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
-		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
 		 FROM triggers WHERE pack_name = ? AND name = ? LIMIT 1`,
 		packName, name,
 	)
@@ -1106,7 +1362,7 @@ func (s *Store) FindByDedupKey(key string) (*Trigger, error) {
 		`SELECT id, name, enabled, pattern, actions, pack_name, created_at,
 		        timer_type, timer_duration_secs, worn_off_pattern, spell_id,
 		        display_threshold_secs, characters, timer_alerts, exclude_patterns,
-		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack
+		        extra_patterns, timer_duration_capture, timer_key_capture, timer_target_capture, source, pipe_condition, dedup_key, cooldown_secs, sort_order, source_pack, bar_color, refire_cooldown_secs, pack_key, pinned, custom_group_id, timer_stack, category_id
 		 FROM triggers WHERE dedup_key = ? LIMIT 1`, key,
 	)
 	t, err := scanTrigger(row)
@@ -1239,7 +1495,7 @@ func scanTrigger(row scanner) (*Trigger, error) {
 		&t.ID, &t.Name, &enabledInt, &t.Pattern, &actJSON, &t.PackName, &unixSec,
 		&timerType, &t.TimerDurationSecs, &t.WornOffPattern, &t.SpellID,
 		&t.DisplayThresholdSecs, &charJSON, &alertJSON, &excludeJSON,
-		&extraJSON, &t.TimerDurationCapture, &t.TimerKeyCapture, &t.TimerTargetCapture, &source, &pipeJSON, &t.DedupKey, &t.CooldownSecs, &t.SortOrder, &t.SourcePack, &t.BarColor, &t.RefireCooldownSecs, &t.PackKey, &pinnedInt, &t.CustomGroupID, &timerStackInt,
+		&extraJSON, &t.TimerDurationCapture, &t.TimerKeyCapture, &t.TimerTargetCapture, &source, &pipeJSON, &t.DedupKey, &t.CooldownSecs, &t.SortOrder, &t.SourcePack, &t.BarColor, &t.RefireCooldownSecs, &t.PackKey, &pinnedInt, &t.CustomGroupID, &timerStackInt, &t.CategoryID,
 	); err != nil {
 		return nil, err
 	}

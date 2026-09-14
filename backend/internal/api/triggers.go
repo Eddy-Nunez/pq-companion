@@ -79,10 +79,15 @@ type triggerRequest struct {
 	ExtraPatterns   []trigger.ExtraPattern `json:"extra_patterns"`
 	Source          string                 `json:"source,omitempty"`
 	PipeCondition   *trigger.PipeCondition `json:"pipe_condition,omitempty"`
-	// PackName is the trigger's category. Pointer so an omitted field on
-	// update leaves the existing category untouched (a present value — even
-	// "" for Uncategorized — replaces it). nil on create defaults to "".
-	PackName *string `json:"pack_name,omitempty"`
+	// PackName is the trigger's category, by name — root-level only, kept for
+	// older callers. Pointer so an omitted field on update leaves the existing
+	// category untouched (a present value — even "" for Uncategorized —
+	// replaces it). nil on create defaults to "". CategoryID, when present,
+	// takes precedence over PackName — it's the only way to place a trigger
+	// into a subcategory, since a bare name always resolves at the top level
+	// (see resolveCategoryLink).
+	PackName   *string `json:"pack_name,omitempty"`
+	CategoryID *string `json:"category_id,omitempty"`
 }
 
 // validateTriggerRequest enforces the per-source field rules: log triggers
@@ -147,6 +152,16 @@ func (h *triggerHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.PackName != nil {
 		packName = strings.TrimSpace(*req.PackName)
 	}
+	categoryID := ""
+	if req.CategoryID != nil && strings.TrimSpace(*req.CategoryID) != "" {
+		cat, err := h.store.CategoryByID(strings.TrimSpace(*req.CategoryID))
+		if err != nil {
+			writeCategoryError(w, err)
+			return
+		}
+		categoryID = cat.ID
+		packName = cat.Name
+	}
 	t := &trigger.Trigger{
 		ID:                   id,
 		Name:                 req.Name,
@@ -154,6 +169,7 @@ func (h *triggerHandler) create(w http.ResponseWriter, r *http.Request) {
 		Pattern:              req.Pattern,
 		Actions:              req.Actions,
 		PackName:             packName,
+		CategoryID:           categoryID,
 		CreatedAt:            time.Now().UTC(),
 		TimerType:            normalizeTimerType(req.TimerType),
 		TimerDurationSecs:    req.TimerDurationSecs,
@@ -262,14 +278,36 @@ func (h *triggerHandler) update(w http.ResponseWriter, r *http.Request) {
 	existing.ExtraPatterns = req.ExtraPatterns
 	existing.Source = src
 	existing.PipeCondition = req.PipeCondition
-	// Only touch the category when the request carries pack_name — an
-	// omitted field (older callers, edits that don't change category)
-	// leaves the existing value intact. On a category change, re-append to
-	// the end of the destination's manual order.
-	if req.PackName != nil {
+	// Only touch the category when the request carries category_id or
+	// pack_name — an omitted field (older callers, edits that don't change
+	// category) leaves the existing value intact. On a category change,
+	// re-append to the end of the destination's manual order. category_id
+	// takes precedence — it's the only way to target a subcategory, since a
+	// bare pack_name always resolves at the top level.
+	switch {
+	case req.CategoryID != nil:
+		newID := strings.TrimSpace(*req.CategoryID)
+		if newID != existing.CategoryID {
+			newPack := ""
+			if newID != "" {
+				cat, err := h.store.CategoryByID(newID)
+				if err != nil {
+					writeCategoryError(w, err)
+					return
+				}
+				newPack = cat.Name
+			}
+			existing.CategoryID = newID
+			existing.PackName = newPack
+			if order, err := h.store.NextTriggerSortOrder(newPack); err == nil {
+				existing.SortOrder = order
+			}
+		}
+	case req.PackName != nil:
 		newPack := strings.TrimSpace(*req.PackName)
 		if newPack != existing.PackName {
 			existing.PackName = newPack
+			existing.CategoryID = ""
 			if order, err := h.store.NextTriggerSortOrder(newPack); err == nil {
 				existing.SortOrder = order
 			}
@@ -477,12 +515,39 @@ func (h *triggerHandler) exportPack(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pack)
 }
 
-// exportCategory exports all triggers filed under one category as a JSON
-// trigger pack, so a curated category (e.g. "Raid Triggers") can be shared
-// and imported by others via the same Import wizard used for any other pack.
+// exportCategory exports all triggers filed under one category — including
+// any subcategory's triggers, if it has children — as a JSON trigger pack, so
+// a curated category (e.g. "Raid Triggers", with a subcategory per raid) can
+// be shared and imported by others via the same Import wizard used for any
+// other pack. Each trigger's pack_name is rewritten to its path relative to
+// the exported root (empty for a trigger filed directly in the root, or the
+// child's own name for one filed in a subcategory) — the same convention
+// GINA's own nested export uses — so importCommit can rebuild the hierarchy
+// under whatever category the importer chooses.
 func (h *triggerHandler) exportCategory(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	triggers, err := h.store.ListByCategory(name)
+	id := chi.URLParam(r, "id")
+	cats, err := h.store.ListCategories()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var root *trigger.Category
+	childName := make(map[string]string)
+	ids := []string{id}
+	for i := range cats {
+		c := &cats[i]
+		if c.ID == id {
+			root = c
+		} else if c.ParentID == id {
+			ids = append(ids, c.ID)
+			childName[c.ID] = c.Name
+		}
+	}
+	if root == nil {
+		writeError(w, http.StatusNotFound, "category not found")
+		return
+	}
+	triggers, err := h.store.ListByCategoryIDs(ids)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -493,10 +558,16 @@ func (h *triggerHandler) exportCategory(w http.ResponseWriter, r *http.Request) 
 	}
 	plain := make([]trigger.Trigger, len(triggers))
 	for i, t := range triggers {
-		plain[i] = *t
+		p := *t
+		if p.CategoryID == id {
+			p.PackName = ""
+		} else {
+			p.PackName = childName[p.CategoryID]
+		}
+		plain[i] = p
 	}
 	pack := trigger.TriggerPack{
-		PackName:    name,
+		PackName:    root.Name,
 		Description: "Exported from PQ Companion",
 		Triggers:    plain,
 	}
@@ -568,16 +639,32 @@ func (h *triggerHandler) importCommit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the destination category exists. A reserved/builtin name or an
-	// already-existing custom category is fine — only hard errors abort.
-	if _, err := h.store.CreateCategory(category); err != nil &&
-		!errors.Is(err, trigger.ErrCategoryExists) {
+	// "Parent/Child" files the import into a subcategory, creating the parent
+	// alongside it if neither exists yet. Only the first "/" is significant —
+	// matches the one-level nesting cap and the path convention exportCategory
+	// and GINA's own nested groups (gina.go's walk()) already use. A reserved/
+	// builtin name or an already-existing category at that spot is fine —
+	// ResolveOrCreateCategory reuses it; only hard errors abort.
+	segments := strings.SplitN(category, "/", 2)
+	leafName := strings.TrimSpace(segments[0])
+	parentID := ""
+	if len(segments) == 2 && strings.TrimSpace(segments[1]) != "" {
+		parent, err := h.store.ResolveOrCreateCategory("", leafName)
+		if err != nil {
+			writeCategoryError(w, err)
+			return
+		}
+		parentID = parent.ID
+		leafName = strings.TrimSpace(segments[1])
+	}
+	leaf, err := h.store.ResolveOrCreateCategory(parentID, leafName)
+	if err != nil {
 		writeCategoryError(w, err)
 		return
 	}
 
 	// Default Characters via the shared (class-agnostic) pack logic.
-	pack := trigger.TriggerPack{PackName: category, Triggers: req.Triggers}
+	pack := trigger.TriggerPack{PackName: leaf.Name, Triggers: req.Triggers}
 	h.applyDefaultCharacters(&pack)
 
 	// Fetch the base sort order once: the whole batch is inserted in a single
@@ -585,13 +672,13 @@ func (h *triggerHandler) importCommit(w http.ResponseWriter, r *http.Request) {
 	// none of the pending rows and hand every trigger the same order. Offset by
 	// the loop index instead to preserve the selected order.
 	baseOrder := 0
-	if order, err := h.store.NextTriggerSortOrder(category); err == nil {
+	if order, err := h.store.NextTriggerSortOrder(leaf.Name); err == nil {
 		baseOrder = order
 	}
 	triggers := make([]*trigger.Trigger, 0, len(pack.Triggers))
 	for i := range pack.Triggers {
 		t := pack.Triggers[i]
-		t.PackName = category
+		t.CategoryID = leaf.ID
 		t.SourcePack = "" // user-owned: removal is via the category, not a pack
 		t.TimerType = normalizeTimerType(t.TimerType)
 		// Re-validate the pattern here rather than trusting the earlier
@@ -651,15 +738,21 @@ func (h *triggerHandler) listBuiltinPacks(w http.ResponseWriter, r *http.Request
 
 // ── Categories ───────────────────────────────────────────────────────────────
 //
-// Categories are trigger groupings keyed off the pack_name column. Custom
-// categories persist in the trigger_categories table so an empty, freshly-
-// created group survives a restart; built-in (class) and imported packs show
-// up here too (derived from in-use pack_name values) but are flagged
-// IsBuiltin and stay read-only — they're managed from the Packs tab. Deleting
-// a category moves its triggers to Uncategorized rather than deleting them,
-// which is the key difference from uninstalling a pack (removePack).
+// Categories are trigger groupings, id-keyed (trigger_categories.id, linked
+// via triggers.category_id) so a rename never cascades and a subcategory can
+// share a name with one under a different parent. Nesting is capped at one
+// level (see trigger.maxCategoryDepth): a top-level category may have
+// children, a child may not. Custom categories persist in trigger_categories
+// so an empty, freshly-created group survives a restart; built-in (class) and
+// imported packs show up here too (every in-use category is materialized —
+// see migrateCategoryHierarchy) but are flagged IsBuiltin and stay read-only
+// — they're managed from the Packs tab. Deleting a category moves its own
+// triggers to Uncategorized (or deletes them, if requested) and promotes any
+// children to top-level; it never deletes a child category, which is the key
+// difference from uninstalling a pack (removePack).
 
-// listCategories returns all categories surfaced to the UI.
+// listCategories returns all categories surfaced to the UI, as a flat list —
+// the frontend assembles the tree from each category's parent_id.
 func (h *triggerHandler) listCategories(w http.ResponseWriter, r *http.Request) {
 	cats, err := h.store.ListCategories()
 	if err != nil {
@@ -673,17 +766,19 @@ func (h *triggerHandler) listCategories(w http.ResponseWriter, r *http.Request) 
 }
 
 type categoryRequest struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	ParentID string `json:"parent_id"`
 }
 
-// createCategory persists a new, empty custom category.
+// createCategory persists a new, empty custom category, optionally nested
+// under parent_id.
 func (h *triggerHandler) createCategory(w http.ResponseWriter, r *http.Request) {
 	var req categoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	cat, err := h.store.CreateCategory(req.Name)
+	cat, err := h.store.CreateCategory(req.Name, req.ParentID)
 	if err != nil {
 		writeCategoryError(w, err)
 		return
@@ -695,15 +790,16 @@ type renameCategoryRequest struct {
 	NewName string `json:"new_name"`
 }
 
-// renameCategory renames a custom category, cascading to its triggers.
+// renameCategory renames a category in place — its id doesn't change, so
+// this never touches any other category or any trigger outside it.
 func (h *triggerHandler) renameCategory(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	id := chi.URLParam(r, "id")
 	var req renameCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if err := h.store.RenameCategory(name, req.NewName); err != nil {
+	if err := h.store.RenameCategory(id, req.NewName); err != nil {
 		writeCategoryError(w, err)
 		return
 	}
@@ -711,13 +807,15 @@ func (h *triggerHandler) renameCategory(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// deleteCategory removes a custom category. The ?triggers= query selects what
-// happens to its triggers: "delete" removes them outright, anything else (the
-// default) moves them to Uncategorized.
+// deleteCategory removes a category. The ?triggers= query selects what
+// happens to its own triggers: "delete" removes them outright (cascading to
+// any children's triggers too), anything else (the default) moves just this
+// category's triggers to Uncategorized. Either way, any children are
+// promoted to top-level rather than deleted.
 func (h *triggerHandler) deleteCategory(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	id := chi.URLParam(r, "id")
 	deleteTriggers := r.URL.Query().Get("triggers") == "delete"
-	if err := h.store.DeleteCategory(name, deleteTriggers); err != nil {
+	if err := h.store.DeleteCategory(id, deleteTriggers); err != nil {
 		writeCategoryError(w, err)
 		return
 	}
@@ -726,18 +824,20 @@ func (h *triggerHandler) deleteCategory(w http.ResponseWriter, r *http.Request) 
 }
 
 type reorderCategoriesRequest struct {
-	Order []string `json:"order"`
+	Items []trigger.CategoryPlacement `json:"items"`
 }
 
-// reorderCategories persists a new display order for the category sections.
+// reorderCategories persists new positions and/or parents for a set of
+// categories in one call — a plain reorder (parent unchanged) and a reparent
+// (drag a category onto another) are both just entries in items.
 func (h *triggerHandler) reorderCategories(w http.ResponseWriter, r *http.Request) {
 	var req reorderCategoriesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	if err := h.store.ReorderCategories(req.Order); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	if err := h.store.ReorderCategories(req.Items); err != nil {
+		writeCategoryError(w, err)
 		return
 	}
 	// Ordering doesn't affect matching, so no engine reload.
@@ -868,7 +968,8 @@ func writeTimerGroupError(w http.ResponseWriter, err error) {
 // writeCategoryError maps category sentinel errors to HTTP status codes.
 func writeCategoryError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, trigger.ErrCategoryNameEmpty), errors.Is(err, trigger.ErrCategoryReserved):
+	case errors.Is(err, trigger.ErrCategoryNameEmpty), errors.Is(err, trigger.ErrCategoryReserved),
+		errors.Is(err, trigger.ErrCategoryDepth), errors.Is(err, trigger.ErrCategoryCycle):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, trigger.ErrCategoryExists):
 		writeError(w, http.StatusConflict, err.Error())

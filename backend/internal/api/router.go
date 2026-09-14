@@ -557,9 +557,9 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			// "order" can't shadow them (vs. the PUT/{name} rename route).
 			r.Post("/categories/order", triggerH.reorderCategories)
 			r.Post("/order", triggerH.reorderTriggers)
-			r.Put("/categories/{name}", triggerH.renameCategory)
-			r.Delete("/categories/{name}", triggerH.deleteCategory)
-			r.Get("/categories/{name}/export", triggerH.exportCategory)
+			r.Put("/categories/{id}", triggerH.renameCategory)
+			r.Delete("/categories/{id}", triggerH.deleteCategory)
+			r.Get("/categories/{id}/export", triggerH.exportCategory)
 			// Spell Emote Customizer integration: flags triggers linked to an
 			// edited spell whose pattern may need updating — suggest/apply/
 			// revert only, never an automatic bulk rewrite.

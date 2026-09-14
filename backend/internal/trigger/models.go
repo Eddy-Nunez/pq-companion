@@ -216,13 +216,14 @@ type PipeCondition struct {
 // either log lines (Source=="log", regex on Pattern) or ZealPipe events
 // (Source=="pipe", typed match on PipeCondition).
 type Trigger struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Enabled   bool      `json:"enabled"`
-	Pattern   string    `json:"pattern"` // regexp matched against the message portion of log lines (Source=="log" only)
-	Actions   []Action  `json:"actions"`
-	PackName  string    `json:"pack_name"` // empty for user-created triggers; pack name for built-in packs
-	CreatedAt time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	Enabled    bool      `json:"enabled"`
+	Pattern    string    `json:"pattern"` // regexp matched against the message portion of log lines (Source=="log" only)
+	Actions    []Action  `json:"actions"`
+	PackName   string    `json:"pack_name"`   // display cache derived from CategoryID; never authoritative — see resolveCategoryLink
+	CategoryID string    `json:"category_id"` // authoritative category link; empty means Uncategorized
+	CreatedAt  time.Time `json:"created_at"`
 
 	// Source selects which input stream the trigger matches against:
 	//   "log"  (default, omitted in JSON) — Pattern regex on log lines.
