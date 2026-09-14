@@ -1485,6 +1485,12 @@ func main() {
 				})
 			}
 			rosterKeeper.Set(pipeZoneID, pipeZoneShort, raidMembers)
+			// Trigger for the Raid Readiness overlay: like lockouts.snapshot /
+			// keyring.snapshot, this carries no payload — the client re-fetches
+			// the roster + re-runs the comp check rather than trusting a
+			// WS-carried snapshot to stay in sync with the taxonomy/encounter
+			// edits it also depends on.
+			hub.Broadcast(ws.Event{Type: "raid.roster", Data: map[string]any{"zone_id": pipeZoneID}})
 			if playerStore == nil {
 				return
 			}
@@ -1617,6 +1623,7 @@ func main() {
 		posTracker.ResetGroup()
 		lastRaidSeen = map[string]string{}
 		rosterKeeper.Clear()
+		hub.Broadcast(ws.Event{Type: "raid.roster", Data: map[string]any{}})
 		hub.Broadcast(ws.Event{Type: "player:position", Data: nil})
 		timerEngine.SetPipeCasting("")
 		timerEngine.SetPipeBuffSlots(nil)

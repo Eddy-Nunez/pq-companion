@@ -85,6 +85,9 @@ export interface ElectronAPI {
     openZoneLockouts: () => Promise<void>
     closeZoneLockouts: () => Promise<void>
     toggleZoneLockouts: () => Promise<void>
+    openRaidReadiness: () => Promise<void>
+    closeRaidReadiness: () => Promise<void>
+    toggleRaidReadiness: () => Promise<void>
     anyPopoutOpen: () => Promise<boolean>
     openAllPopouts: (panels?: Array<string | { key: string; name: string }>) => Promise<void>
     closeAllPopouts: () => Promise<void>

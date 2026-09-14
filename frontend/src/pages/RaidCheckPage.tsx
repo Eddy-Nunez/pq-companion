@@ -1,16 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useState } from 'react'
 import { RefreshCw, Play, ShieldCheck, Radio, UserRoundPlus, Trash2 } from 'lucide-react'
-import {
-  getRaidEncounters,
-  getRaidRoster,
-  checkRaidComp,
-} from '../services/api'
-import type {
-  CheckReport,
-  CheckRosterInput,
-  RaidEncounter,
-  RaidRosterSnapshot,
-} from '../types/raid'
+import { useRaidReadiness } from '../hooks/useRaidReadiness'
+import type { CheckRosterInput } from '../types/raid'
 import CompReport from '../components/raids/CompReport'
 
 const selectCls =
@@ -21,102 +12,17 @@ const selectStyle: React.CSSProperties = {
   color: 'var(--color-foreground)',
 }
 
-// normalizeZone makes zone-name comparisons forgiving across Zeal's short
-// names vs the knowledge base's display names (letters+digits only, lowercase).
-function normalizeZone(s: string): string {
-  return (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')
-}
-
 function StampTime({ ts }: { ts?: number }): React.ReactElement {
   if (!ts) return <span>—</span>
   return <span>{new Date(ts * 1000).toLocaleTimeString()}</span>
 }
 
 export default function RaidCheckPage(): React.ReactElement {
-  const [encounters, setEncounters] = useState<RaidEncounter[]>([])
-  const [roster, setRoster] = useState<RaidRosterSnapshot | null>(null)
-  const [selectedId, setSelectedId] = useState<string>('')
-  const [detectedZone, setDetectedZone] = useState<string>('')
-  const [report, setReport] = useState<CheckReport | null>(null)
+  const {
+    encounters, roster, selectedId, setSelectedId, detectedZone, report, busy, error, refresh, runCheck,
+  } = useRaidReadiness()
   const [manualRows, setManualRows] = useState<CheckRosterInput[]>([])
   const [useManual, setUseManual] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      const [encRes, rosterRes] = await Promise.all([getRaidEncounters(), getRaidRoster()])
-      setEncounters(encRes.encounters)
-      setRoster(rosterRes)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  // Encounter detection: prefer an exact zoneidnumber match with the live
-  // roster (what Zeal reports); fall back to normalized-name comparison for
-  // encounters without a resolved zone id. The dropdown stays authoritative.
-  useEffect(() => {
-    if (!roster || encounters.length === 0) return
-    if (roster.zone_id && roster.zone_id > 0) {
-      const hit = encounters.find((e) => e.zone_id === roster.zone_id)
-      if (hit) {
-        setSelectedId(hit.id)
-        setDetectedZone(roster.zone ?? String(roster.zone_id))
-        return
-      }
-    }
-    if (roster.zone === undefined) return
-    const zoneKey = normalizeZone(roster.zone)
-    if (!zoneKey) return
-    const hit = encounters.find((e) => normalizeZone(e.zone) === zoneKey)
-    if (hit) {
-      setSelectedId(hit.id)
-      setDetectedZone(roster.zone)
-    }
-  }, [roster, encounters])
-
-  // runCheck takes the encounter id explicitly rather than always reading
-  // `selectedId` from closure — the auto-run effect below needs to check
-  // against an id it just resolved this tick, before the corresponding
-  // setSelectedId has re-rendered the component.
-  async function runCheck(id: string = selectedId): Promise<void> {
-    if (!id) {
-      setError('Pick an encounter first')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      // When a manual roster is entered it replaces the live one entirely.
-      const rep = await checkRaidComp({
-        encounter_id: id,
-        roster: useManual && manualRows.length > 0 ? manualRows : undefined,
-      })
-      setReport(rep)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setReport(null)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // Auto-run a first check once data is loaded and an encounter is selectable.
-  const autoRan = useRef(false)
-  useEffect(() => {
-    if (autoRan.current || busy || encounters.length === 0) return
-    const id = selectedId || (encounters.length === 1 ? encounters[0].id : '')
-    if (!id) return
-    autoRan.current = true
-    if (!selectedId) setSelectedId(id)
-    void runCheck(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [encounters, selectedId])
 
   function addManualRow(): void {
     setManualRows((rows) => [...rows, { name: 'Tank', class: 'war' }])
@@ -149,7 +55,7 @@ export default function RaidCheckPage(): React.ReactElement {
           ))}
         </select>
         <button
-          onClick={() => void runCheck()}
+          onClick={() => void runCheck(selectedId, useManual && manualRows.length > 0 ? manualRows : undefined)}
           disabled={busy || !selectedId}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
           style={{

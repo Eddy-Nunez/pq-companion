@@ -26,6 +26,7 @@ export type OverlayName =
   | 'discordVoice'
   | 'liveMap'
   | 'zoneLockouts'
+  | 'raidReadiness'
 
 /**
  * How an overlay behaves while locked.
@@ -54,6 +55,10 @@ const OVERLAY_DEFAULT_LOCKED_MODE: Partial<Record<OverlayName, LockedMode>> = {
   // or clear and no reason for the map body to capture the mouse while playing.
   // Only the header responds to hover, as with Discord Voice.
   liveMap: 'clickthrough',
+  // Same reasoning as Discord Voice: the gap list is a passive readout with
+  // nothing to click or clear, so there's no reason for its body to capture
+  // the mouse while playing.
+  raidReadiness: 'clickthrough',
 }
 
 export const OVERLAY_DEFS: { name: OverlayName; label: string }[] = [
@@ -71,6 +76,7 @@ export const OVERLAY_DEFS: { name: OverlayName; label: string }[] = [
   { name: 'discordVoice', label: 'Discord Voice' },
   { name: 'liveMap', label: 'Live Map' },
   { name: 'zoneLockouts', label: 'Zone Lockouts' },
+  { name: 'raidReadiness', label: 'Raid Readiness' },
 ]
 
 // Matches a StreamKit voice-overlay URL, e.g.
