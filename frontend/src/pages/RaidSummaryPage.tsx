@@ -78,9 +78,13 @@ export default function RaidSummaryPage(): React.ReactElement {
       }
       counts.set(code, (counts.get(code) ?? 0) + 1)
     }
-    const missing = inRaid ? CLASS_ORDER.filter((c) => (counts.get(c) ?? 0) === 0) : []
+    // Computed unconditionally (an empty raid is trivially "missing" every
+    // class) — the dashboard below always renders, so the grid's per-card
+    // dimming and the summary stat stay consistent whether or not there's a
+    // live raid right now. Only the alert banner's tone depends on inRaid.
+    const missing = CLASS_ORDER.filter((c) => (counts.get(c) ?? 0) === 0)
     return { counts, unclassedCount, missing }
-  }, [members, inRaid])
+  }, [members])
 
   const sortedMembers = useMemo(() => {
     const rank = (m: RaidRosterMember): number => {
@@ -121,91 +125,104 @@ export default function RaidSummaryPage(): React.ReactElement {
 
       <RosterStatusBanner roster={roster} />
 
-      {!inRaid ? (
-        <div className="text-sm py-10 text-center" style={{ color: 'var(--color-muted-foreground)' }}>
-          No live raid to summarize yet — join a raid in-game with Zeal running and this tab will
-          fill in automatically.
-        </div>
+      <div className="flex flex-wrap gap-3">
+        <Stat label="Members" value={members.length} />
+        <Stat label="Classed" value={members.length - unclassedCount} color={inRaid ? 'var(--color-success)' : undefined} />
+        {unclassedCount > 0 && <Stat label="Unclassed" value={unclassedCount} color="var(--color-muted-foreground)" />}
+        <Stat label="Classes missing" value={missing.length} color={inRaid && missingCritical.length > 0 ? 'var(--color-danger)' : undefined} />
+      </div>
+
+      {inRaid ? (
+        missing.length > 0 && (
+          <div
+            className="rounded-lg px-4 py-3 flex items-start gap-2"
+            style={{
+              border: `1px solid ${missingCritical.length > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
+              backgroundColor: missingCritical.length > 0 ? 'rgba(220,38,38,0.10)' : 'var(--color-surface)',
+            }}
+          >
+            <AlertTriangle size={15} style={{ color: missingCritical.length > 0 ? 'var(--color-danger)' : 'var(--color-muted-foreground)', marginTop: 1 }} />
+            <div className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+              {missingCritical.length > 0 && (
+                <div>
+                  <span className="font-semibold" style={{ color: 'var(--color-danger)' }}>No {missingCritical.map((c) => classLabel(taxonomy, c)).join(', ')}</span> in the raid.
+                </div>
+              )}
+              {missingOther.length > 0 && (
+                <div style={{ color: 'var(--color-muted-foreground)' }}>
+                  Also missing: {missingOther.map((c) => classLabel(taxonomy, c)).join(', ')}
+                </div>
+              )}
+            </div>
+          </div>
+        )
       ) : (
-        <>
-          <div className="flex flex-wrap gap-3">
-            <Stat label="Members" value={members.length} />
-            <Stat label="Classed" value={members.length - unclassedCount} color="var(--color-success)" />
-            {unclassedCount > 0 && <Stat label="Unclassed" value={unclassedCount} color="var(--color-muted-foreground)" />}
-            <Stat label="Classes missing" value={missing.length} color={missingCritical.length > 0 ? 'var(--color-danger)' : undefined} />
-          </div>
-
-          {missing.length > 0 && (
-            <div
-              className="rounded-lg px-4 py-3 flex items-start gap-2"
-              style={{
-                border: `1px solid ${missingCritical.length > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
-                backgroundColor: missingCritical.length > 0 ? 'rgba(220,38,38,0.10)' : 'var(--color-surface)',
-              }}
-            >
-              <AlertTriangle size={15} style={{ color: missingCritical.length > 0 ? 'var(--color-danger)' : 'var(--color-muted-foreground)', marginTop: 1 }} />
-              <div className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-                {missingCritical.length > 0 && (
-                  <div>
-                    <span className="font-semibold" style={{ color: 'var(--color-danger)' }}>No {missingCritical.map((c) => classLabel(taxonomy, c)).join(', ')}</span> in the raid.
-                  </div>
-                )}
-                {missingOther.length > 0 && (
-                  <div style={{ color: 'var(--color-muted-foreground)' }}>
-                    Also missing: {missingOther.map((c) => classLabel(taxonomy, c)).join(', ')}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-muted-foreground)' }}>
-              Class counts
-            </p>
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
-              {CLASS_ORDER.map((code) => (
-                <ClassCountCard
-                  key={code}
-                  label={classLabel(taxonomy, code)}
-                  count={counts.get(code) ?? 0}
-                  critical={CRITICAL_CLASSES.has(code)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
-            <div
-              className="px-3 py-2 text-sm font-semibold"
-              style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
-            >
-              Members
-            </div>
-            <div className="grid grid-cols-[1.4fr_60px_1fr_1fr_1fr] gap-3 px-3 py-1 text-[11px] uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>
-              <span>Name</span>
-              <span className="justify-self-end">Level</span>
-              <span>Class</span>
-              <span>Group</span>
-              <span>Rank</span>
-            </div>
-            {sortedMembers.map((m, i) => (
-              <div
-                key={`${m.name}-${i}`}
-                className={`grid grid-cols-[1.4fr_60px_1fr_1fr_1fr] gap-3 items-center px-3 py-1.5 ${i % 2 === 1 ? 'bg-(--color-surface-2)/50' : ''}`}
-              >
-                <span className="text-sm truncate" style={{ color: 'var(--color-foreground)' }}>{m.name}</span>
-                <span className="text-sm tabular-nums justify-self-end" style={{ color: 'var(--color-muted-foreground)' }}>{m.level ?? '—'}</span>
-                <span className="text-sm" style={{ color: m.code ? 'var(--color-foreground)' : 'var(--color-danger)' }}>
-                  {m.code ? classLabel(taxonomy, m.code as ClassCode) : 'Unknown'}
-                </span>
-                <span className="text-sm truncate" style={{ color: 'var(--color-muted-foreground)' }}>{m.group ?? '—'}</span>
-                <span className="text-sm truncate" style={{ color: 'var(--color-muted-foreground)' }}>{m.rank ?? '—'}</span>
-              </div>
-            ))}
-          </div>
-        </>
+        // No live raid yet — the counts above are just all-zero placeholders,
+        // not a real "everyone's missing" warning, so this stays neutral
+        // instead of reusing the red alert styling.
+        <div
+          className="rounded-lg px-4 py-3 flex items-start gap-2"
+          style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}
+        >
+          <RefreshCw size={15} style={{ color: 'var(--color-muted-foreground)', marginTop: 1 }} />
+          <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+            Waiting for a live raid — member counts, class coverage, and the roster below will fill
+            in automatically once Zeal reports a raid roster. No need to refresh by hand.
+          </span>
+        </div>
       )}
+
+      <div>
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-muted-foreground)' }}>
+          Class counts
+        </p>
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
+          {CLASS_ORDER.map((code) => (
+            <ClassCountCard
+              key={code}
+              label={classLabel(taxonomy, code)}
+              count={counts.get(code) ?? 0}
+              critical={inRaid && CRITICAL_CLASSES.has(code)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
+        <div
+          className="px-3 py-2 text-sm font-semibold"
+          style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+        >
+          Members
+        </div>
+        <div className="grid grid-cols-[1.4fr_60px_1fr_1fr_1fr] gap-3 px-3 py-1 text-[11px] uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>
+          <span>Name</span>
+          <span className="justify-self-end">Level</span>
+          <span>Class</span>
+          <span>Group</span>
+          <span>Rank</span>
+        </div>
+        {sortedMembers.length === 0 ? (
+          <div className="px-3 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+            No members yet.
+          </div>
+        ) : (
+          sortedMembers.map((m, i) => (
+            <div
+              key={`${m.name}-${i}`}
+              className={`grid grid-cols-[1.4fr_60px_1fr_1fr_1fr] gap-3 items-center px-3 py-1.5 ${i % 2 === 1 ? 'bg-(--color-surface-2)/50' : ''}`}
+            >
+              <span className="text-sm truncate" style={{ color: 'var(--color-foreground)' }}>{m.name}</span>
+              <span className="text-sm tabular-nums justify-self-end" style={{ color: 'var(--color-muted-foreground)' }}>{m.level ?? '—'}</span>
+              <span className="text-sm" style={{ color: m.code ? 'var(--color-foreground)' : 'var(--color-danger)' }}>
+                {m.code ? classLabel(taxonomy, m.code as ClassCode) : 'Unknown'}
+              </span>
+              <span className="text-sm truncate" style={{ color: 'var(--color-muted-foreground)' }}>{m.group ?? '—'}</span>
+              <span className="text-sm truncate" style={{ color: 'var(--color-muted-foreground)' }}>{m.rank ?? '—'}</span>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
