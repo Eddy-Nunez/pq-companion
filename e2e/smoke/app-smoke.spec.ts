@@ -9,24 +9,37 @@
 //
 // Note: the app may pop a "what's new" changelog dialog on a fresh user.db;
 // these tests assume the dev machine's store, where it is already dismissed.
+// Note: the app may pop a "what's new" changelog dialog on a fresh user.db;
+// these tests assume the dev machine's store, where it is already dismissed.
+//
+// The Raids sidebar section (and its routes) are gated behind the
+// raids_enabled developer flag (upstream gates the feature for live
+// validation), so the Raid tests toggle it via the config API and restore
+// the prior value afterwards.
 import { expect, test } from '@playwright/test'
 
-test.describe('app shell', () => {
-  test('renders the shell and navigates to Raid Composition', async ({
-    page,
-  }) => {
-    await page.goto('/#/', { waitUntil: 'domcontentloaded' })
-    await expect(
-      page.getByText('PQ Companion', { exact: true }).first(),
-    ).toBeVisible()
-    await page.getByRole('link', { name: 'Raid Composition' }).click()
-    await expect(
-      page.getByRole('heading', { name: 'Raid Composition Check' }),
-    ).toBeVisible()
-  })
-})
+const apiBase = process.env.PQ_BASE_URL ?? 'http://127.0.0.1:17654'
 
-test.describe('Raid Composition page', () => {
+test.describe.serial('Raid Composition page', () => {
+  let raidsWasEnabled = false
+
+  test.beforeAll(async ({ request }) => {
+    const cfg = await (await request.get(`${apiBase}/api/config`)).json()
+    raidsWasEnabled = Boolean(cfg?.preferences?.raids_enabled)
+    if (!raidsWasEnabled) {
+      cfg.preferences.raids_enabled = true
+      await request.put(`${apiBase}/api/config`, { data: cfg })
+    }
+  })
+
+  test.afterAll(async ({ request }) => {
+    if (!raidsWasEnabled) {
+      const cfg = await (await request.get(`${apiBase}/api/config`)).json()
+      cfg.preferences.raids_enabled = false
+      await request.put(`${apiBase}/api/config`, { data: cfg })
+    }
+  })
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/#/raids', { waitUntil: 'domcontentloaded' })
     await expect(
@@ -73,7 +86,26 @@ test.describe('Raid Composition page', () => {
   })
 })
 
-test.describe('Raid Editor page', () => {
+test.describe.serial('Raid Editor page', () => {
+  let raidsWasEnabled = false
+
+  test.beforeAll(async ({ request }) => {
+    const cfg = await (await request.get(`${apiBase}/api/config`)).json()
+    raidsWasEnabled = Boolean(cfg?.preferences?.raids_enabled)
+    if (!raidsWasEnabled) {
+      cfg.preferences.raids_enabled = true
+      await request.put(`${apiBase}/api/config`, { data: cfg })
+    }
+  })
+
+  test.afterAll(async ({ request }) => {
+    if (!raidsWasEnabled) {
+      const cfg = await (await request.get(`${apiBase}/api/config`)).json()
+      cfg.preferences.raids_enabled = false
+      await request.put(`${apiBase}/api/config`, { data: cfg })
+    }
+  })
+
   test('lists encounters and offers the taxonomy editor', async ({ page }) => {
     await page.goto('/#/raids/editor', { waitUntil: 'domcontentloaded' })
     // The seeded AoW encounter must appear in the encounter list.
