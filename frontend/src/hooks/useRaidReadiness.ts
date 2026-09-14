@@ -11,13 +11,28 @@
  * pickEncounter / adoptSelection). The roster's live zone is display-only
  * (roster banner), and the backend still stamps it from the Zeal pipe.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useWebSocket } from './useWebSocket'
-import { getRaidEncounters, getRaidRoster, checkRaidComp } from '../services/api'
+import { usePlayerPosition } from './usePlayerPosition'
+import { getRaidEncounters, getRaidRoster, checkRaidComp, getConfig } from '../services/api'
 import type { CheckReport, CheckRosterInput, RaidEncounter, RaidRosterSnapshot } from '../types/raid'
+import type { Config } from '../types/config'
+
+// normalizeZone makes zone-name comparisons forgiving across Zeal's short
+// names vs the knowledge base's display names (letters+digits only, lowercase).
+function normalizeZone(s: string): string {
+  return (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
 
 export interface RaidReadinessState {
   encounters: RaidEncounter[]
+  // Encounters ordered by proximity to the live Zeal zone: exact zoneidnumber
+  // matches first, then normalized-name matches, then the rest in knowledge-
+  // base order. Stable sort — ties keep store order. ORDERING ONLY: detection
+  // was deliberately removed (multiple encounters can share a zone, and it
+  // clobbered manual picks) — the dropdown's first option is just the best
+  // zone match; nothing auto-selects.
+  orderedEncounters: RaidEncounter[]
   roster: RaidRosterSnapshot | null
   selectedId: string
   // The UI-facing selector (Raid Composition page's dropdown — the only
@@ -74,6 +89,32 @@ export function useRaidReadiness(): RaidReadinessState {
     [],
   )
 
+  // Encounter ranking: 0 = exact zoneidnumber match with the live roster
+  // zone (what Zeal is currently reporting), 1 = normalized-name match,
+  // 2 = no match. The dropdown displays this ordering; nothing auto-selects
+  // from it — the user's pick stays authoritative.
+  const rank = useCallback(
+    (e: RaidEncounter): number => {
+      if (!roster) return 2
+      if (roster.zone_id && roster.zone_id > 0 && e.zone_id === roster.zone_id) {
+        return 0
+      }
+      const zoneKey = normalizeZone(roster.zone ?? '')
+      if (zoneKey && normalizeZone(e.zone) === zoneKey) return 1
+      return 2
+    },
+    [roster],
+  )
+
+  const orderedEncounters = useMemo(
+    () =>
+      encounters
+        .map((e, i) => ({ e, i }))
+        .sort((a, b) => rank(a.e) - rank(b.e) || a.i - b.i)
+        .map((x) => x.e),
+    [encounters, rank],
+  )
+
   // Re-pull encounters + roster, then re-run the check for the current
   // selection so Refresh visibly updates the report too — not just the
   // roster banner.
@@ -94,6 +135,30 @@ export function useRaidReadiness(): RaidReadinessState {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Live-zone change → reload. The backend heartbeats player:position (2s)
+  // while the Zeal pipe is connected, so pos.zone tracks the character across
+  // zoning. On a change, refresh() re-pulls encounters + roster and re-runs
+  // the check — the dropdown re-sorts to put current-zone encounters on top
+  // and the report follows the new zone context. Gated behind raids_enabled
+  // (the flag that surfaces the raid UI at all): the hook can be mounted with
+  // the flag off via a direct URL, and there's no reason to churn fetches on
+  // every zoning for a feature that's switched off.
+  const pos = usePlayerPosition()
+  const [raidsEnabled, setRaidsEnabled] = useState(false)
+  useEffect(() => {
+    void getConfig()
+      .then((c: Config) => setRaidsEnabled(Boolean(c.preferences?.raids_enabled)))
+      .catch(() => setRaidsEnabled(false))
+  }, [])
+  const lastZoneRef = useRef<string | null>(null)
+  useEffect(() => {
+    const zone = pos?.zone ?? null
+    const prev = lastZoneRef.current
+    lastZoneRef.current = zone
+    if (!raidsEnabled || !zone || prev === null || prev === zone) return
+    void refresh()
+  }, [pos?.zone, raidsEnabled, refresh])
 
   // adoptSelection applies a selection that arrived from another surface
   // (IPC relay or mount-time catch-up) and runs a check. Never re-publishes
@@ -161,5 +226,5 @@ export function useRaidReadiness(): RaidReadinessState {
   )
   useWebSocket(handleWsMessage)
 
-  return { encounters, roster, selectedId, pickEncounter, report, busy, refreshing, error, refresh, runCheck }
+  return { encounters, orderedEncounters, roster, selectedId, pickEncounter, report, busy, refreshing, error, refresh, runCheck }
 }
