@@ -212,7 +212,9 @@ export default function ImportTriggersModal({
                 style={{ color: 'var(--color-muted-foreground)' }}
               >
                 Imported triggers are filed under this category. Delete the
-                category later to remove them all at once.
+                category later to remove them all at once. Use "Parent/Child"
+                (e.g. "Raid Triggers/Ring War") to file them into a
+                subcategory, creating the parent too if it doesn't exist yet.
               </p>
 
               {/* Selection toolbar */}

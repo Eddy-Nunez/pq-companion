@@ -134,7 +134,10 @@ export interface Trigger {
   enabled: boolean
   pattern: string
   actions: Action[]
+  /** Display cache derived from category_id — never authoritative. */
   pack_name: string
+  /** Authoritative category link (TriggerCategory.id). Empty = Uncategorized. */
+  category_id?: string
   created_at: string
   timer_type: TimerType
   timer_duration_secs: number
@@ -430,18 +433,35 @@ export interface ImportPreview {
 }
 
 /**
- * A trigger grouping (category), keyed off pack_name. Custom categories are
- * user-created and editable; built-in (class) and imported packs surface here
- * too but are flagged is_builtin and stay read-only (managed from the Packs
- * tab). The Uncategorized bucket (empty pack_name) is not represented here.
+ * A trigger grouping (category), id-keyed (Trigger.category_id references
+ * it). parent_id is empty for a top-level category; a category with a
+ * non-empty parent_id is always a leaf — nesting is capped at one level (see
+ * MAX_CATEGORY_DEPTH). Custom categories are user-created and editable;
+ * built-in (class) and imported packs surface here too but are flagged
+ * is_builtin and stay read-only (managed from the Packs tab). The
+ * Uncategorized bucket (empty category_id) is not represented here — the
+ * frontend renders it separately. Returned as a flat list; buildCategoryTree
+ * assembles it into a tree via parent_id.
  */
 export interface TriggerCategory {
+  id: string
   name: string
-  count: number       // triggers currently in this category
+  parent_id: string
+  count: number       // triggers in this category, plus — for a top-level category — its children's
   is_builtin: boolean // true = managed via the Packs tab, not editable here
   custom: boolean     // true = user-created (always visible, editable)
   explicit: boolean   // true = has a persisted row (visible even when empty)
-  sort_order: number  // display order; lower sorts first
+  sort_order: number  // display order among siblings; lower sorts first
+}
+
+/** How many levels deep a category may nest: 0 = top level, 1 = child. Mirrors trigger.maxCategoryDepth on the backend. */
+export const MAX_CATEGORY_DEPTH = 1
+
+/** One category positioned in a reorder/reparent request — see reorderCategories. */
+export interface CategoryPlacement {
+  id: string
+  parent_id: string
+  sort_order: number
 }
 
 /**

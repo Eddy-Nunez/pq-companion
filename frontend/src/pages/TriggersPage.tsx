@@ -95,6 +95,7 @@ import type {
   TriggerFired,
   TriggerPack,
   TriggerCategory,
+  CategoryPlacement,
   TimerGroup,
   Action,
   TimerType,
@@ -134,6 +135,36 @@ function downloadTriggerPack(pack: TriggerPack, filename: string): void {
 // slugifyFilename turns a category name into a safe filename fragment.
 function slugifyFilename(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'category'
+}
+
+// flattenCategoryTree returns categories in tree render order: each top-level
+// category immediately followed by its children — both already sorted by
+// sort_order/name within their own parent, since that's how the backend
+// returns them (ListCategories sorts per-parent). Nesting is capped at one
+// level (MAX_CATEGORY_DEPTH), so this two-pass grouping is exhaustive.
+function flattenCategoryTree(categories: TriggerCategory[]): TriggerCategory[] {
+  const children = new Map<string, TriggerCategory[]>()
+  for (const c of categories) {
+    if (!c.parent_id) continue
+    if (!children.has(c.parent_id)) children.set(c.parent_id, [])
+    children.get(c.parent_id)!.push(c)
+  }
+  const out: TriggerCategory[] = []
+  for (const c of categories) {
+    if (c.parent_id) continue
+    out.push(c)
+    for (const child of children.get(c.id) ?? []) out.push(child)
+  }
+  return out
+}
+
+// categoryLabel is a category's display label — "Parent / Child" for a
+// subcategory, so two subcategories with the same name under different
+// parents (and the section itself) stay unambiguous.
+function categoryLabel(cat: TriggerCategory, byId: Map<string, TriggerCategory>): string {
+  if (!cat.parent_id) return cat.name
+  const parent = byId.get(cat.parent_id)
+  return parent ? `${parent.name} / ${cat.name}` : cat.name
 }
 
 function Toggle({
@@ -396,10 +427,17 @@ interface TriggerFormProps {
 
 function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerGroups, onTimerGroupsChanged, onSaved, onCancel }: TriggerFormProps): React.ReactElement {
   const [name, setName] = useState(initial?.name ?? prefill?.name ?? '')
-  // Category (pack_name). Defaults to the trigger's current category on edit,
-  // Uncategorized ('') on create. The "__new__" sentinel opens an inline
-  // create input.
-  const [packName, setPackName] = useState(initial?.pack_name ?? '')
+  // Category, by id. Defaults to the trigger's current category on edit,
+  // Uncategorized ('') on create. Falls back to matching by pack_name for
+  // older cached data with no category_id — categories is already loaded by
+  // the time this form mounts. The "__new__" sentinel opens an inline create
+  // input (always a top-level category — nest it afterward from the section
+  // header's Parent picker).
+  const [categoryId, setCategoryId] = useState(
+    initial?.category_id ?? categories.find((c) => c.name === initial?.pack_name)?.id ?? '',
+  )
+  const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
+  const orderedCategories = useMemo(() => flattenCategoryTree(categories), [categories])
   const [creatingCat, setCreatingCat] = useState(false)
   const [newCatName, setNewCatName] = useState('')
   const [addingCat, setAddingCat] = useState(false)
@@ -575,7 +613,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
       setCatError(null)
       return
     }
-    setPackName(v)
+    setCategoryId(v)
   }
 
   const handleAddCategory = () => {
@@ -585,7 +623,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
     setCatError(null)
     createTriggerCategory(trimmed)
       .then((cat) => {
-        setPackName(cat.name)
+        setCategoryId(cat.id)
         setCreatingCat(false)
         setNewCatName('')
         onCategoriesChanged()
@@ -722,7 +760,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
       extra_patterns: source === 'pipe' ? [] : extraList,
       source,
       pipe_condition: pipeCondition,
-      pack_name: packName,
+      category_id: categoryId,
     }
 
     setSubmitting(true)
@@ -838,22 +876,22 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
           </div>
         ) : (
           <select
-            value={packName}
+            value={categoryId}
             onChange={(e) => handleCategorySelect(e.target.value)}
             className="w-full rounded px-3 py-1.5 text-sm outline-none"
             style={inputStyle}
             disabled={submitting}
           >
             <option value="">Uncategorized</option>
-            {categories.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}{c.is_builtin ? ' (pack)' : ''}
+            {orderedCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.parent_id ? `  ↳ ${c.name}` : c.name}{c.is_builtin ? ' (pack)' : ''}
               </option>
             ))}
             {/* Defensive: keep the current value selectable even if the
                 category list hasn't loaded or doesn't include it yet. */}
-            {packName && !categories.some((c) => c.name === packName) && (
-              <option value={packName}>{packName}</option>
+            {categoryId && !categoriesById.has(categoryId) && (
+              <option value={categoryId}>{initial?.pack_name || categoryId}</option>
             )}
             <option value="__new__">+ New category…</option>
           </select>
@@ -1962,7 +2000,7 @@ function TriggerRow({
 // ── Category section ──────────────────────────────────────────────────────────
 
 interface CategorySectionProps {
-  group: { packName: string; items: Trigger[] }
+  group: { categoryId: string; items: Trigger[] }
   categories: TriggerCategory[]
   collapsed: boolean
   // True when a movable trigger is mid-drag (i.e. one whose current category is
@@ -1976,7 +2014,9 @@ interface CategorySectionProps {
   onCommitRename: () => void
   onCancelRename: () => void
   onDeleteCategory: (cat: TriggerCategory) => void
-  onExportCategory: (name: string) => void
+  onExportCategory: (id: string) => void
+  onAddSubcategory: (parentId: string) => void
+  onReparentCategory: (cat: TriggerCategory, newParentId: string) => void
   onTriggerDeleted: (id: string) => void
   onTriggerUpdated: (t: Trigger) => void
   onCategoriesChanged: () => void
@@ -1998,18 +2038,28 @@ function CategorySection({
   onCancelRename,
   onDeleteCategory,
   onExportCategory,
+  onAddSubcategory,
+  onReparentCategory,
   onTriggerDeleted,
   onTriggerUpdated,
   onCategoriesChanged,
   timerGroups,
   onTimerGroupsChanged,
 }: CategorySectionProps): React.ReactElement {
-  const packName = group.packName
-  const isUncategorized = packName === '__uncategorized__'
+  const categoryId = group.categoryId
+  const isUncategorized = categoryId === '__uncategorized__'
   const reorderableSection = !isUncategorized
-  const label = isUncategorized ? 'Uncategorized' : packName
-  const cat = categories.find((c) => c.name === packName)
+  const cat = categories.find((c) => c.id === categoryId)
   const isCustom = !!cat?.custom
+  const isChild = !!cat?.parent_id
+  const hasChildren = !isChild && categories.some((c) => c.parent_id === categoryId)
+  const categoriesById = new Map(categories.map((c) => [c.id, c]))
+  const label = isUncategorized ? 'Uncategorized' : cat ? categoryLabel(cat, categoriesById) : categoryId
+  // Reparent target options: other top-level custom categories. The dropdown
+  // itself is only rendered when this section has no children of its own —
+  // see hasChildren below — a category that itself has children can't become
+  // a child (the backend's ReorderCategories rejects it).
+  const parentOptions = categories.filter((c) => c.custom && !c.parent_id && c.id !== categoryId)
 
   // Category reorder: dragging the header grip moves the whole section.
   // Uncategorized is pinned last, so its sortable is disabled.
@@ -2020,11 +2070,11 @@ function CategorySection({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: `${CATEGORY_PREFIX}${packName}`, disabled: !reorderableSection })
+  } = useSortable({ id: `${CATEGORY_PREFIX}${categoryId}`, disabled: !reorderableSection })
 
   // Trigger move: dropping a trigger anywhere on this section reassigns it here.
   const { setNodeRef: setDropRef, isOver, active } = useDroppable({
-    id: `${SECTION_PREFIX}${packName}`,
+    id: `${SECTION_PREFIX}${categoryId}`,
   })
 
   const triggerBeingDragged = !!active && String(active.id).startsWith(TRIGGER_PREFIX)
@@ -2039,6 +2089,7 @@ function CategorySection({
         transform: CSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.5 : 1,
+        marginLeft: isChild ? 20 : 0,
       }}
     >
       <div ref={setDropRef} className="space-y-2">
@@ -2151,10 +2202,40 @@ function CategorySection({
           )}
           {isCustom && !isRenaming && (
             <div className="flex items-center gap-1 shrink-0">
+              {!hasChildren && parentOptions.length > 0 && (
+                <select
+                  value={cat?.parent_id ?? ''}
+                  onChange={(e) => cat && onReparentCategory(cat, e.target.value)}
+                  className="rounded px-1 py-0.5 text-[10px] outline-none"
+                  title="Move this category to the top level or nest it under another"
+                  style={{
+                    backgroundColor: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    color: 'var(--color-muted-foreground)',
+                    maxWidth: 110,
+                  }}
+                >
+                  <option value="">Top level</option>
+                  {parentOptions.map((p) => (
+                    <option key={p.id} value={p.id}>↳ {p.name}</option>
+                  ))}
+                </select>
+              )}
+              {!isChild && (
+                <button
+                  type="button"
+                  onClick={() => onAddSubcategory(categoryId)}
+                  className="p-0.5 rounded"
+                  title="Add a subcategory"
+                  style={{ color: 'var(--color-muted-foreground)', cursor: 'pointer' }}
+                >
+                  <Plus size={12} />
+                </button>
+              )}
               {group.items.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => onExportCategory(packName)}
+                  onClick={() => onExportCategory(categoryId)}
                   className="p-0.5 rounded"
                   title="Export category as a trigger pack"
                   style={{ color: 'var(--color-muted-foreground)', cursor: 'pointer' }}
@@ -2798,13 +2879,18 @@ type Tab = 'triggers' | 'history' | 'packs'
 
 interface DeleteCategoryModalProps {
   category: TriggerCategory
+  // True when this category has subcategories — they're promoted to the top
+  // level (never deleted) regardless of which choice below is made.
+  hasChildren: boolean
   onClose: () => void
-  // Reload triggers + categories after the delete (it cascades to pack_name).
+  // Reload triggers + categories after the delete (it refreshes the
+  // pack_name display cache too).
   onChanged: () => void
 }
 
 function DeleteCategoryModal({
   category,
+  hasChildren,
   onClose,
   onChanged,
 }: DeleteCategoryModalProps): React.ReactElement {
@@ -2815,7 +2901,7 @@ function DeleteCategoryModal({
   const run = (deleteTriggers: boolean) => {
     setBusy(true)
     setError(null)
-    deleteTriggerCategory(category.name, deleteTriggers)
+    deleteTriggerCategory(category.id, deleteTriggers)
       .then(() => onChanged())
       .catch((e: Error) => {
         setError(e.message)
@@ -2866,6 +2952,11 @@ function DeleteCategoryModal({
               ? 'This category is empty and will be removed.'
               : `This category has ${n} trigger${plural}. What should happen to ${n === 1 ? 'it' : 'them'}?`}
           </p>
+          {hasChildren && (
+            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+              Its subcategories will be kept and moved to the top level.
+            </p>
+          )}
           {error && (
             <p className="text-[11px]" style={{ color: 'var(--color-danger)' }}>{error}</p>
           )}
@@ -2938,11 +3029,14 @@ export default function TriggersPage(): React.ReactElement {
   const [sortMode, setSortMode] = useState<'name' | 'recent' | 'manual'>('name')
   const [chars, setChars] = useState<Character[]>([])
   const [packClassByName, setPackClassByName] = useState<Map<string, number>>(new Map())
-  // Tracks which pack sections in the grouped trigger list are collapsed.
-  // Default: all expanded. Persists across refreshes via localStorage.
+  // Tracks which category sections in the grouped trigger list are collapsed,
+  // by category id. Default: all expanded. Persists across refreshes via
+  // localStorage. Keyed separately from the pre-nesting name-keyed storage
+  // (triggers.collapsedPacks) so stale name entries can never phantom-match
+  // an id.
   const [collapsedPacks, setCollapsedPacks] = useState<Set<string>>(() => {
     try {
-      const raw = localStorage.getItem('triggers.collapsedPacks')
+      const raw = localStorage.getItem('triggers.collapsedCategories')
       if (raw) return new Set(JSON.parse(raw))
     } catch {}
     return new Set()
@@ -3050,10 +3144,12 @@ export default function TriggersPage(): React.ReactElement {
       }
       if (packFilter) {
         // packFilter === "__uncategorized__" picks user-authored triggers
-        // (empty pack_name); any other value matches the pack name exactly.
+        // (no category); any other value is a category id, matched exactly —
+        // ids, unlike names, are never ambiguous between two subcategories
+        // that happen to share a name.
         if (packFilter === '__uncategorized__') {
-          if (t.pack_name) return false
-        } else if (t.pack_name !== packFilter) {
+          if (t.category_id) return false
+        } else if ((t.category_id ?? '') !== packFilter) {
           return false
         }
       }
@@ -3061,41 +3157,45 @@ export default function TriggersPage(): React.ReactElement {
     })
   }, [triggers, search, classFilter, charFilter, packFilter, packClassByName])
 
-  // Pack names currently represented in the user's triggers, for the
-  // pack-filter dropdown. Sorted alphabetically; the "Uncategorized"
-  // bucket (user-authored) is pinned to the end.
+  // Categories currently represented in the user's triggers, for the
+  // pack-filter dropdown — tree order, so a subcategory sorts right after its
+  // parent. The "Uncategorized" bucket (user-authored) is pinned to the end.
   const packsInUse = useMemo(() => {
-    const set = new Set<string>()
+    const idsInUse = new Set<string>()
     let hasUncategorized = false
     for (const t of triggers) {
-      if (t.pack_name) set.add(t.pack_name)
+      if (t.category_id) idsInUse.add(t.category_id)
       else hasUncategorized = true
     }
-    const names = Array.from(set).sort((a, b) => a.localeCompare(b))
-    if (hasUncategorized) names.push('__uncategorized__')
-    return names
-  }, [triggers])
+    const byId = new Map(categories.map((c) => [c.id, c]))
+    const entries = flattenCategoryTree(categories)
+      .filter((c) => idsInUse.has(c.id))
+      .map((c) => ({ id: c.id, label: categoryLabel(c, byId) }))
+    if (hasUncategorized) entries.push({ id: '__uncategorized__', label: 'Uncategorized' })
+    return entries
+  }, [triggers, categories])
 
   const hasActiveFilter = !!(search.trim() || classFilter !== null || charFilter || packFilter)
 
   // Group + sort the filtered triggers for display. Sections follow the
-  // backend category order; Uncategorized pins last. Empty custom categories
-  // are shown (so they can be drag targets) when no filter is narrowing the
-  // view. Each section's entries are sorted per sortMode.
+  // backend category order (tree-flattened, so a subcategory follows its
+  // parent); Uncategorized pins last. Empty custom categories are shown (so
+  // they can be drag targets) when no filter is narrowing the view. Each
+  // section's entries are sorted per sortMode.
   const groupedTriggers = useMemo(() => {
     const groups = new Map<string, Trigger[]>()
     for (const t of filteredTriggers) {
-      const key = t.pack_name || '__uncategorized__'
+      const key = t.category_id || '__uncategorized__'
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(t)
     }
     if (!hasActiveFilter) {
       for (const c of categories) {
-        if (c.custom && !groups.has(c.name)) groups.set(c.name, [])
+        if (c.custom && !groups.has(c.id)) groups.set(c.id, [])
       }
     }
     const orderIndex = new Map<string, number>()
-    categories.forEach((c, i) => orderIndex.set(c.name, i))
+    flattenCategoryTree(categories).forEach((c, i) => orderIndex.set(c.id, i))
     const orderOf = (key: string): number => {
       if (key === '__uncategorized__') return Number.MAX_SAFE_INTEGER
       const idx = orderIndex.get(key)
@@ -3119,16 +3219,11 @@ export default function TriggersPage(): React.ReactElement {
         items.sort((a, b) => a.name.localeCompare(b.name))
       }
     }
-    const ordered = Array.from(groups.entries()).map(([packName, items]) => ({
-      packName,
+    const ordered = Array.from(groups.entries()).map(([categoryId, items]) => ({
+      categoryId,
       items,
     }))
-    ordered.sort((a, b) => {
-      const oa = orderOf(a.packName)
-      const ob = orderOf(b.packName)
-      if (oa !== ob) return oa - ob
-      return a.packName.localeCompare(b.packName)
-    })
+    ordered.sort((a, b) => orderOf(a.categoryId) - orderOf(b.categoryId))
     for (const g of ordered) sortItems(g.items)
     return ordered
   }, [filteredTriggers, categories, sortMode, hasActiveFilter])
@@ -3140,13 +3235,13 @@ export default function TriggersPage(): React.ReactElement {
     [triggers],
   )
 
-  const togglePackCollapsed = (packName: string) => {
+  const togglePackCollapsed = (categoryId: string) => {
     setCollapsedPacks((prev) => {
       const next = new Set(prev)
-      if (next.has(packName)) next.delete(packName)
-      else next.add(packName)
+      if (next.has(categoryId)) next.delete(categoryId)
+      else next.add(categoryId)
       try {
-        localStorage.setItem('triggers.collapsedPacks', JSON.stringify(Array.from(next)))
+        localStorage.setItem('triggers.collapsedCategories', JSON.stringify(Array.from(next)))
       } catch {}
       return next
     })
@@ -3177,27 +3272,35 @@ export default function TriggersPage(): React.ReactElement {
   // ── Category management (inline, on the section headers) ──
   // Create a category with a unique default name, then immediately drop its
   // header into rename mode so the user can type the real name.
-  const handleNewCategory = () => {
+  // Create a category with a unique (among its siblings) default name, then
+  // immediately drop its header into rename mode so the user can type the
+  // real name. parentId='' creates a top-level category (the toolbar button);
+  // a non-empty parentId creates a subcategory (a section header's + button).
+  const createCategoryFlow = (parentId: string) => {
     if (creatingCategory) return
-    const existing = new Set(categories.map((c) => c.name))
+    const siblingNames = new Set(
+      categories.filter((c) => (c.parent_id || '') === parentId).map((c) => c.name),
+    )
     let name = 'New Category'
-    for (let i = 2; existing.has(name); i++) name = `New Category ${i}`
+    for (let i = 2; siblingNames.has(name); i++) name = `New Category ${i}`
     setCreatingCategory(true)
-    createTriggerCategory(name)
+    createTriggerCategory(name, parentId)
       .then((cat) => {
         reloadCategories()
         cancelRenameRef.current = false
-        setRenamingCategory(cat.name)
+        setRenamingCategory(cat.id)
         setRenameValue(cat.name)
       })
       .catch(() => {})
       .finally(() => setCreatingCategory(false))
   }
+  const handleNewCategory = () => createCategoryFlow('')
+  const handleAddSubcategory = (parentId: string) => createCategoryFlow(parentId)
 
-  const startRenameCategory = (name: string) => {
+  const startRenameCategory = (id: string, currentName: string) => {
     cancelRenameRef.current = false
-    setRenamingCategory(name)
-    setRenameValue(name)
+    setRenamingCategory(id)
+    setRenameValue(currentName)
   }
 
   const cancelRenameCategory = () => {
@@ -3209,7 +3312,7 @@ export default function TriggersPage(): React.ReactElement {
   // when Enter/Escape unmounts it, so the first call latches cancelRenameRef
   // to make the second a no-op. Escape sets the latch up front to skip the
   // rename entirely.
-  const commitRenameCategory = (oldName: string) => {
+  const commitRenameCategory = (id: string) => {
     if (cancelRenameRef.current) {
       cancelRenameRef.current = false
       setRenamingCategory(null)
@@ -3217,34 +3320,51 @@ export default function TriggersPage(): React.ReactElement {
     }
     cancelRenameRef.current = true
     const trimmed = renameValue.trim()
+    const current = categories.find((c) => c.id === id)
     setRenamingCategory(null)
-    if (!trimmed || trimmed === oldName) return
-    renameTriggerCategory(oldName, trimmed)
-      .then(() => load()) // cascades to trigger pack_name → reload everything
+    if (!trimmed || trimmed === current?.name) return
+    renameTriggerCategory(id, trimmed)
+      .then(() => load()) // refreshes the pack_name display cache too
       .catch(() => {})
   }
 
-  const handleExportCategory = (name: string) => {
-    exportTriggerCategory(name)
-      .then((pack) => downloadTriggerPack(pack, `pq-triggers-${slugifyFilename(name)}.json`))
+  // Reparent a category — the section header's "Parent" picker, since
+  // spatial drag-and-drop only reorders siblings (see reorderCategoryTo).
+  // newParentId='' un-nests a child back to the top level.
+  const handleReparentCategory = (cat: TriggerCategory, newParentId: string) => {
+    if ((cat.parent_id || '') === newParentId) return
+    const sortOrder = categories.filter(
+      (c) => (c.parent_id || '') === newParentId && c.id !== cat.id,
+    ).length
+    setCategories((prev) =>
+      prev.map((c) => (c.id === cat.id ? { ...c, parent_id: newParentId, sort_order: sortOrder } : c)),
+    )
+    reorderTriggerCategories([{ id: cat.id, parent_id: newParentId, sort_order: sortOrder }])
+      .catch(() => load())
+  }
+
+  const handleExportCategory = (id: string) => {
+    const cat = categories.find((c) => c.id === id)
+    exportTriggerCategory(id)
+      .then((pack) => downloadTriggerPack(pack, `pq-triggers-${slugifyFilename(cat?.name ?? id)}.json`))
       .catch((err: Error) => setError(err.message))
   }
 
   // ── Drag-and-drop (dnd-kit) ──
-  // A section keyed by packKey ('__uncategorized__' or a category name) accepts
-  // the active trigger when it isn't already that trigger's category. Pack
+  // A section keyed by categoryKey ('__uncategorized__' or a category id)
+  // accepts the active trigger when it isn't already filed there. Pack
   // sections are valid targets too — origin is tracked by source_pack, so
   // moving a trigger into/out of a pack category doesn't change its pack.
-  const canDropTriggerOn = (packKey: string): boolean => {
+  const canDropTriggerOn = (categoryKey: string): boolean => {
     if (!activeTrigger) return false
-    const target = packKey === '__uncategorized__' ? '' : packKey
-    return activeTrigger.pack_name !== target
+    const target = categoryKey === '__uncategorized__' ? '' : categoryKey
+    return (activeTrigger.category_id ?? '') !== target
   }
 
-  // Move a trigger to another category by reassigning its pack_name.
-  const moveTriggerToCategory = (t: Trigger, packKey: string) => {
-    const target = packKey === '__uncategorized__' ? '' : packKey
-    if (t.pack_name === target) return
+  // Move a trigger to another category by reassigning its category_id.
+  const moveTriggerToCategory = (t: Trigger, categoryKey: string) => {
+    const target = categoryKey === '__uncategorized__' ? '' : categoryKey
+    if ((t.category_id ?? '') === target) return
     // Re-serialize the trigger with the new category. Sending the full request
     // (incl. source/pipe_condition) keeps pipe triggers valid; fields not in
     // the request (cooldown_secs, dedup_key) are preserved server-side.
@@ -3271,7 +3391,7 @@ export default function TriggersPage(): React.ReactElement {
       extra_patterns: t.extra_patterns ?? [],
       source: t.source,
       pipe_condition: t.pipe_condition,
-      pack_name: target,
+      category_id: target,
     }
     // A failed move (rare local sqlite write) just leaves the list unchanged.
     updateTrigger(t.id, req).then(handleUpdated).catch(() => {})
@@ -3299,9 +3419,9 @@ export default function TriggersPage(): React.ReactElement {
           (b.created_at ? new Date(b.created_at).getTime() : 0)
       )
     }
-    const key = dragged.pack_name || ''
+    const key = dragged.category_id || ''
     const ids = triggers
-      .filter((t) => (t.pack_name || '') === key)
+      .filter((t) => (t.category_id || '') === key)
       .sort(byMode)
       .map((t) => t.id)
     const from = ids.indexOf(dragged.id)
@@ -3321,22 +3441,33 @@ export default function TriggersPage(): React.ReactElement {
   }
 
   // Reorder category sections by dragging their header grip onto another
-  // section. Uncategorized is pinned last and can't be a drag source or target.
-  const reorderCategoryTo = (dragged: string, targetKey: string) => {
-    if (!dragged || dragged === targetKey || targetKey === '__uncategorized__') return
-    // Order over ALL categories (already display-sorted) so reordering while
+  // section. Uncategorized is pinned last and can't be a drag source or
+  // target. A drag only ever reorders among siblings sharing the same
+  // parent — dropping onto a section at a different level is a no-op;
+  // moving a category between levels is the header's "Parent" picker
+  // (handleReparentCategory), not a spatial gesture.
+  const reorderCategoryTo = (draggedId: string, targetId: string) => {
+    if (!draggedId || draggedId === targetId || targetId === '__uncategorized__') return
+    const dragged = categories.find((c) => c.id === draggedId)
+    const target = categories.find((c) => c.id === targetId)
+    if (!dragged || !target) return
+    const parentId = dragged.parent_id || ''
+    if ((target.parent_id || '') !== parentId) return
+    // Order over ALL siblings (already display-sorted) so reordering while
     // filtered doesn't drop hidden ones. Move dragged to target's slot.
-    const order = categories.map((c) => c.name)
-    const from = order.indexOf(dragged)
-    const to = order.indexOf(targetKey)
+    const siblings = categories.filter((c) => (c.parent_id || '') === parentId)
+    const order = siblings.map((c) => c.id)
+    const from = order.indexOf(draggedId)
+    const to = order.indexOf(targetId)
     if (from === -1 || to === -1 || from === to) return
     const next = arrayMove(order, from, to)
-    // Optimistic: rebuild categories in the new order so sections reflow.
-    const byName = new Map(categories.map((c) => [c.name, c]))
-    setCategories(
-      next.map((name, i) => ({ ...(byName.get(name) as TriggerCategory), sort_order: i })),
+    const nextSortOrder = new Map(next.map((id, i) => [id, i]))
+    // Optimistic: rebuild categories with the new order so sections reflow.
+    setCategories((prev) =>
+      prev.map((c) => (nextSortOrder.has(c.id) ? { ...c, sort_order: nextSortOrder.get(c.id)! } : c)),
     )
-    reorderTriggerCategories(next).catch(() => load())
+    const items: CategoryPlacement[] = next.map((id, i) => ({ id, parent_id: parentId, sort_order: i }))
+    reorderTriggerCategories(items).catch(() => load())
   }
 
   // Scope collision detection by drag kind so the nested sortables don't
@@ -3393,11 +3524,11 @@ export default function TriggersPage(): React.ReactElement {
     if (aId.startsWith(TRIGGER_PREFIX)) {
       const dragged = triggers.find((t) => t.id === aId.slice(TRIGGER_PREFIX.length))
       if (!dragged) return
-      const srcKey = dragged.pack_name || '__uncategorized__'
+      const srcKey = dragged.category_id || '__uncategorized__'
       if (oId.startsWith(TRIGGER_PREFIX)) {
         const overT = triggers.find((t) => t.id === oId.slice(TRIGGER_PREFIX.length))
         if (!overT) return
-        const overKey = overT.pack_name || '__uncategorized__'
+        const overKey = overT.category_id || '__uncategorized__'
         // Same category → reorder; different category → move (dropping onto a
         // foreign row reassigns the category, matching the old behaviour).
         if (overKey === srcKey) reorderTriggerWithin(dragged, overT.id)
@@ -3722,8 +3853,8 @@ export default function TriggersPage(): React.ReactElement {
                     >
                       <option value="">All packs</option>
                       {packsInUse.map((p) => (
-                        <option key={p} value={p}>
-                          {p === '__uncategorized__' ? 'Uncategorized' : p}
+                        <option key={p.id} value={p.id}>
+                          {p.label}
                         </option>
                       ))}
                     </select>
@@ -3902,25 +4033,30 @@ export default function TriggersPage(): React.ReactElement {
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext
-                  items={groupedTriggers.map((g) => `${CATEGORY_PREFIX}${g.packName}`)}
+                  items={groupedTriggers.map((g) => `${CATEGORY_PREFIX}${g.categoryId}`)}
                   strategy={verticalListSortingStrategy}
                 >
                   {groupedTriggers.map((group) => (
                     <CategorySection
-                      key={group.packName}
+                      key={group.categoryId}
                       group={group}
                       categories={categories}
-                      collapsed={collapsedPacks.has(group.packName)}
-                      canDrop={canDropTriggerOn(group.packName)}
-                      isRenaming={renamingCategory === group.packName}
+                      collapsed={collapsedPacks.has(group.categoryId)}
+                      canDrop={canDropTriggerOn(group.categoryId)}
+                      isRenaming={renamingCategory === group.categoryId}
                       renameValue={renameValue}
                       onRenameValueChange={setRenameValue}
-                      onToggleCollapsed={() => togglePackCollapsed(group.packName)}
-                      onStartRename={() => startRenameCategory(group.packName)}
-                      onCommitRename={() => commitRenameCategory(group.packName)}
+                      onToggleCollapsed={() => togglePackCollapsed(group.categoryId)}
+                      onStartRename={() => {
+                        const c = categories.find((x) => x.id === group.categoryId)
+                        startRenameCategory(group.categoryId, c?.name ?? '')
+                      }}
+                      onCommitRename={() => commitRenameCategory(group.categoryId)}
                       onCancelRename={cancelRenameCategory}
                       onDeleteCategory={(c) => setDeletingCategory(c)}
                       onExportCategory={handleExportCategory}
+                      onAddSubcategory={handleAddSubcategory}
+                      onReparentCategory={handleReparentCategory}
                       onTriggerDeleted={handleDeleted}
                       onTriggerUpdated={handleUpdated}
                       onCategoriesChanged={reloadCategories}
@@ -3935,7 +4071,9 @@ export default function TriggersPage(): React.ReactElement {
                   ) : activeCategory ? (
                     <CategoryDragPreview
                       label={
-                        activeCategory === '__uncategorized__' ? 'Uncategorized' : activeCategory
+                        activeCategory === '__uncategorized__'
+                          ? 'Uncategorized'
+                          : categories.find((c) => c.id === activeCategory)?.name ?? activeCategory
                       }
                     />
                   ) : null}
@@ -3958,6 +4096,7 @@ export default function TriggersPage(): React.ReactElement {
       {deletingCategory && (
         <DeleteCategoryModal
           category={deletingCategory}
+          hasChildren={categories.some((c) => c.parent_id === deletingCategory.id)}
           onClose={() => setDeletingCategory(null)}
           onChanged={() => {
             load()
@@ -4054,6 +4193,7 @@ export default function TriggersPage(): React.ReactElement {
       {showBulkEdit && (
         <BulkActionsModal
           triggers={triggers}
+          categories={categories}
           onClose={() => setShowBulkEdit(false)}
           onApplied={(res) => {
             setShowBulkEdit(false)

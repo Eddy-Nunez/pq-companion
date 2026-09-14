@@ -44,7 +44,7 @@ import type { RaidThreatState, TargetState, ThreatState } from '../types/overlay
 import type { CombatState, HistoryFacets, HistoryFilter, HistoryListResponse, StoredFight } from '../types/combat'
 import type { TimerState } from '../types/timer'
 import type { RespawnState } from '../types/respawn'
-import type { Trigger, TriggerFired, TriggerPack, TriggerCategory, TimerGroup, Action, TimerType, TimerAlertThreshold, TriggerSource, PipeCondition, ExtraPattern, ImportPreview, PackUpdateSummary, PackDiff, PackUpdateMode, PackUpdateResult, ActionTemplate, BulkResult, EmoteChange, TriggerEmoteSuggestion, PatternLocation } from '../types/trigger'
+import type { Trigger, TriggerFired, TriggerPack, TriggerCategory, CategoryPlacement, TimerGroup, Action, TimerType, TimerAlertThreshold, TriggerSource, PipeCondition, ExtraPattern, ImportPreview, PackUpdateSummary, PackDiff, PackUpdateMode, PackUpdateResult, ActionTemplate, BulkResult, EmoteChange, TriggerEmoteSuggestion, PatternLocation } from '../types/trigger'
 import type { RollsState, RollsSettingsPatch, WinnerRule } from '../types/rolls'
 import type { EnumsCatalog } from '../types/enums'
 import type {
@@ -2763,10 +2763,18 @@ export interface CreateTriggerRequest {
   /** Typed match definition for pipe-source triggers. */
   pipe_condition?: PipeCondition
   /**
-   * Category (pack_name). Omit to leave the existing category untouched on
-   * update; send '' for Uncategorized. Backend treats absent as no-change.
+   * Category, by name — root-level only, kept for older callers. Omit to
+   * leave the existing category untouched on update; send '' for
+   * Uncategorized. Backend treats absent as no-change.
    */
   pack_name?: string
+  /**
+   * Category, by id. Omit to leave the existing category untouched on
+   * update; send '' for Uncategorized. Takes precedence over pack_name when
+   * both are present — it's the only way to target a subcategory, since a
+   * bare pack_name always resolves at the top level.
+   */
+  category_id?: string
 }
 
 /**
@@ -2976,24 +2984,28 @@ export function listTriggerCategories(): Promise<TriggerCategory[]> {
   return get<TriggerCategory[]>('/api/triggers/categories')
 }
 
-export function createTriggerCategory(name: string): Promise<TriggerCategory> {
-  return post<TriggerCategory>('/api/triggers/categories', { name })
+export function createTriggerCategory(name: string, parentId = ''): Promise<TriggerCategory> {
+  return post<TriggerCategory>('/api/triggers/categories', { name, parent_id: parentId })
 }
 
-export function renameTriggerCategory(name: string, newName: string): Promise<void> {
-  return put<void>(`/api/triggers/categories/${encodeURIComponent(name)}`, { new_name: newName })
+export function renameTriggerCategory(id: string, newName: string): Promise<void> {
+  return put<void>(`/api/triggers/categories/${encodeURIComponent(id)}`, { new_name: newName })
 }
 
 // deleteTriggerCategory removes a category. deleteTriggers=true deletes its
-// triggers outright; false (default) moves them to Uncategorized.
-export function deleteTriggerCategory(name: string, deleteTriggers = false): Promise<void> {
+// (and any children's) triggers outright; false (default) moves just this
+// category's triggers to Uncategorized. Either way, any children are
+// promoted to top-level rather than deleted.
+export function deleteTriggerCategory(id: string, deleteTriggers = false): Promise<void> {
   const mode = deleteTriggers ? 'delete' : 'orphan'
-  return del(`/api/triggers/categories/${encodeURIComponent(name)}?triggers=${mode}`)
+  return del(`/api/triggers/categories/${encodeURIComponent(id)}?triggers=${mode}`)
 }
 
-// reorderTriggerCategories persists the display order of category sections.
-export function reorderTriggerCategories(order: string[]): Promise<void> {
-  return post<void>('/api/triggers/categories/order', { order })
+// reorderTriggerCategories persists new positions and/or parents for a set of
+// categories in one call — a plain reorder (parent unchanged) and a reparent
+// (drag a category onto another) are both just entries in items.
+export function reorderTriggerCategories(items: CategoryPlacement[]): Promise<void> {
+  return post<void>('/api/triggers/categories/order', { items })
 }
 
 // ── Timer groups ─────────────────────────────────────────────────────────────
@@ -3031,10 +3043,11 @@ export function exportTriggerPack(): Promise<TriggerPack> {
   return get<TriggerPack>('/api/triggers/export')
 }
 
-// exportTriggerCategory exports one custom category as a JSON trigger pack,
-// suitable for sharing and re-importing via the standard Import wizard.
-export function exportTriggerCategory(name: string): Promise<TriggerPack> {
-  return get<TriggerPack>(`/api/triggers/categories/${encodeURIComponent(name)}/export`)
+// exportTriggerCategory exports one category — including any subcategory's
+// triggers, if it has children — as a JSON trigger pack, suitable for sharing
+// and re-importing via the standard Import wizard.
+export function exportTriggerCategory(id: string): Promise<TriggerPack> {
+  return get<TriggerPack>(`/api/triggers/categories/${encodeURIComponent(id)}/export`)
 }
 
 export interface TriggerTestOverlayRequest {
