@@ -9,6 +9,26 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.22.0-beta.3 — 2026-09-14
+
+Third unofficial dogfood build, now based on **upstream main** — the Raid Composition feature set as merged upstream (reviewed and refined by the maintainer), plus four follow-up fixes awaiting their own upstream PR. The maintainer's release notes remain authoritative for the app as a whole.
+
+### How to turn raids on
+The raid feature ships behind a developer flag for live validation:
+1. Open **Settings** and press **Ctrl+Shift+D** to reveal the hidden Developer tab.
+2. In **Developer → Flags**, enable **raids_enabled**.
+3. The **Raids** section appears in the left sidebar (Raid Composition + Raid Editor), and the Raid Readiness overlay becomes available in Settings → Overlays.
+
+### What's in this build (vs the merged upstream state)
+- **Live encounter detection** — encounter detection always compares against the zone Zeal is reporting *right now* (per-tick player snapshot), not a snapshot that can go stale when the raid zones without a membership change. Validated live on 2026-09-13: a Wakening Lands → Kael Drakkel zone change was picked up within one poll.
+- **Encounter dropdown ordering** — encounters in your current zone sort to the top of the dropdown (exact zone-id matches first, then name matches), shared by the checker page and the Raid Readiness overlays.
+- **Refresh feedback** — the Raid Composition Refresh button shows a spinning icon while it re-checks, instead of appearing dead.
+- **Detection banner removed** — the dev-facing "Detected encounter for zone …" banner is gone; detection shows via the dropdown ordering.
+
+### Notes
+- Pre-release fork build for guild dogfooding; not the official release. Auto-updates are not effective on this build — install new builds manually.
+- Builds on top of upstream `main` (Raid Readiness overlay included); live-raid validation is still pending, which is exactly what this dogfood build is for.
+
 ## v0.21.2 — 2026-09-12
 
 Overlay Text joins the fading-soon alert types for both triggers and the global spell-timer defaults, timer overlays get bottom-up stacking and a white urgent-text option, and the Wishlist can auto-clear an entry when you loot it yourself.
