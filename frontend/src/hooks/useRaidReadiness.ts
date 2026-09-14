@@ -151,12 +151,19 @@ export function useRaidReadiness(): RaidReadinessState {
       .then((c: Config) => setRaidsEnabled(Boolean(c.preferences?.raids_enabled)))
       .catch(() => setRaidsEnabled(false))
   }, [])
+  // lastZoneRef is STICKY: zoning takes several seconds during which the pipe
+  // is silent and usePlayerPosition ages out to null (STALE_MS < zone load).
+  // Storing that null here would forget the previous zone and the new zone's
+  // first event would land on the "first sight" skip — the reload would never
+  // fire. Keep the last seen zone through the gap; only a real zone-to-zone
+  // transition triggers the reload.
   const lastZoneRef = useRef<string | null>(null)
   useEffect(() => {
-    const zone = pos?.zone ?? null
+    const zone = pos?.zone
+    if (!zone) return // stale gap / no pipe — remember what we had
     const prev = lastZoneRef.current
     lastZoneRef.current = zone
-    if (!raidsEnabled || !zone || prev === null || prev === zone) return
+    if (!raidsEnabled || prev === null || prev === zone) return
     void refresh()
   }, [pos?.zone, raidsEnabled, refresh])
 
