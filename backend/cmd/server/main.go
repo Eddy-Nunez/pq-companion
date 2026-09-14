@@ -1377,7 +1377,16 @@ func main() {
 	lastRaidSeen := map[string]string{}
 
 	// Fingerprint of the last raid.roster broadcast — see the MsgRaid case.
-	var lastRaidRosterFP string
+	// atomic: written by the pipe reader goroutine AND the disband watcher
+	// below. "" means "nothing broadcast yet" (or the roster aged out).
+	var lastRaidRosterFP atomic.Value // string
+	lastRaidRosterFP.Store("")
+	raidFPLoad := func() string {
+		if v, ok := lastRaidRosterFP.Load().(string); ok {
+			return v
+		}
+		return ""
+	}
 
 	// raidFingerprint summarizes a raid roster + zone into a change-detection
 	// key. Member order follows the wire (Zeal's raid list order), which is
@@ -1531,8 +1540,8 @@ func main() {
 			// broadcasting every envelope would make every connected client
 			// re-fetch + re-check ten times a second. Broadcast only when the
 			// roster fingerprint (members + zone) actually changes.
-			if fp := raidFingerprint(pipeZoneID, raidMembers); fp != lastRaidRosterFP {
-				lastRaidRosterFP = fp
+			if fp := raidFingerprint(pipeZoneID, raidMembers); fp != raidFPLoad() {
+				lastRaidRosterFP.Store(fp)
 				hub.Broadcast(ws.Event{Type: "raid.roster", Data: map[string]any{"zone_id": pipeZoneID}})
 			}
 			if playerStore == nil {
@@ -2024,6 +2033,25 @@ func main() {
 	defer mapStore.Close()
 
 	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, liveZoneFn, actualPort)
+
+	// Raid disband watcher. Zeal emits MsgRaid only while is_in_raid(); on
+	// disband the envelopes just STOP — there is no "raid over" message on the
+	// pipe. The roster keeper ages the snapshot out after rosterStaleAfter
+	// (API truth), but nothing else would tell connected clients: no envelope
+	// fires after disband, so the per-envelope fingerprint dedupe never
+	// triggers again. This low-frequency watcher notices the fresh→stale
+	// transition and pushes one raid.roster event (plus resets the broadcast
+	// fingerprint so the next real roster change re-broadcasts immediately).
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for range t.C {
+			if rosterKeeper.StaleChange() {
+				lastRaidRosterFP.Store("")
+				hub.Broadcast(ws.Event{Type: "raid.roster", Data: map[string]any{}})
+			}
+		}
+	}()
 
 	slog.Info("server starting", "addr", listener.Addr().String(), "db", *dbPath)
 	if err := http.Serve(listener, router); err != nil {
