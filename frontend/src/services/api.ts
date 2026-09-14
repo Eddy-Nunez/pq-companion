@@ -1413,6 +1413,7 @@ export interface BackfillArchiveInfo {
   count: number
   bytes: number // total uncompressed size
   oldest: string // YYYY-MM-DD, or ''
+  legacy_count: number // of count, how many are still uncompressed .bak.txt
 }
 
 export interface BackfillInfo {
@@ -1439,6 +1440,18 @@ export function runBackfill(
     sections,
     scope,
   })
+}
+
+// compressLegacyArchives retroactively zips old uncompressed .bak.txt
+// archives (from before Archive & Trim moved to .bak.zip) into .bak.zip in
+// place. Omit character to sweep every character with a log file.
+export function compressLegacyArchives(
+  character?: string,
+): Promise<{ compressed: number; failed: { path: string; error: string }[] }> {
+  return post<{ compressed: number; failed: { path: string; error: string }[] }>(
+    '/api/backfill/compress-archives',
+    character ? { character } : {},
+  )
 }
 
 // ── App Backup (export/import full app state) ──────────────────────────────────

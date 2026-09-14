@@ -150,3 +150,57 @@ func (z *zipEntryReader) Close() error {
 	}
 	return err
 }
+
+// CompressLegacyArchive converts one legacy uncompressed .bak.txt archive
+// (produced by an earlier version of Archive & Trim, before it moved to
+// .bak.zip — see BackupAndPurge) into a single-entry .bak.zip in place, then
+// removes the .txt. The zip entry is named after the live log
+// ("eqlog_<Char>_pq.proj.txt") so OpenArchive reads it the same way as any
+// other archive. Returns the new .bak.zip path.
+func CompressLegacyArchive(path string) (string, error) {
+	base := filepath.Base(path)
+	m := reArchiveName.FindStringSubmatch(base)
+	if m == nil || !strings.HasSuffix(strings.ToLower(base), ".bak.txt") {
+		return "", fmt.Errorf("not a legacy .bak.txt archive: %s", base)
+	}
+	entryName := strings.TrimSuffix(base, m[0]) + ".txt"
+	newPath := strings.TrimSuffix(path, ".txt") + ".zip"
+
+	srcInfo, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("stat archive: %w", err)
+	}
+	if err := zipFile(path, newPath, entryName, srcInfo); err != nil {
+		return "", fmt.Errorf("compress archive: %w", err)
+	}
+	if err := verifyZipEntry(newPath, entryName, srcInfo.Size()); err != nil {
+		os.Remove(newPath)
+		return "", fmt.Errorf("verify compressed archive: %w", err)
+	}
+	if err := os.Remove(path); err != nil {
+		return newPath, fmt.Errorf("compressed to %s but could not remove original: %w", filepath.Base(newPath), err)
+	}
+	return newPath, nil
+}
+
+// CompressResult is the outcome of compressing one legacy archive.
+type CompressResult struct {
+	OldPath string
+	NewPath string
+	Err     error
+}
+
+// CompressLegacyArchives compresses every legacy .bak.txt archive found for
+// character in eqPath, oldest first. It keeps going after a per-file error
+// so one bad archive doesn't block the rest.
+func CompressLegacyArchives(eqPath, character string) []CompressResult {
+	var out []CompressResult
+	for _, af := range DiscoverArchives(eqPath, character) {
+		if af.Compressed {
+			continue
+		}
+		newPath, err := CompressLegacyArchive(af.Path)
+		out = append(out, CompressResult{OldPath: af.Path, NewPath: newPath, Err: err})
+	}
+	return out
+}

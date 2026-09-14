@@ -23,9 +23,10 @@ type backfillHandler struct {
 // archiveInfo summarizes the rotated-out .bak.zip / .bak.txt logs available
 // for one character, so the UI can label the "scan archives too" option.
 type archiveInfo struct {
-	Count  int    `json:"count"`
-	Bytes  int64  `json:"bytes"`  // total uncompressed size across all archives
-	Oldest string `json:"oldest"` // YYYY-MM-DD of the earliest archive, or ""
+	Count       int    `json:"count"`
+	Bytes       int64  `json:"bytes"`        // total uncompressed size across all archives
+	Oldest      string `json:"oldest"`       // YYYY-MM-DD of the earliest archive, or ""
+	LegacyCount int    `json:"legacy_count"` // of Count, how many are still uncompressed .bak.txt
 }
 
 // info handles GET /api/backfill — the available sections plus the characters
@@ -49,13 +50,18 @@ func (h *backfillHandler) info(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		var bytes int64
+		var legacy int
 		for _, a := range found {
 			bytes += a.Bytes
+			if !a.Compressed {
+				legacy++
+			}
 		}
 		archives[c] = archiveInfo{
-			Count:  len(found),
-			Bytes:  bytes,
-			Oldest: found[0].ArchivedAt.Format("2006-01-02"),
+			Count:       len(found),
+			Bytes:       bytes,
+			Oldest:      found[0].ArchivedAt.Format("2006-01-02"),
+			LegacyCount: legacy,
 		}
 	}
 	active := h.mgr.Get().Character
@@ -127,5 +133,53 @@ func (h *backfillHandler) run(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"results":   results,
 		"character": req.Character,
+	})
+}
+
+// compressArchives handles POST /api/backfill/compress-archives {character?}
+// — retroactively zips legacy .bak.txt archives (left behind by an earlier
+// version of Archive & Trim, before it moved to .bak.zip) into .bak.zip in
+// place, freeing up disk space. An empty/omitted character sweeps every
+// character that has a log file. Failures on individual archives are
+// collected rather than aborting the sweep.
+func (h *backfillHandler) compressArchives(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Character string `json:"character"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req) // empty body means "all characters"
+
+	eqPath := h.mgr.Get().EQPath
+	if eqPath == "" {
+		writeError(w, http.StatusBadRequest, "eq_path not configured")
+		return
+	}
+
+	var chars []string
+	if req.Character != "" {
+		chars = []string{req.Character}
+	} else {
+		for _, d := range logparser.DiscoverCharacters(eqPath) {
+			chars = append(chars, d.Name)
+		}
+	}
+
+	type failure struct {
+		Path  string `json:"path"`
+		Error string `json:"error"`
+	}
+	compressed := 0
+	failed := []failure{}
+	for _, c := range chars {
+		for _, res := range logparser.CompressLegacyArchives(eqPath, c) {
+			if res.Err != nil {
+				failed = append(failed, failure{Path: res.OldPath, Error: res.Err.Error()})
+				continue
+			}
+			compressed++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"compressed": compressed,
+		"failed":     failed,
 	})
 }

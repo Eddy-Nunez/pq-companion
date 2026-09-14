@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { DatabaseBackup, RefreshCw, AlertTriangle, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { Archive, DatabaseBackup, RefreshCw, AlertTriangle, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
 import {
   getBackfillInfo,
   getConfig,
   updateConfig,
+  compressLegacyArchives,
   type BackfillSection,
   type BackfillArchiveInfo,
   type BackfillScope,
@@ -22,6 +23,9 @@ export default function BackfillPanel(): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [legacyState, setLegacyState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [legacyResult, setLegacyResult] = useState<{ compressed: number; failed: { path: string; error: string }[] } | null>(null)
+  const [legacyErr, setLegacyErr] = useState<string | null>(null)
   // The run itself lives in the app-root BackfillProvider so it keeps going (and
   // shows in the persistent bottom bar) while the user navigates away from
   // Settings. This panel just kicks it off and reads back the results.
@@ -78,11 +82,91 @@ export default function BackfillPanel(): React.ReactElement {
     startBackfill(Array.from(selChars), Array.from(selSections), effectiveScope)
   }
 
+  // Legacy .bak.txt archives across every character, not just the selected
+  // ones — this is a one-time, character-agnostic cleanup, so it's shown
+  // independent of the backfill selection above.
+  const totalLegacy = Object.values(archives).reduce((sum, a) => sum + (a.legacy_count ?? 0), 0)
+
+  async function handleCompressLegacy() {
+    setLegacyState('running')
+    setLegacyErr(null)
+    try {
+      const res = await compressLegacyArchives()
+      setLegacyResult(res)
+      setLegacyState('done')
+      const info = await getBackfillInfo()
+      setArchives(info.archives ?? {})
+    } catch (e) {
+      setLegacyState('error')
+      setLegacyErr((e as Error).message)
+    }
+  }
+
   const labelFor = (key: string) => sections.find((s) => s.key === key)?.label ?? key
 
   return (
     <>
       <ChatRetentionCard />
+
+      {(totalLegacy > 0 || legacyState === 'done' || legacyState === 'error') && (
+        <section
+          className="rounded-lg p-4"
+          style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+        >
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+            <Archive size={13} /> Old backup logs
+          </h2>
+          <p className="mb-3 text-xs leading-relaxed" style={{ color: 'var(--color-muted-foreground)' }}>
+            {totalLegacy > 0 ? (
+              <>
+                {totalLegacy} backup{totalLegacy === 1 ? '' : 's'} from an earlier version of Archive &amp; Trim{' '}
+                {totalLegacy === 1 ? 'is' : 'are'} still stored as plain <code className="font-mono">.bak.txt</code> text.
+                Compress {totalLegacy === 1 ? 'it' : 'them'} into <code className="font-mono">.bak.zip</code>, same as new
+                backups, to free up space. Backfill reads compressed and plain archives the same way either way, so nothing
+                else changes.
+              </>
+            ) : (
+              'All backup logs are compressed.'
+            )}
+          </p>
+
+          {(legacyState === 'idle' || legacyState === 'error') && totalLegacy > 0 && (
+            <button
+              onClick={handleCompressLegacy}
+              className="flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium"
+              style={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)', color: 'var(--color-foreground)' }}
+            >
+              <Archive size={12} />
+              Compress {totalLegacy} old backup{totalLegacy === 1 ? '' : 's'}
+            </button>
+          )}
+
+          {legacyState === 'running' && (
+            <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+              <RefreshCw size={12} className="animate-spin" /> Compressing…
+            </p>
+          )}
+
+          {legacyState === 'done' && legacyResult && (
+            <div className="space-y-1">
+              <p className="flex items-center gap-1.5 text-xs" style={{ color: '#22c55e' }}>
+                <CheckCircle2 size={12} /> Compressed {legacyResult.compressed} file{legacyResult.compressed === 1 ? '' : 's'}.
+              </p>
+              {legacyResult.failed.length > 0 && (
+                <p className="text-xs" style={{ color: '#f87171' }}>
+                  {legacyResult.failed.length} failed: {legacyResult.failed.map((f) => f.path.split(/[\\/]/).pop()).join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {legacyState === 'error' && legacyErr && (
+            <p className="flex items-center gap-1.5 text-xs" style={{ color: '#f87171' }}>
+              <AlertTriangle size={12} /> {legacyErr}
+            </p>
+          )}
+        </section>
+      )}
 
       <section
         id="log-backfill"

@@ -441,6 +441,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 		r.Route("/backfill", func(r chi.Router) {
 			r.Get("/", backfillH.info)
 			r.Post("/", backfillH.run)
+			r.Post("/compress-archives", backfillH.compressArchives)
 		})
 		r.Route("/app", func(r chi.Router) {
 			r.Post("/export", appBackupH.export)
