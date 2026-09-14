@@ -2,8 +2,10 @@ package raidcomp
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // openTemp opens a Store on a fresh temp DB file.
@@ -17,28 +19,38 @@ func openTemp(t *testing.T) *Store {
 	return s
 }
 
-func TestStore_SeedOnFirstOpen(t *testing.T) {
+// TestStore_NoEncountersSeededOnFirstOpen locks in that the knowledge base
+// starts empty — encounters are no longer auto-seeded, so a fresh store
+// never carries sample/placeholder data a guild didn't create themselves.
+func TestStore_NoEncountersSeededOnFirstOpen(t *testing.T) {
 	s := openTemp(t)
 	encs, err := s.ListEncounters()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(encs) != 1 {
-		t.Fatalf("seed: got %d encounters, want 1", len(encs))
+	if len(encs) != 0 {
+		t.Fatalf("fresh store: got %d encounters, want 0 (no sample data)", len(encs))
 	}
-	aow := encs[0]
-	if aow.ID != "aow" || aow.Name != "Avatar of War" || aow.Zone != "Kael Drakkel" {
-		t.Errorf("seed encounter wrong: %+v", aow)
+}
+
+// TestStore_SaveEncounter_CompRoundTrip exercises the same comp-row shape the
+// old auto-seeded "aow" fixture carried (min/rec split across two tables,
+// merged back on read), now via an explicit save instead of seeding.
+func TestStore_SaveEncounter_CompRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	e := aowFixture()
+	if err := s.SaveEncounter(e); err != nil {
+		t.Fatal(err)
+	}
+	aow, err := s.GetEncounter("aow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aow.Name != "Avatar of War" || aow.Zone != "Kael Drakkel" {
+		t.Errorf("encounter wrong: %+v", aow)
 	}
 	if len(aow.Comps) != 18 {
-		t.Errorf("seed comps = %d rows, want 18", len(aow.Comps))
-	}
-	// every seeded row must have both levels round-tripped
-	for _, c := range aow.Comps {
-		if c.Min == 0 && c.Rec == 0 {
-			// allowed (rgc/lockpicker/etc. are 0/0) — just verify levels exist separately below
-			continue
-		}
+		t.Errorf("comps = %d rows, want 18", len(aow.Comps))
 	}
 	byPath := map[string]CompRow{}
 	for _, c := range aow.Comps {
@@ -55,33 +67,51 @@ func TestStore_SeedOnFirstOpen(t *testing.T) {
 	}
 }
 
-func TestStore_SeedIdempotent(t *testing.T) {
+// TestStore_RemoveLegacySeedEncounter verifies the one-time cleanup: a store
+// still carrying the old auto-seeded "aow" row (identified by its exact
+// Notes text) has it removed on open, while a user's own re-created "aow"
+// encounter (different Notes) is left untouched.
+func TestStore_RemoveLegacySeedEncounter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	s1, err := OpenStore(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	n1 := countEncounters(t, s1)
+	seed := aowFixture()
+	seed.Notes = legacySeedNotes
+	if err := s1.SaveEncounter(seed); err != nil {
+		t.Fatal(err)
+	}
 	s1.Close()
-	// reopening the same file must not re-seed
+
+	// Reopening must strip the legacy row.
 	s2, err := OpenStore(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	n2 := countEncounters(t, s2)
-	s2.Close()
-	if n1 != 1 || n2 != 1 {
-		t.Errorf("seed counts = %d then %d, want 1 then 1", n1, n2)
+	if _, err := s2.GetEncounter("aow"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("legacy seed encounter should have been removed, got err=%v", err)
 	}
-}
 
-func countEncounters(t *testing.T, s *Store) int {
-	t.Helper()
-	encs, err := s.ListEncounters()
+	// A user's own "aow" with different notes must survive a reopen.
+	custom := aowFixture()
+	custom.Notes = "our guild's own notes"
+	if err := s2.SaveEncounter(custom); err != nil {
+		t.Fatal(err)
+	}
+	s2.Close()
+	s3, err := OpenStore(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return len(encs)
+	defer s3.Close()
+	got, err := s3.GetEncounter("aow")
+	if err != nil {
+		t.Fatalf("user's own aow encounter should survive: %v", err)
+	}
+	if got.Notes != "our guild's own notes" {
+		t.Errorf("notes = %q, want preserved", got.Notes)
+	}
 }
 
 func TestStore_CRUDRoundTrip(t *testing.T) {
@@ -150,13 +180,13 @@ func TestStore_CRUDRoundTrip(t *testing.T) {
 		t.Errorf("reqs should persist across update, got %v", got2.Reqs)
 	}
 
-	// list includes both seed and new encounter
+	// list includes the new encounter
 	list, err := s.ListEncounters()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 {
-		t.Fatalf("list = %d, want 2", len(list))
+	if len(list) != 1 {
+		t.Fatalf("list = %d, want 1", len(list))
 	}
 
 	// delete removes children too
@@ -167,8 +197,8 @@ func TestStore_CRUDRoundTrip(t *testing.T) {
 		t.Errorf("after delete, want ErrNotFound, got %v", err)
 	}
 	list, _ = s.ListEncounters()
-	if len(list) != 1 {
-		t.Fatalf("after delete, list = %d, want 1", len(list))
+	if len(list) != 0 {
+		t.Fatalf("after delete, list = %d, want 0", len(list))
 	}
 }
 
@@ -242,6 +272,14 @@ func TestStore_RoleTaxonomySeeded(t *testing.T) {
 
 func TestStore_RoleCRUD(t *testing.T) {
 	s := openTemp(t)
+	// an encounter using tank.defensive, so the in-use delete guard below has
+	// something to actually block
+	if err := s.SaveEncounter(&Encounter{
+		ID: "x", Name: "X", Zone: "Z", Status: StatusActive,
+		Comps: []CompRow{{Role: "tank", Sub: "defensive", Min: 1, Rec: 1}},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	// add a flat role; appends at the end
 	if err := s.SaveRole(Role{Role: "puller2", Label: "Puller 2", Classes: ClassSet{CodeMonk}}); err != nil {
 		t.Fatal(err)
@@ -276,7 +314,7 @@ func TestStore_RoleCRUD(t *testing.T) {
 	if len(roles) != 21 {
 		t.Errorf("after delete = %d, want 21", len(roles))
 	}
-	// delete a role referenced by a comp must be blocked (aow uses tank.defensive)
+	// delete a role referenced by a comp must be blocked (encounter "x" uses tank.defensive)
 	if err := s.DeleteRole("tank", "defensive"); err == nil {
 		t.Error("expected in-use delete to fail")
 	}
@@ -327,6 +365,15 @@ func TestStore_MigrationsAddZoneIDToExistingTable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// a pre-migration row, inserted directly since the pre-zone_id schema has
+	// no zone_id/npc_id columns for SaveEncounter to write
+	now := time.Now().Unix()
+	if _, err := legacy.Exec(
+		`INSERT INTO raid_encounters (id, name, zone, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		"vulak", "Vulak'Aerr", "Kael Drakkel", "active", now, now,
+	); err != nil {
+		t.Fatal(err)
+	}
 	legacy.Close()
 
 	s, err := OpenStore(path, nil)
@@ -334,12 +381,16 @@ func TestStore_MigrationsAddZoneIDToExistingTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	// the migration adds raid_encounters.zone_id (old table preserved) and seeds
-	got, err := s.GetEncounter("aow")
+	// the migration adds raid_encounters.zone_id / npc_id, defaulted to 0, to
+	// the pre-existing row rather than dropping or reseeding it
+	got, err := s.GetEncounter("vulak")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ZoneID < 0 {
+	if got.ZoneID != 0 {
 		t.Errorf("zone_id should default 0, got %d", got.ZoneID)
+	}
+	if got.NPCID != 0 {
+		t.Errorf("npc_id should default 0, got %d", got.NPCID)
 	}
 }

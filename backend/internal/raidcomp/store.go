@@ -229,63 +229,81 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-// EnsureSeed seeds the taxonomy (always) and starter encounters (only when
-// the encounter table is empty).
+// EnsureSeed seeds the taxonomy (always). Encounters are no longer
+// auto-seeded — the knowledge base starts empty and guilds build their own
+// encounters in the Raid Editor — but existing stores still get their zone
+// ids backfilled and, once, their legacy sample encounter removed.
 func (s *Store) EnsureSeed() error {
 	if err := s.EnsureSeedRoles(); err != nil {
 		return err
 	}
-	var n int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM raid_encounters`).Scan(&n); err != nil {
+	if err := s.removeLegacySeedEncounter(); err != nil {
 		return err
 	}
-	if n > 0 {
-		// Backfill zone ids for encounters seeded before the zone_id column
-		// existed (idempotent — only touches rows still at 0). Collect first,
-		// then update: the store pins a single SQLite connection, so an UPDATE
-		// inside the SELECT cursor's loop would deadlock.
-		if s.zoneID != nil {
-			type zoneFix struct{ id, zone string }
-			var fixes []zoneFix
-			rows, err := s.db.Query(`SELECT id, zone FROM raid_encounters WHERE zone_id = 0`)
-			if err != nil {
-				return err
-			}
-			for rows.Next() {
-				var f zoneFix
-				if err := rows.Scan(&f.id, &f.zone); err != nil {
-					rows.Close()
-					return err
-				}
-				fixes = append(fixes, f)
-			}
-			if err := rows.Err(); err != nil {
-				rows.Close()
-				return err
-			}
-			rows.Close()
-			for _, f := range fixes {
-				if zid := s.zoneID(f.zone); zid > 0 {
-					if _, err := s.db.Exec(`UPDATE raid_encounters SET zone_id = ? WHERE id = ?`, zid, f.id); err != nil {
-						return err
-					}
-				}
-			}
-		}
+	if s.zoneID == nil {
 		return nil
 	}
-	for _, seed := range SeedEncounters() {
-		now := time.Now().Unix()
-		seed.CreatedAt = now
-		seed.UpdatedAt = now
-		if s.zoneID != nil {
-			seed.ZoneID = s.zoneID(seed.Zone)
-		}
-		if err := s.SaveEncounter(&seed); err != nil {
+	// Backfill zone ids for encounters seeded before the zone_id column
+	// existed (idempotent — only touches rows still at 0). Collect first,
+	// then update: the store pins a single SQLite connection, so an UPDATE
+	// inside the SELECT cursor's loop would deadlock.
+	type zoneFix struct{ id, zone string }
+	var fixes []zoneFix
+	rows, err := s.db.Query(`SELECT id, zone FROM raid_encounters WHERE zone_id = 0`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var f zoneFix
+		if err := rows.Scan(&f.id, &f.zone); err != nil {
+			rows.Close()
 			return err
+		}
+		fixes = append(fixes, f)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, f := range fixes {
+		if zid := s.zoneID(f.zone); zid > 0 {
+			if _, err := s.db.Exec(`UPDATE raid_encounters SET zone_id = ? WHERE id = ?`, zid, f.id); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// legacySeedNotes is the Notes text carried by the "aow" encounter earlier
+// versions auto-seeded on first open (see git history for SeedEncounters).
+// Matched verbatim below so removeLegacySeedEncounter only ever deletes the
+// untouched sample row, never a user's own "aow"-id encounter.
+const legacySeedNotes = "Counts are starting suggestions, not canonical. AoW himself is unslowable but " +
+	"the surrounding mobs are not — slower stays for adds. No rgc/lockpicker/tracker/coth " +
+	"needed on the Kael path; RGC staffing is for Ssra (Luclin). Adjust debuffer/resist " +
+	"coverage to the guild class mix."
+
+// removeLegacySeedEncounter is a one-time cleanup: earlier versions
+// auto-seeded a starter "Avatar of War" encounter (id "aow") into every new
+// store. The knowledge base no longer ships sample encounters, so any store
+// still carrying that exact seeded row — identified by its distinctive Notes
+// text, so a user's own edited or re-created "aow" encounter is left alone —
+// has it removed.
+func (s *Store) removeLegacySeedEncounter() error {
+	var notes string
+	err := s.db.QueryRow(`SELECT notes FROM raid_encounters WHERE id = ?`, "aow").Scan(&notes)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if notes != legacySeedNotes {
+		return nil
+	}
+	return s.DeleteEncounter("aow")
 }
 
 // EnsureSeedRoles inserts the starter taxonomy when the roles table is empty
