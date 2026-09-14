@@ -39,6 +39,12 @@ func SeedRoles() []Role {
 // suggested starting values, sized for a ~54-person raid. ZoneID is resolved
 // at first-open time by the OpenStore zone resolver (the user.db store cannot
 // read quarm.db itself).
+//
+// Zone corrected to "Kael Drakkel" (quarm.db zoneidnumber 113) — eqmon's
+// source data listed "Temple of Veeshan", which doesn't match where Avatar of
+// War actually spawns and was inconsistent with this same seed's own Notes
+// field ("No rgc/lockpicker/tracker/coth needed on the Kael path"). Spelling
+// matches quarm.db's zone.long_name exactly so ZoneIDByLongName resolves it.
 func SeedEncounters() []Encounter {
 	notes := "Counts are starting suggestions, not canonical. AoW himself is unslowable but " +
 		"the surrounding mobs are not — slower stays for adds. No rgc/lockpicker/tracker/coth " +
@@ -47,7 +53,7 @@ func SeedEncounters() []Encounter {
 	return []Encounter{{
 		ID:     "aow",
 		Name:   "Avatar of War",
-		Zone:   "Temple of Veeshan",
+		Zone:   "Kael Drakkel",
 		Status: StatusActive,
 		Notes:  notes,
 		Comps: []CompRow{

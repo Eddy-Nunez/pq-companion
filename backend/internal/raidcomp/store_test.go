@@ -27,7 +27,7 @@ func TestStore_SeedOnFirstOpen(t *testing.T) {
 		t.Fatalf("seed: got %d encounters, want 1", len(encs))
 	}
 	aow := encs[0]
-	if aow.ID != "aow" || aow.Name != "Avatar of War" || aow.Zone != "Temple of Veeshan" {
+	if aow.ID != "aow" || aow.Name != "Avatar of War" || aow.Zone != "Kael Drakkel" {
 		t.Errorf("seed encounter wrong: %+v", aow)
 	}
 	if len(aow.Comps) != 18 {

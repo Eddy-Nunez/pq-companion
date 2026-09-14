@@ -344,8 +344,8 @@ function FlagsPanel(): React.ReactElement {
             Adds a <strong>Raids</strong> section: a user-editable role taxonomy,
             an encounter knowledge base, and a MIN/REC composition checker
             compared against the live Zeal raid roster (or a manually-entered
-            one). Contributed by Eddy Nunez (Intervention), ported from his
-            eqmon project. The knowledge base ships with a single seeded
+            one). Contributed by Kav (Intervention), ported from his eqmon
+            project. The knowledge base ships with a single seeded
             encounter (Avatar of War) — add your own via the Raid Editor.
             Candidate names on a short row are class-eligible members, not
             actual assignments, so the same person can be counted toward more
