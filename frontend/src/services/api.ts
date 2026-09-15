@@ -3313,6 +3313,10 @@ import type {
   RaidRole,
   CheckReport,
   CheckRequest,
+  RaidPack,
+  RaidImportPreview,
+  RaidImportCommitRequest,
+  RaidImportCommitResult,
 } from '../types/raid'
 
 export function getRaidTaxonomy(): Promise<RaidTaxonomy> {
@@ -3359,4 +3363,20 @@ export function deleteRaidEncounter(id: string): Promise<void> {
 
 export function checkRaidComp(req: CheckRequest): Promise<CheckReport> {
   return post<CheckReport>('/api/raids/check', req)
+}
+
+export function exportRaidPack(): Promise<RaidPack> {
+  return get<RaidPack>('/api/raids/export')
+}
+
+export function exportRaidEncounter(id: string): Promise<RaidPack> {
+  return get<RaidPack>(`/api/raids/encounters/${encodeURIComponent(id)}/export`)
+}
+
+export function previewRaidImport(pack: RaidPack): Promise<RaidImportPreview> {
+  return post<RaidImportPreview>('/api/raids/import/preview', pack)
+}
+
+export function commitRaidImport(req: RaidImportCommitRequest): Promise<RaidImportCommitResult> {
+  return post<RaidImportCommitResult>('/api/raids/import/commit', req)
 }

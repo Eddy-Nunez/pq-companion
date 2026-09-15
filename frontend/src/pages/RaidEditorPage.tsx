@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { PencilRuler, Plus, Trash2, Edit3, MapPin } from 'lucide-react'
+import { PencilRuler, Plus, Trash2, Edit3, MapPin, Download, Upload } from 'lucide-react'
 import {
   getRaidTaxonomy,
   getRaidEncounters,
@@ -7,11 +7,30 @@ import {
   updateRaidEncounter,
   deleteRaidEncounter,
   searchZones,
+  exportRaidPack,
+  exportRaidEncounter,
 } from '../services/api'
-import type { RaidEncounter, RaidTaxonomy } from '../types/raid'
+import type { RaidEncounter, RaidTaxonomy, RaidPack } from '../types/raid'
 import type { Zone } from '../types/zone'
 import EncounterForm from '../components/raids/EncounterForm'
 import TaxonomyEditor from '../components/raids/TaxonomyEditor'
+import RaidImportDialog from '../components/raids/RaidImportDialog'
+
+// downloadRaidPack saves a fetched pack as a local .json file (same pattern
+// as the trigger-pack download).
+function downloadRaidPack(pack: RaidPack, filename: string): void {
+  const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function slugifyFilename(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'encounter'
+}
 
 function asChip(s: string): React.ReactElement {
   return <span key={s} className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}>{s}</span>
@@ -28,6 +47,7 @@ interface EncounterListProps {
   onRequestDelete: (id: string) => void
   onCancelDelete: () => void
   onConfirmDelete: (id: string) => void
+  onExport: (e: RaidEncounter) => void
 }
 
 function EncounterList({
@@ -37,6 +57,7 @@ function EncounterList({
   onRequestDelete,
   onCancelDelete,
   onConfirmDelete,
+  onExport,
 }: EncounterListProps): React.ReactElement {
   if (items.length === 0) return <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>None</span>
   return (
@@ -65,6 +86,14 @@ function EncounterList({
             ) : null}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => onExport(e)}
+              title="Export this encounter as a pack"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded"
+              style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+            >
+              <Download size={13} /> Export
+            </button>
             <button
               onClick={() => onEdit(e)}
               className="flex items-center gap-1 px-2 py-1 text-xs rounded"
@@ -113,6 +142,8 @@ export default function RaidEditorPage(): React.ReactElement {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -161,6 +192,29 @@ export default function RaidEditorPage(): React.ReactElement {
     }
   }
 
+  async function handleExportAll(): Promise<void> {
+    setExporting(true)
+    setError('')
+    try {
+      const pack = await exportRaidPack()
+      downloadRaidPack(pack, 'raid-compositions.json')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function handleExportOne(e: RaidEncounter): Promise<void> {
+    setError('')
+    try {
+      const pack = await exportRaidEncounter(e.id)
+      downloadRaidPack(pack, `raid-${slugifyFilename(e.name)}.json`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const active = encounters.filter((e) => e.status === 'active')
   const placeholder = encounters.filter((e) => e.status !== 'active')
 
@@ -187,13 +241,30 @@ export default function RaidEditorPage(): React.ReactElement {
         <h1 className="text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--color-foreground)' }}>
           <PencilRuler size={18} /> Raid Composition Editor
         </h1>
-        <button
-          onClick={() => setEditing('new')}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
-          style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }}
-        >
-          <Plus size={14} /> New Encounter
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void handleExportAll()}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded"
+            style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+          >
+            <Download size={14} /> {exporting ? 'Exporting…' : 'Export All'}
+          </button>
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded"
+            style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+          >
+            <Upload size={14} /> Import
+          </button>
+          <button
+            onClick={() => setEditing('new')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded font-medium"
+            style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }}
+          >
+            <Plus size={14} /> New Encounter
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -217,6 +288,7 @@ export default function RaidEditorPage(): React.ReactElement {
               onRequestDelete={setConfirmDelete}
               onCancelDelete={() => setConfirmDelete(null)}
               onConfirmDelete={(id) => void handleDelete(id)}
+              onExport={(e) => void handleExportOne(e)}
             />
           </section>
 
@@ -232,6 +304,7 @@ export default function RaidEditorPage(): React.ReactElement {
                 onRequestDelete={setConfirmDelete}
                 onCancelDelete={() => setConfirmDelete(null)}
                 onConfirmDelete={(id) => void handleDelete(id)}
+                onExport={(e) => void handleExportOne(e)}
               />
             </section>
           )}
@@ -252,6 +325,7 @@ export default function RaidEditorPage(): React.ReactElement {
           </section>
         </div>
       )}
+      {importOpen && <RaidImportDialog onClose={() => setImportOpen(false)} onDone={() => void load()} />}
     </div>
   )
 }
