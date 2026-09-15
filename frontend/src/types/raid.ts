@@ -117,3 +117,44 @@ export interface CheckRequest {
   encounter_id: string
   roster?: CheckRosterInput[]
 }
+
+// ── Pack export/import ───────────────────────────────────────────────────────
+// Portable JSON packs carrying encounters (with comps/reqs/strategy) between
+// users. Shapes mirror the Go structs in backend/internal/api/raidpacks.go.
+
+export interface RaidPack {
+  kind: string
+  version: number
+  pack_name: string
+  description?: string
+  exported_at: number
+  encounters: RaidEncounter[]
+}
+
+export interface RaidImportPreviewItem {
+  encounter: RaidEncounter
+  exists: boolean
+  errors?: string[]
+  warnings?: string[]
+}
+
+export interface RaidImportPreview {
+  pack_name: string
+  encounters: RaidImportPreviewItem[]
+}
+
+export interface RaidImportCommitItem {
+  encounter: RaidEncounter
+  overwrite: boolean
+}
+
+export interface RaidImportCommitRequest {
+  pack_name?: string
+  encounters: RaidImportCommitItem[]
+}
+
+export interface RaidImportCommitResult {
+  saved: string[]
+  skipped: string[]
+  failed?: Record<string, string>
+}
