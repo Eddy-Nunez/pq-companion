@@ -38,7 +38,7 @@ function taxonomyLeaves(tax: RaidTaxonomy): Leaf[] {
     if (spec.sub_roles) {
       for (const sub of Object.keys(spec.sub_roles).sort()) {
         const s = spec.sub_roles[sub]
-        leaves.push({ key: `${role}.${sub}`, role, sub, label: s.label || `${role} / ${sub}`, classes: s.classes })
+        leaves.push({ key: `${role}.${sub}`, role, sub, label: s.label || `${role} / ${sub}`, classes: s.classes ?? [] })
       }
     } else {
       leaves.push({ key: role, role, label: spec.label || role, classes: spec.classes ?? [] })

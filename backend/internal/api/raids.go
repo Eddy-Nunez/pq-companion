@@ -76,12 +76,22 @@ func (h *raidsHandler) taxonomy(w http.ResponseWriter, r *http.Request) {
 			dto.Label = row.Label
 		}
 		if row.Sub == "" {
+			// omitempty on this field keeps parent roles (sub-role holders)
+			// clean; a nil slice there would also marshal as null, so force
+			// an empty array whenever we attach classes.
+			if row.Classes == nil {
+				row.Classes = raidcomp.ClassSet{}
+			}
 			dto.Classes = row.Classes
 		} else {
 			if dto.SubRoles == nil {
 				dto.SubRoles = map[string]taxonomySubDTO{}
 			}
-			dto.SubRoles[row.Sub] = taxonomySubDTO{Label: row.Label, Classes: row.Classes}
+			subClasses := row.Classes
+			if subClasses == nil {
+				subClasses = raidcomp.ClassSet{}
+			}
+			dto.SubRoles[row.Sub] = taxonomySubDTO{Label: row.Label, Classes: subClasses}
 		}
 		roles[row.Role] = dto
 	}
