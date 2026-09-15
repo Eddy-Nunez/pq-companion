@@ -49,7 +49,7 @@ export default function TaxonomyEditor({ classNames }: Props): React.ReactElemen
 
   function startEdit(r: RaidRole): void {
     setEditing(r)
-    setForm({ role: r.role, sub: r.sub_role ?? '', label: r.label, classes: r.classes.join(', ') })
+    setForm({ role: r.role, sub: r.sub_role ?? '', label: r.label, classes: (r.classes ?? []).join(', ') })
     setError('')
   }
 
@@ -166,7 +166,7 @@ export default function TaxonomyEditor({ classNames }: Props): React.ReactElemen
               </span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {r.classes.map((c) => (
+              {(r.classes ?? []).map((c) => (
                 <span key={c} className="text-[11px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-surface)', color: 'var(--color-muted-foreground)' }}>
                   {classNames?.[c] ?? c}
                 </span>

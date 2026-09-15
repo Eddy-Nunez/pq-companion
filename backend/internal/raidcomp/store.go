@@ -348,6 +348,12 @@ func (s *Store) ListRoles() ([]Role, error) {
 				}
 			}
 		}
+		// Import-provisioned stubs carry no class mappings (empty class_codes
+		// column). A nil slice would marshal as JSON null and crash frontend
+		// consumers that call .map/.join on it — always emit a real array.
+		if r.Classes == nil {
+			r.Classes = ClassSet{}
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()

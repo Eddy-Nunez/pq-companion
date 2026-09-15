@@ -1,7 +1,9 @@
 package raidcomp
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -196,10 +198,21 @@ func TestStore_ProvisionRoles(t *testing.T) {
 	}
 
 	// Malformed paths rejected.
-	if _, _, err := s.ProvisionRoles([]string{".noole"}); err == nil {
+	if _, _, err := s.ProvisionRoles([]string{".norole"}); err == nil {
 		t.Error("empty role segment accepted")
 	}
 	if _, _, err := s.ProvisionRoles([]string{"nosub."}); err == nil {
 		t.Error("empty sub segment accepted")
+	}
+
+	// Regression: stubs must marshal classes as [], never null — the first
+	// wizard test run crashed TaxonomyEditor with "Cannot read properties of
+	// null (reading 'map')" on exactly this.
+	rolesJSON, err := json.Marshal(roles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(rolesJSON), `"classes":null`) {
+		t.Errorf("role classes marshaled as null: %s", rolesJSON)
 	}
 }
