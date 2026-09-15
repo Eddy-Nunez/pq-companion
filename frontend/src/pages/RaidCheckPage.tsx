@@ -30,8 +30,8 @@ export default function RaidCheckPage(): React.ReactElement {
   }
 
   const selectedEncounter = useMemo(
-    () => encounters.find((e) => e.id === selectedId) ?? null,
-    [encounters, selectedId],
+    () => orderedEncounters.find((e) => e.id === selectedId) ?? null,
+    [orderedEncounters, selectedId],
   )
 
   return (
