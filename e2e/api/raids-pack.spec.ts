@@ -27,6 +27,8 @@ const BAD = `e2e-pack-${RUN}-bad` // hand-built invalid commit target
 const DUP = `e2e-pack-${RUN}-dup` // duplicate-comp rollback target
 
 const ALL_IDS = [LOCAL, IMP, BAD, DUP]
+const PROV = `e2e-pack-${RUN}-prov` // provisioning flow encounter
+const PROV_ROLE = `e2e-provrole-${RUN}` // its missing taxonomy role
 
 function packEncounter(
   id: string,
@@ -161,7 +163,7 @@ test.describe.serial('raid pack export/import', () => {
             { role: 'tank', sub_role: 'defensive', min: 1, rec: 2 },
             { role: 'not_a_role', min: 1, rec: 1 },
           ],
-        }), // unknown role -> error
+        }), // unknown role -> missing_roles (auto-provisionable), not an error
         packEncounter(`${IMP}-dup`, {
           comps: [
             { role: 'tank', sub_role: 'defensive', min: 1, rec: 2 },
@@ -175,7 +177,12 @@ test.describe.serial('raid pack export/import', () => {
     expect(body.pack_name).toBe('e2e pack')
     const byId: Record<
       string,
-      { exists: boolean; errors?: string[]; warnings?: string[] }
+      {
+        exists: boolean
+        errors?: string[]
+        warnings?: string[]
+        missing_roles?: string[]
+      }
     > = {}
     for (const item of body.encounters) byId[item.encounter.id] = item
 
@@ -184,9 +191,10 @@ test.describe.serial('raid pack export/import', () => {
 
     expect(byId.aow.exists).toBe(true)
 
-    expect((byId[`${IMP}-bad`].errors ?? []).join(' ')).toContain(
-      'not in taxonomy',
-    )
+    // Unknown comp roles are surfaced as missing_roles (the wizard offers
+    // auto-provisioning), NOT as blocking errors.
+    expect(byId[`${IMP}-bad`].errors ?? []).toEqual([])
+    expect(byId[`${IMP}-bad`].missing_roles).toEqual(['not_a_role'])
     expect((byId[`${IMP}-dup`].errors ?? []).join(' ')).toContain(
       'duplicate comp row',
     )
@@ -270,6 +278,81 @@ test.describe.serial('raid pack export/import', () => {
     expect(Object.keys(body.failed ?? {})).toEqual([DUP])
     const probe = await request.get(`/api/raids/encounters/${DUP}`)
     expect(probe.status()).toBe(404)
+  })
+
+  test('auto-provision of missing roles enables import', async ({
+    request,
+  }) => {
+    const enc = packEncounter(PROV, {
+      comps: [
+        { role: 'tank', sub_role: 'defensive', min: 1, rec: 2 },
+        { role: PROV_ROLE, sub_role: 'mappings', min: 2, rec: 3 },
+      ],
+    })
+
+    // Preview flags the path; no errors.
+    const pv = await request.post('/api/raids/import/preview', {
+      data: pack(enc),
+    })
+    expect(pv.status()).toBe(200)
+    const pvBody = await pv.json()
+    expect(pvBody.encounters[0].missing_roles).toEqual([
+      `${PROV_ROLE}.mappings`,
+    ])
+    expect(pvBody.encounters[0].errors ?? []).toEqual([])
+
+    // Commit before provisioning: per-item failure with an actionable msg.
+    const early = await request.post('/api/raids/import/commit', {
+      data: { encounters: [{ encounter: enc }] },
+    })
+    const earlyBody = await early.json()
+    expect(earlyBody.failed[PROV]).toContain(PROV_ROLE)
+
+    // Provision (the wizard's blue CTA call): creates the stub.
+    const prov = await request.post('/api/raids/roles/provision', {
+      data: { paths: [`${PROV_ROLE}.mappings`] },
+    })
+    expect(prov.status()).toBe(200)
+    const provBody = await prov.json()
+    expect(provBody.created).toEqual([`${PROV_ROLE}.mappings`])
+    expect(provBody.present).toEqual([])
+
+    // Stub visible in roles with a label and no class mappings.
+    const roles = await (await request.get('/api/raids/roles')).json()
+    const stub = roles.roles.find(
+      (r: { role: string; sub_role: string }) =>
+        r.role === PROV_ROLE && r.sub_role === 'mappings',
+    )
+    expect(stub.label).toBe('Mappings')
+    expect(stub.classes ?? []).toEqual([])
+
+    // Idempotent: second call reports present, creates nothing.
+    const prov2 = await request.post('/api/raids/roles/provision', {
+      data: { paths: [`${PROV_ROLE}.mappings`] },
+    })
+    const prov2Body = await prov2.json()
+    expect(prov2Body.created).toEqual([])
+    expect(prov2Body.present).toEqual([`${PROV_ROLE}.mappings`])
+
+    // The encounter now imports cleanly.
+    const commit = await request.post('/api/raids/import/commit', {
+      data: { encounters: [{ encounter: enc }] },
+    })
+    const commitBody = await commit.json()
+    expect(commitBody.saved).toEqual([PROV])
+
+    // Self-contained cleanup: encounter first (role is referenced by it),
+    // then the stub role.
+    expect((await request.delete(`/api/raids/encounters/${PROV}`)).status()).toBe(
+      204,
+    )
+    expect(
+      (
+        await request.delete(
+          `/api/raids/roles?role=${PROV_ROLE}&sub=mappings`,
+        )
+      ).status(),
+    ).toBe(204)
   })
 
   test('skip is the default conflict choice; overwrite preserves provenance', async ({
