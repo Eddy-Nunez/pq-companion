@@ -137,4 +137,30 @@ test.describe.serial('Raid Editor page', () => {
       page.getByText(/Role Taxonomy|Remove Greater Curse|Tank/i).first(),
     ).toBeVisible()
   })
+
+  test('taxonomy editor renders a class-less import stub without crashing', async ({
+    page,
+    request,
+  }) => {
+    // Regression: a provisioned stub role marshaled classes as JSON null and
+    // TaxonomyEditor crashed the whole editor page on render. Provision a
+    // stub, then require the editor page to render it (zero class chips,
+    // label + role id visible).
+    const prov = await request.post(`${apiBase}/api/raids/roles/provision`, {
+      data: { paths: ['e2e-smoke-stub.mappings'] },
+    })
+    expect(prov.status()).toBe(200)
+
+    try {
+      await page.goto('/#/raids/editor', { waitUntil: 'domcontentloaded' })
+      await expect(
+        page.getByText('e2e-smoke-stub / mappings').first(),
+      ).toBeVisible({ timeout: 15_000 })
+    } finally {
+      // The stub is unreferenced (no encounter was created) — deletable.
+      await request.delete(
+        `${apiBase}/api/raids/roles?role=e2e-smoke-stub&sub=mappings`,
+      )
+    }
+  })
 })
