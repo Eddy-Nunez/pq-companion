@@ -212,6 +212,65 @@ func timerKey(spellName, targetName string) string {
 // counter suffix. Distinct from timerKeySep so the two never collide.
 const stackKeySep = "#"
 
+// targetIDKeySep separates a captured target name from the disambiguating
+// spawn-id suffix keyTargetTokenLocked appends. Distinct from timerKeySep
+// and stackKeySep so none of the three can ever collide with each other or
+// with a legitimate mob name (EQ names can't contain "#" or "@").
+const targetIDKeySep = "#id:"
+
+// castSelfSlowWindow bounds how long a "You begin casting <spell>." cast-
+// start observation (lastCastSpell/lastCastAt/lastCastTargetID) stays
+// eligible to disambiguate that same spell's later trigger-driven landed
+// firing by spawn id — see keyTargetTokenLocked. Generous relative to
+// these spells' actual cast times (a few seconds) while short enough that
+// it can't bleed into a later, unrelated recast of the same spell on a
+// different mob.
+const castSelfSlowWindow = 10 * time.Second
+
+// keyTargetTokenLocked returns targetName as-is, or targetName with a
+// disambiguating "#id:<spawnid>" suffix appended, when this StartExternal
+// call can be confidently attributed to the active character's own very
+// recent cast of spell landing on their live-selected target. Callers must
+// hold e.mu.
+//
+// This only ever affects the internal timer map key — via timerKey — so
+// two identically-named mobs the player personally slowed in quick
+// succession get independent rows instead of colliding on name (reported
+// by Grimrose/SoS against the built-in Slows pack: two same-named mobs
+// slowed at once showed only one countdown). It never changes the
+// displayed TargetName, which stays the plain mob name.
+//
+// Deliberately narrow — requires all of:
+//   - the trigger captured a target name at all (targetName != "");
+//   - Zeal reported a live target spawn id at the moment of the player's
+//     most recent spell cast (lastCastTargetID != 0);
+//   - that cast's spell name matches this landed spell's name exactly
+//     (case-insensitively); and
+//   - it happened within castSelfSlowWindow of this firing.
+//
+// It does nothing — targetName passes through unchanged, same as before
+// this existed — for a slow cast by someone else in the raid (no cast-
+// start line for another player's cast reaches this client), an NPC-cast
+// slow (no cast-start line at all), or once the window lapses. Those cases
+// keep colliding on name exactly as before: the underlying limitation is
+// that EQ's log carries no spawn id on the landed-effect line itself,
+// documented in LIMITATIONS.md §1.3.
+func (e *Engine) keyTargetTokenLocked(spell *db.Spell, targetName string, at time.Time) string {
+	if targetName == "" || spell == nil || spell.Name == "" {
+		return targetName
+	}
+	if e.lastCastTargetID == 0 || e.lastCastSpell == "" {
+		return targetName
+	}
+	if !strings.EqualFold(e.lastCastSpell, spell.Name) {
+		return targetName
+	}
+	if d := at.Sub(e.lastCastAt); d < 0 || d > castSelfSlowWindow {
+		return targetName
+	}
+	return targetName + targetIDKeySep + strconv.Itoa(e.lastCastTargetID)
+}
+
 // maxStackedPerName caps how many stacked rows a single trigger (by
 // SpellName) can have active at once. Guards against a misconfigured
 // trigger on a common log line spawning runaway timer counts — both for the
@@ -354,6 +413,15 @@ type Engine struct {
 	// window (see recentSelfCastMatches).
 	lastCastTarget string
 
+	// lastCastTargetID mirrors lastCastTarget but carries the Zeal pipe's
+	// numeric target spawn id (Player.TargetID, v1.4.6+) snapshotted at the
+	// same moment. 0 when no id was available (older Zeal, no target
+	// selected, or the pipe isn't connected). Used by
+	// StartExternal/keyTargetTokenLocked to disambiguate two identically-
+	// named mobs the active character personally slowed in quick
+	// succession — see that method's doc comment for the (narrow) scope.
+	lastCastTargetID int
+
 	// clickableSpellIDs is the set of spell IDs produced by some item's click
 	// or proc effect, lazily loaded from the DB on first need (see
 	// resolveLandedSpellName). Used as a last resort to disambiguate instant
@@ -403,6 +471,15 @@ type Engine struct {
 	// (LabelTargetName, id 28). The pipe resends the current target at ~10 Hz,
 	// so HandlePipeTarget tracks the last value and only acts on transitions.
 	lastPipeTarget string
+
+	// lastPipeTargetID is the most recent numeric target spawn id reported
+	// by the Zeal pipe (Player.TargetID, v1.4.6+ MsgPlayer snapshot).
+	// Refreshed on every per-tick snapshot via SetPipeTargetID regardless of
+	// whether the name changed — unlike lastPipeTarget it needs no
+	// transition/dedup logic, since it's only ever read at the instant
+	// EventSpellCast snapshots it into lastCastTargetID. 0 = no target
+	// selected, or a pre-1.4.6 Zeal build that doesn't report it.
+	lastPipeTargetID int
 
 	// pipeBuffSlots is the most recent self-buff slot snapshot from the pipe
 	// (Buff0..14, plus 15..20 from game.dll). Stored as a set keyed by spell
@@ -551,6 +628,7 @@ func (e *Engine) Handle(ev logparser.LogEvent) {
 		e.lastCastSpell = data.SpellName
 		e.lastCastAt = time.Now()
 		e.lastCastTarget = e.lastPipeTarget
+		e.lastCastTargetID = e.lastPipeTargetID
 		// Cross-check: if Zeal is reporting a different in-flight cast than
 		// the log, that's a parser miss worth investigating. Logged once per
 		// cast event so this can't spam during fast cast chains.
@@ -579,6 +657,7 @@ func (e *Engine) Handle(ev logparser.LogEvent) {
 		e.lastCastSpell = ""
 		e.lastCastAt = time.Time{}
 		e.lastCastTarget = ""
+		e.lastCastTargetID = 0
 		e.mu.Unlock()
 
 	case logparser.EventSpellFade:
@@ -707,6 +786,25 @@ func (e *Engine) HandlePipeTarget(name string) {
 	if base, ok := parseCorpseTarget(name); ok {
 		e.removeOnKill(base, true)
 	}
+}
+
+// SetPipeTargetID records the player's current target spawn id from the
+// Zeal pipe's per-tick MsgPlayer snapshot (Player.TargetID, v1.4.6+). nil
+// means no target selected, or a pre-1.4.6 Zeal build that doesn't report
+// it — stored as 0, which keyTargetTokenLocked treats as "no id available."
+//
+// Unlike SetPipePetID this needs no debounce: nothing reacts to the value
+// changing on its own. It's read once, at the instant EventSpellCast
+// snapshots it into lastCastTargetID, so a single stale or missed frame
+// can't misattribute anything.
+func (e *Engine) SetPipeTargetID(id *int) {
+	e.mu.Lock()
+	if id != nil {
+		e.lastPipeTargetID = *id
+	} else {
+		e.lastPipeTargetID = 0
+	}
+	e.mu.Unlock()
 }
 
 // petLossMissThreshold is how many consecutive nil pet-id observations must
@@ -898,13 +996,20 @@ func (e *Engine) StartExternal(name string, category string, durationSecs, displ
 
 	var resolvedIcon int
 	var isCharm bool
+	var spell *db.Spell
 	if spellID > 0 && e.db != nil {
-		if spell, err := e.db.GetSpell(spellID); err == nil && spell != nil {
+		if s, err := e.db.GetSpell(spellID); err == nil && s != nil {
+			spell = s
 			durationSecs = e.applyDurationModifiers(spell, durationSecs)
 			resolvedIcon = spell.NewIcon
 			isCharm = isCharmSpell(spell)
 		}
 	}
+
+	caster := e.activePlayerName()
+
+	e.mu.Lock()
+	e.gcPendingArmsLocked(time.Now())
 
 	// targetName is non-empty only when the firing trigger captured a target
 	// (TimerTargetCapture) — e.g. a group buff landing on a party member. It
@@ -914,11 +1019,14 @@ func (e *Engine) StartExternal(name string, category string, durationSecs, displ
 	// alternation) the key namespaces by name alone; the same-spell-name dedup
 	// below still avoids a duplicate row when the spell-landed pipeline already
 	// created one for the same buff.
-	key := timerKey(name, targetName)
-	caster := e.activePlayerName()
-
-	e.mu.Lock()
-	e.gcPendingArmsLocked(time.Now())
+	//
+	// keyTargetTokenLocked additionally appends a disambiguating spawn-id
+	// suffix when this firing can be confidently attributed to the active
+	// character's own very recent cast landing on their live target (see its
+	// doc comment) — separating two identically-named targets (e.g. two "a
+	// gnoll"s) the player personally slowed in quick succession into
+	// independent rows instead of colliding on name alone.
+	key := timerKey(name, e.keyTargetTokenLocked(spell, targetName, startedAt))
 
 	// A stacking firing always gets its own row: skip the deferred-render
 	// mez path (which is keyed by name and would otherwise swallow it into

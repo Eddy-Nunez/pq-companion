@@ -38,6 +38,10 @@ export interface RaidEncounter {
   name: string
   zone: string
   zone_id?: number
+  // npc_id links this encounter to its boss's npc_types row (quarm.db) so the
+  // checker page can pull resists / HP / special abilities / signature spells
+  // straight from the game database. 0 / undefined = not linked.
+  npc_id?: number
   status: RaidStatus
   trigger?: string
   reqs?: string[]

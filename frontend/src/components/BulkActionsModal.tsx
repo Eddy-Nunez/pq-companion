@@ -19,14 +19,26 @@ import {
   bulkConvertTTSToSound,
 } from '../services/api'
 import { playSoundForTest, stopTestPlayback } from '../services/audio'
-import type { Action, ActionTemplate, BulkResult, Trigger } from '../types/trigger'
+import type { Action, ActionTemplate, BulkResult, Trigger, TriggerCategory } from '../types/trigger'
 
 type BulkOperation = 'tts_to_sound' | 'apply_template'
 
 interface BulkActionsModalProps {
   triggers: Trigger[]
+  categories: TriggerCategory[]
   onClose: () => void
   onApplied: (result: BulkResult) => void
+}
+
+// categoryLabelFor is a category's display label — "Parent / Child" for a
+// subcategory, so two subcategories with the same name under different
+// parents stay unambiguous as group headers here.
+function categoryLabelFor(id: string, categories: TriggerCategory[]): string {
+  const cat = categories.find((c) => c.id === id)
+  if (!cat) return id
+  if (!cat.parent_id) return cat.name
+  const parent = categories.find((c) => c.id === cat.parent_id)
+  return parent ? `${parent.name} / ${cat.name}` : cat.name
 }
 
 type CatState = 'none' | 'some' | 'all'
@@ -40,6 +52,7 @@ type CatState = 'none' | 'some' | 'all'
  */
 export default function BulkActionsModal({
   triggers,
+  categories,
   onClose,
   onApplied,
 }: BulkActionsModalProps): React.ReactElement {
@@ -48,7 +61,7 @@ export default function BulkActionsModal({
   )
   const [search, setSearch] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(
-    () => new Set(triggers.map((t) => t.pack_name ?? '')),
+    () => new Set(triggers.map((t) => t.category_id ?? '')),
   )
   const [operation, setOperation] = useState<BulkOperation>('tts_to_sound')
   const [templates, setTemplates] = useState<ActionTemplate[]>([])
@@ -78,12 +91,12 @@ export default function BulkActionsModal({
     return () => stopTestPlayback()
   }, [])
 
-  // Triggers grouped by category (pack_name), Uncategorized last, sorted by
-  // name within each group.
+  // Triggers grouped by category (category_id), Uncategorized last, sorted by
+  // label within each group.
   const grouped = useMemo(() => {
     const map = new Map<string, Trigger[]>()
     for (const t of triggers) {
-      const key = t.pack_name ?? ''
+      const key = t.category_id ?? ''
       const arr = map.get(key)
       if (arr) arr.push(t)
       else map.set(key, [t])
@@ -92,11 +105,11 @@ export default function BulkActionsModal({
     entries.sort((a, b) => {
       if (a[0] === '') return 1
       if (b[0] === '') return -1
-      return a[0].localeCompare(b[0])
+      return categoryLabelFor(a[0], categories).localeCompare(categoryLabelFor(b[0], categories))
     })
     for (const [, arr] of entries) arr.sort((x, y) => x.name.localeCompare(y.name))
     return entries
-  }, [triggers])
+  }, [triggers, categories])
 
   const query = search.trim().toLowerCase()
 
@@ -350,7 +363,7 @@ export default function BulkActionsModal({
                           className="truncate text-[11px] font-semibold"
                           style={{ color: 'var(--color-foreground)' }}
                         >
-                          {key || 'Uncategorized'}
+                          {key ? categoryLabelFor(key, categories) : 'Uncategorized'}
                         </span>
                         <span
                           className="shrink-0 text-[10px] ml-2"

@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Save, X, ChevronDown } from 'lucide-react'
 import type { RaidEncounter, RaidStatus, RaidTaxonomy } from '../../types/raid'
 import type { Zone } from '../../types/zone'
+import type { NPC } from '../../types/npc'
 import { roleLabel, subLabel } from '../../lib/raidLabels'
+import { getNPC, searchNPCs } from '../../services/api'
+import { npcLevelLabel } from '../../lib/npcHelpers'
 
 interface Leaf {
   key: string
@@ -147,6 +150,123 @@ function ZoneField({ zones, value, onPick }: {
   )
 }
 
+// NPCField — type-ahead combobox over the NPC database (same search the NPCs
+// browser uses). Picking an NPC links the encounter to its npc_types row so
+// the checker page can pull resists / HP / special abilities / signature
+// spells straight from the game database instead of duplicating them here.
+function NPCField({ value, onPick }: {
+  value: { id: number; name: string }
+  onPick: (id: number, name: string) => void
+}): React.ReactElement {
+  const [text, setText] = useState(value.name)
+  const [open, setOpen] = useState(false)
+  const [matches, setMatches] = useState<NPC[]>([])
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Keep the field's text in sync when a different encounter is loaded (or
+  // the linked NPC's name resolves after an async lookup on mount).
+  useEffect(() => {
+    setText(value.name)
+  }, [value.id, value.name])
+
+  useEffect(() => {
+    const q = text.trim()
+    if (!q || q === value.name) {
+      setMatches([])
+      return
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      searchNPCs(q, 12)
+        .then((res) => setMatches(res.items))
+        .catch(() => setMatches([]))
+    }, 250)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text])
+
+  function choose(npc: NPC): void {
+    onPick(npc.id, npc.name)
+    setText(npc.name)
+    setOpen(false)
+  }
+
+  function clear(): void {
+    onPick(0, '')
+    setText('')
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative" onBlur={() => setTimeout(() => setOpen(false), 150)}>
+      <div className="relative">
+        <input
+          className={inputCls}
+          style={inputStyle}
+          value={text}
+          placeholder="search NPC name to link stats (optional)…"
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setText(e.target.value)
+            onPick(0, e.target.value)
+            setOpen(true)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && matches.length > 0) { e.preventDefault(); choose(matches[0]) }
+            if (e.key === 'Escape') setOpen(false)
+          }}
+        />
+        {value.id > 0 ? (
+          <button
+            type="button"
+            onClick={clear}
+            title="Unlink NPC"
+            className="absolute right-2 top-1/2 -translate-y-1/2"
+            style={{ color: 'var(--color-muted-foreground)' }}
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <ChevronDown
+            size={14}
+            className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: 'var(--color-muted-foreground)' }}
+          />
+        )}
+      </div>
+      {open && matches.length > 0 && (
+        <div
+          className="absolute left-0 right-0 z-30 mt-1 rounded overflow-hidden shadow-lg"
+          style={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)', maxHeight: 260, overflowY: 'auto' }}
+        >
+          {matches.map((npc) => (
+            <button
+              key={npc.id}
+              type="button"
+              className="w-full text-left px-2.5 py-1.5 text-sm hover:bg-(--color-surface-3)"
+              style={{ color: 'var(--color-foreground)' }}
+              onClick={() => choose(npc)}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <span>{npc.name.replace(/_/g, ' ')}</span>{' '}
+              <span className="text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                (L{npcLevelLabel(npc)} · {npc.hp.toLocaleString()} HP · id {npc.id})
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {value.id > 0 && (
+        <span className="text-[11px]" style={{ color: 'var(--color-success)' }}>
+          ✓ linked to npc id {value.id}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, onCancel, saving }: Props): React.ReactElement {
   const leaves = useMemo(() => taxonomyLeaves(taxonomy), [taxonomy])
 
@@ -156,6 +276,21 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
     text: encounter?.zone ?? '',
     id: encounter?.zone_id ?? 0,
   })
+  const [npc, setNpc] = useState<{ id: number; name: string }>({
+    id: encounter?.npc_id ?? 0,
+    name: '',
+  })
+  // The encounter only carries npc_id, not a name — resolve it once on load
+  // so the combobox shows something other than a bare id.
+  useEffect(() => {
+    if (!encounter?.npc_id) return
+    let cancelled = false
+    getNPC(encounter.npc_id)
+      .then((n) => { if (!cancelled) setNpc({ id: n.id, name: n.name.replace(/_/g, ' ') }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encounter?.npc_id])
   const [status, setStatus] = useState<RaidStatus>(encounter?.status ?? 'active')
   const [trigger, setTrigger] = useState(encounter?.trigger ?? '')
   const [source, setSource] = useState(encounter?.source ?? '')
@@ -250,6 +385,7 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
       name: name.trim(),
       zone: zone.text.trim(),
       zone_id: zone.id,
+      npc_id: npc.id || undefined,
       status,
       trigger: trigger.trim(),
       source: source.trim(),
@@ -343,6 +479,9 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
         ))}
         {field('Zone (type-ahead)', (
           <ZoneField zones={zones} value={zone} onPick={(text, id) => setZone({ text, id })} />
+        ))}
+        {field('Linked NPC (type-ahead, optional)', (
+          <NPCField value={npc} onPick={(id, name) => setNpc({ id, name })} />
         ))}
         {field('Trigger / spawn mechanics', (
           <input

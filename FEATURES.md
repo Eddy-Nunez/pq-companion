@@ -2013,6 +2013,29 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## Unreleased — Raid Composition
+
+- **Raid Composition** — a new **Raids** section: a user-editable role
+  taxonomy, a normalized encounter knowledge base, and a live MIN/REC
+  composition checker run against the current Zeal raid roster (or a
+  manually-entered one), plus a Raid Summary dashboard tab showing
+  encounter-agnostic per-class coverage and a Raid Readiness overlay
+  (dashboard panel + popout window) surfacing missing MIN-role classes at
+  a glance. Contributed by Kav (Intervention), ported from his eqmon
+  project, with follow-up fixes from a live raid in Kael Drakkel: Zeal's
+  raid roster wire format sends class as a name and level as a string
+  rather than the numbers first assumed, which had silently dropped every
+  roster update — the decoder is now tolerant of both. The composition
+  check's encounter is now always a manual pick (multiple encounters can
+  share a zone, so auto-detection couldn't pick one unambiguously) kept
+  in sync across the check page, dashboard panel, and popout overlay. The
+  knowledge base ships with a single seeded encounter (Avatar of War) —
+  add your own via the Raid Editor. Candidate names on a short row are
+  class-eligible members, not actual assignments, so the same person can
+  be counted toward more than one role's need at once; treat the report
+  as a staffing guide, not a final call. Gated behind Settings > Developer
+  > Flags, off by default.
+
 ## Phase 11 — Project Website
 _Planned_
 

@@ -37,7 +37,7 @@ export interface RaidReadinessState {
   selectedId: string
   // The UI-facing selector (Raid Composition page's dropdown — the only
   // picker). Publishes the pick so the dashboard panel and the popout
-  // overlay mirror it.
+  // overlay mirror it, and runs the check immediately.
   pickEncounter: (id: string) => void
   report: CheckReport | null
   busy: boolean
@@ -179,18 +179,24 @@ export function useRaidReadiness(): RaidReadinessState {
     [runCheck],
   )
 
-  const pickEncounter = useCallback((id: string) => {
-    setSelectedId(id)
-    // The check page is the only picker; publish so the dashboard panel and
-    // the popout overlay (separate windows, separate hook instances) mirror
-    // the selection. Optional — plain-browser runs (smoke tests) have no
-    // electron bridge and just stay local.
-    void window.electron?.overlay?.setRaidSelection(id)
-  }, [])
+  // The check page's dropdown is the only picker. Selecting sets state,
+  // runs the check right away (this surface doesn't wait for an echo of its
+  // own pick), and publishes so the dashboard panel and the popout overlay
+  // (separate windows, separate hook instances) mirror the selection.
+  // window.electron is optional — plain-browser runs (smoke tests) have no
+  // electron bridge and just stay local.
+  const pickEncounter = useCallback(
+    (id: string) => {
+      setSelectedId(id)
+      void runCheck(id)
+      void window.electron?.overlay?.setRaidSelection(id)
+    },
+    [runCheck],
+  )
 
   // Mirror the Raid Composition page's picks across windows. The sender's
-  // own instance ignores the echo (same id); every other surface adopts it.
-  // Subscribes once — adoptSelection reads refs, not render state.
+  // own instance already ran the check via pickEncounter above and ignores
+  // the echo (same id); every other surface adopts it.
   useEffect(() => {
     const off = window.electron?.overlay?.onRaidSelectionChanged(adoptSelection)
     return off

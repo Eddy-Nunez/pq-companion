@@ -1480,6 +1480,12 @@ func main() {
 			// spawn id so re-targeting the same same-named mob is sticky
 			// instead of re-rolling the position/strength disambiguation.
 			npcTracker.SetPipeTargetID(p.TargetID)
+			// Also feed the spell-timer engine: it snapshots this alongside
+			// the active character's own spell casts so a trigger-driven
+			// detrimental (e.g. the Slows pack) landing on a mob can be keyed
+			// by spawn id instead of colliding with another same-named mob —
+			// see spelltimer.Engine.keyTargetTokenLocked.
+			timerEngine.SetPipeTargetID(p.TargetID)
 			return
 		case zealpipe.MsgGroup:
 			// Groupmates' live map positions. Only members Zeal resolved in the
@@ -1681,6 +1687,7 @@ func main() {
 		timerEngine.SetPipeCasting("")
 		timerEngine.SetPipeBuffSlots(nil)
 		timerEngine.ResetPipePetID()
+		timerEngine.SetPipeTargetID(nil)
 		triggerEngine.HandlePipeReset()
 		hub.Broadcast(ws.Event{Type: "zeal:disconnected", Data: map[string]any{}})
 	})

@@ -157,12 +157,12 @@ func (c *classID) UnmarshalJSON(b []byte) error {
 // members AND only when the user has run "/pipe verbose on" (PipeVerbose,
 // which defaults off). SpawnID was added in v1.4.6.
 type RaidMember struct {
-	Name    string  `json:"name"`
-	Level   flexInt `json:"level"`
-	Class   classID `json:"class"`
-	Group   string  `json:"group"` // "0" = ungrouped, "1".."12"
-	Rank    string  `json:"rank"`  // "Raid Leader" | "Group Leader" | ""
-	SpawnID *int    `json:"spawn_id,omitempty"`
+	Name    string    `json:"name"`
+	Level   flexInt   `json:"level"`
+	Class   classID   `json:"class"`
+	Group   string    `json:"group"` // "0" = ungrouped, "1".."12"
+	Rank    string    `json:"rank"`  // "Raid Leader" | "Group Leader" | ""
+	SpawnID *int      `json:"spawn_id,omitempty"`
 	Loc     *Location `json:"loc,omitempty"`
 	Heading *float64  `json:"heading,omitempty"`
 	HPCur   *int      `json:"hp_current,omitempty"` // PipeVerbose only

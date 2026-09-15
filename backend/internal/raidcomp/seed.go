@@ -34,17 +34,15 @@ func SeedRoles() []Role {
 	return roles
 }
 
-// SeedEncounters returns the starter raid knowledge base, transcribed from
-// eqmon's raids/velious.yaml (the aow encounter). Counts are eqmon's
-// suggested starting values, sized for a ~54-person raid. ZoneID is resolved
-// at first-open time by the OpenStore zone resolver (the user.db store cannot
-// read quarm.db itself).
-//
-// Zone corrected to "Kael Drakkel" (quarm.db zoneidnumber 113) — eqmon's
-// source data listed "Temple of Veeshan", which doesn't match where Avatar of
-// War actually spawns and was inconsistent with this same seed's own Notes
-// field ("No rgc/lockpicker/tracker/coth needed on the Kael path"). Spelling
-// matches quarm.db's zone.long_name exactly so ZoneIDByLongName resolves it.
+// SeedEncounters returns an example encounter (Avatar of War), transcribed
+// from eqmon's raids/velious.yaml. No longer auto-inserted into new stores —
+// the knowledge base starts empty and guilds build their own encounters in
+// the Raid Editor — this now exists solely as a fixture for checker tests
+// (see aowFixture in check_test.go). Zone corrected to "Kael Drakkel" (quarm.db
+// zoneidnumber 113) — eqmon's source data listed "Temple of Veeshan", which
+// doesn't match where Avatar of War actually spawns and was inconsistent with
+// this same seed's own Notes field ("No rgc/lockpicker/tracker/coth needed on
+// the Kael path").
 func SeedEncounters() []Encounter {
 	notes := "Counts are starting suggestions, not canonical. AoW himself is unslowable but " +
 		"the surrounding mobs are not — slower stays for adds. No rgc/lockpicker/tracker/coth " +
