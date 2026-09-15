@@ -25,6 +25,8 @@ func newRaidPackTestRouter(t *testing.T) (*raidsHandler, *chi.Mux, *raidcomp.Sto
 	t.Cleanup(func() { s.Close() })
 	h := &raidsHandler{store: s, roster: nil, pipe: nil, liveZone: nil}
 	r := chi.NewRouter()
+	r.Get("/api/raids/taxonomy", h.taxonomy)
+	r.Get("/api/raids/roles", h.listRoles)
 	r.Get("/api/raids/export", h.exportPack)
 	r.Get("/api/raids/encounters/{id}/export", h.exportEncounter)
 	r.Post("/api/raids/import/preview", h.importPreview)
@@ -308,6 +310,34 @@ func TestRaidPack_ImportCommit(t *testing.T) {
 	}
 	if len(aow.Comps) != 1 || aow.Comps[0].Path() != "tank.defensive" {
 		t.Errorf("overwrite did not replace children: %+v", aow.Comps)
+	}
+}
+
+// TestRaidPack_TaxonomyDTOWithStubs pins the no-null classes contract at the
+// HTTP layer: after provisioning a stub, both /taxonomy and /roles must emit
+// real arrays (never null) for the stubbed sub-role. Regression for the
+// TaxonomyEditor crash ('Cannot read properties of null (reading map)').
+func TestRaidPack_TaxonomyDTOWithStubs(t *testing.T) {
+	_, r, _ := newRaidPackTestRouter(t)
+
+	rec := doReq(t, r, http.MethodPost, "/api/raids/roles/provision",
+		[]byte(`{"paths":["stubrole.sub"]}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("provision status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	for _, path := range []string{"/api/raids/taxonomy", "/api/raids/roles"} {
+		res := doReq(t, r, http.MethodGet, path, nil)
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", path, res.Code)
+		}
+		body := res.Body.String()
+		if strings.Contains(body, `"classes":null`) {
+			t.Errorf("%s emitted classes:null for a stub: %s", path, body)
+		}
+		if !strings.Contains(body, `"classes":[]`) {
+			t.Errorf("%s missing the stub's empty classes array: %s", path, body)
+		}
 	}
 }
 
