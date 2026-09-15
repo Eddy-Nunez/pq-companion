@@ -418,6 +418,75 @@ func (s *Store) SaveRole(r Role) error {
 // DeleteRole removes a taxonomy row (keyed by role+sub, "" for flat). Roles
 // referenced by any encounter comp are protected — the user must clear those
 // rows first, so a deleted role can never orphan stale comp data.
+// ProvisionRoles creates stub taxonomy rows for comp role paths that exist
+// in an imported raid pack but not in the local taxonomy. A stub carries NO
+// class mappings: the composition checker renders it as a permanent GAP with
+// no candidates until the user assigns classes in the Taxonomy Editor —
+// visible, importable, and obviously unfinished. Idempotent: paths already
+// present are reported and left untouched (their labels/classes are never
+// overwritten). Returns the paths that were actually created.
+func (s *Store) ProvisionRoles(paths []string) (created, present []string, err error) {
+	seen := map[string]bool{}
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		role, sub, ok := splitRolePath(p)
+		if !ok {
+			return nil, nil, fmt.Errorf("raidcomp: invalid role path %q", p)
+		}
+		var n int
+		if err := s.db.QueryRow(
+			`SELECT COUNT(*) FROM raid_roles WHERE role = ? AND sub_role = ?`, role, sub,
+		).Scan(&n); err != nil {
+			return nil, nil, err
+		}
+		if n > 0 {
+			present = append(present, p)
+			continue
+		}
+		var max int
+		if err := s.db.QueryRow(`SELECT COALESCE(MAX(position), -1) FROM raid_roles`).Scan(&max); err != nil {
+			return nil, nil, err
+		}
+		if _, err := s.db.Exec(`
+			INSERT INTO raid_roles (role, sub_role, label, class_codes, position) VALUES (?, ?, ?, '', ?)
+		`, role, sub, stubRoleLabel(role, sub), max+1); err != nil {
+			return nil, nil, err
+		}
+		created = append(created, p)
+	}
+	return created, present, nil
+}
+
+// splitRolePath splits a dotted comp path ("tank.defensive") into its
+// taxonomy key (role, sub). Splits on the FIRST dot: sub-roles may contain
+// dots since Path() joins role+"."+sub. A path with no dot is a flat role.
+func splitRolePath(path string) (role, sub string, ok bool) {
+	i := strings.Index(path, ".")
+	if i < 0 {
+		return path, "", path != ""
+	}
+	role, sub = path[:i], path[i+1:]
+	return role, sub, role != "" && sub != ""
+}
+
+// stubRoleLabel derives a human placeholder label from the path's last
+// segment ("defensive" -> "Defensive"); the user renames in the editor.
+func stubRoleLabel(role, sub string) string {
+	name := sub
+	if name == "" {
+		name = role
+	}
+	name = strings.ReplaceAll(name, "_", " ")
+	if name == "" {
+		return "Imported role"
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
+}
+
 func (s *Store) DeleteRole(role, sub string) error {
 	if strings.TrimSpace(role) == "" {
 		return errors.New("raidcomp: role id required")

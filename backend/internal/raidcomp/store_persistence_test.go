@@ -150,3 +150,56 @@ func TestStore_SaveEncounter_OverwriteReplacesChildren(t *testing.T) {
 		t.Errorf("updated_at did not advance past backdated value: %d <= %d", got.UpdatedAt, saved1.UpdatedAt-1000)
 	}
 }
+
+// TestStore_ProvisionRoles covers stub creation: flat + sub paths, label
+// derivation, empty class mappings, idempotency, and malformed paths.
+func TestStore_ProvisionRoles(t *testing.T) {
+	s := openTemp(t)
+
+	created, present, err := s.ProvisionRoles([]string{
+		"brandnew.mappings", "flatrole", "tank.defensive", // tank.defensive seeded -> present
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created) != 2 {
+		t.Errorf("created = %v, want 2 paths", created)
+	}
+	if len(present) != 1 || present[0] != "tank.defensive" {
+		t.Errorf("present = %v, want [tank.defensive]", present)
+	}
+
+	roles, err := s.ListRoles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := map[string]Role{}
+	for _, r := range roles {
+		byPath[r.Role+"."+r.Sub] = r
+	}
+	stub := byPath["brandnew.mappings"]
+	if stub.Label != "Mappings" || len(stub.Classes) != 0 {
+		t.Errorf("stub wrong: %+v", stub)
+	}
+	flat := byPath["flatrole."]
+	if flat.Label != "Flatrole" || len(flat.Classes) != 0 {
+		t.Errorf("flat stub wrong: %+v", flat)
+	}
+
+	// Idempotent second pass: nothing created, both reported present.
+	created2, present2, err := s.ProvisionRoles([]string{"brandnew.mappings", "flatrole"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created2) != 0 || len(present2) != 2 {
+		t.Errorf("re-provision: created=%v present=%v", created2, present2)
+	}
+
+	// Malformed paths rejected.
+	if _, _, err := s.ProvisionRoles([]string{".noole"}); err == nil {
+		t.Error("empty role segment accepted")
+	}
+	if _, _, err := s.ProvisionRoles([]string{"nosub."}); err == nil {
+		t.Error("empty sub segment accepted")
+	}
+}

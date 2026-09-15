@@ -29,6 +29,7 @@ func newRaidPackTestRouter(t *testing.T) (*raidsHandler, *chi.Mux, *raidcomp.Sto
 	r.Get("/api/raids/encounters/{id}/export", h.exportEncounter)
 	r.Post("/api/raids/import/preview", h.importPreview)
 	r.Post("/api/raids/import/commit", h.importCommit)
+	r.Post("/api/raids/roles/provision", h.provisionRoles)
 	return h, r, s
 }
 
@@ -220,8 +221,13 @@ func TestRaidPack_ImportPreviewValidation(t *testing.T) {
 	if len(byID["bad-status"].Errors) == 0 {
 		t.Error("bad status not flagged as error")
 	}
-	if len(byID["unknown-role"].Errors) == 0 || !strings.Contains(strings.Join(byID["unknown-role"].Errors, ";"), "not in taxonomy") {
-		t.Errorf("unknown role not flagged: %v", byID["unknown-role"].Errors)
+	// Unknown roles are warnings + a machine list, NOT errors: the wizard
+	// offers auto-provisioning instead of blocking.
+	if len(byID["unknown-role"].Errors) != 0 {
+		t.Errorf("unknown role should not be an error anymore: %v", byID["unknown-role"].Errors)
+	}
+	if len(byID["unknown-role"].MissingRoles) != 1 || byID["unknown-role"].MissingRoles[0] != "not_a_role" {
+		t.Errorf("missing_roles wrong: %v", byID["unknown-role"].MissingRoles)
 	}
 	if !strings.Contains(strings.Join(byID["dup-comp"].Errors, ";"), "duplicate comp row") {
 		t.Errorf("duplicate comp row not flagged: %v", byID["dup-comp"].Errors)
@@ -309,6 +315,119 @@ func brokenEncounter() raidcomp.Encounter {
 	enc := validImportEncounter("broken")
 	enc.Comps = append(enc.Comps, raidcomp.CompRow{Role: "not_a_role", Min: 1, Rec: 1})
 	return enc
+}
+
+// TestRaidPack_RoleProvisioning covers the auto-provision endpoint and the
+// import-after-provision flow: an encounter with unknown comp roles fails
+// commit until the stubs exist, imports cleanly after, and provisioning is
+// idempotent (second call reports present, never overwrites).
+func TestRaidPack_RoleProvisioning(t *testing.T) {
+	_, r, s := newRaidPackTestRouter(t)
+
+	// Preview flags the missing path without erroring.
+	enc := validImportEncounter("prov-enc")
+	enc.Comps = []raidcomp.CompRow{
+		{Role: "tank", Sub: "defensive", Min: 1, Rec: 2},
+		{Role: "brandnew", Sub: "mappings", Min: 3, Rec: 4},
+	}
+	res := doReq(t, r, http.MethodPost, "/api/raids/import/preview",
+		[]byte(mustJSON(t, testPack(enc))))
+	var prev struct {
+		Encounters []raidImportPreviewItem `json:"encounters"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &prev); err != nil {
+		t.Fatal(err)
+	}
+	if len(prev.Encounters[0].MissingRoles) != 1 || prev.Encounters[0].MissingRoles[0] != "brandnew.mappings" {
+		t.Fatalf("preview missing_roles = %v", prev.Encounters[0].MissingRoles)
+	}
+
+	// Commit before provisioning: per-item failure with an actionable message.
+	commitBody := mustJSON(t, raidImportCommitRequest{
+		Encounters: []raidImportCommitItem{{Encounter: enc}},
+	})
+	rec := doReq(t, r, http.MethodPost, "/api/raids/import/commit", commitBody)
+	var failResp raidImportCommitResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &failResp); err != nil {
+		t.Fatal(err)
+	}
+	if failResp.Failed["prov-enc"] == "" || !strings.Contains(failResp.Failed["prov-enc"], "brandnew.mappings") {
+		t.Errorf("pre-provision commit failure = %q", failResp.Failed["prov-enc"])
+	}
+
+	// Provision: creates the stub; already-present paths are reported.
+	provBody := mustJSON(t, provisionRolesRequest{
+		Paths: []string{"brandnew.mappings", "tank.defensive"},
+	})
+	rec = doReq(t, r, http.MethodPost, "/api/raids/roles/provision", provBody)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("provision status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var prov provisionRolesResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &prov); err != nil {
+		t.Fatal(err)
+	}
+	if len(prov.Created) != 1 || prov.Created[0] != "brandnew.mappings" {
+		t.Errorf("created = %v, want [brandnew.mappings]", prov.Created)
+	}
+	if len(prov.Present) != 1 || prov.Present[0] != "tank.defensive" {
+		t.Errorf("present = %v, want [tank.defensive]", prov.Present)
+	}
+
+	// Stub exists with a label and NO class mappings (checker shows GAP).
+	roles, err := s.ListRoles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stub *raidcomp.Role
+	for i := range roles {
+		if roles[i].Role == "brandnew" && roles[i].Sub == "mappings" {
+			stub = &roles[i]
+		}
+	}
+	if stub == nil {
+		t.Fatal("provisioned stub row missing from raid_roles")
+	}
+	if stub.Label != "Mappings" || len(stub.Classes) != 0 {
+		t.Errorf("stub wrong: label=%q classes=%v", stub.Label, stub.Classes)
+	}
+
+	// Second provision is idempotent.
+	rec = doReq(t, r, http.MethodPost, "/api/raids/roles/provision", provBody)
+	var prov2 provisionRolesResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &prov2); err != nil {
+		t.Fatal(err)
+	}
+	if len(prov2.Created) != 0 || len(prov2.Present) != 2 {
+		t.Errorf("re-provision = created %v present %v", prov2.Created, prov2.Present)
+	}
+
+	// The encounter now imports cleanly and the checker runs without panic.
+	rec = doReq(t, r, http.MethodPost, "/api/raids/import/commit", commitBody)
+	var okResp raidImportCommitResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &okResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(okResp.Saved) != 1 || okResp.Saved[0] != "prov-enc" {
+		t.Errorf("post-provision commit = %+v", okResp)
+	}
+
+	// Guard rails: empty path list and malformed path rejected.
+	if rec := doReq(t, r, http.MethodPost, "/api/raids/roles/provision", []byte(`{"paths":[]}`)); rec.Code != http.StatusBadRequest {
+		t.Errorf("empty provision status = %d, want 400", rec.Code)
+	}
+	if rec := doReq(t, r, http.MethodPost, "/api/raids/roles/provision", []byte(`{"paths":[".bad"]}`)); rec.Code != http.StatusBadRequest {
+		t.Errorf("malformed path provision status = %d, want 400", rec.Code)
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func contains(list []string, want string) bool {

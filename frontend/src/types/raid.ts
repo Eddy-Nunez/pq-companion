@@ -140,6 +140,8 @@ export interface RaidImportPreviewItem {
   exists: boolean
   errors?: string[]
   warnings?: string[]
+  /** Comp paths absent from the local taxonomy — auto-provisionable. */
+  missing_roles?: string[]
 }
 
 export interface RaidImportPreview {
@@ -161,4 +163,9 @@ export interface RaidImportCommitResult {
   saved: string[]
   skipped: string[]
   failed?: Record<string, string>
+}
+
+export interface RaidRoleProvisionResult {
+  created: string[]
+  present: string[]
 }
