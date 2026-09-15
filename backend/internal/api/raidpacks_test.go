@@ -44,6 +44,16 @@ func packBody(t *testing.T, pack raidPack) *bytes.Reader {
 	return bytes.NewReader(b)
 }
 
+// seedTestAow materializes the canonical AoW fixture directly. OpenStore no
+// longer auto-seeds encounters (upstream a12bc7a5), so tests that assume a
+// pre-existing encounter must create it themselves.
+func seedTestAow(t *testing.T, s *raidcomp.Store) {
+	t.Helper()
+	if err := s.SaveEncounter(&raidcomp.SeedEncounters()[0]); err != nil {
+		t.Fatalf("seed aow: %v", err)
+	}
+}
+
 func testPack(encs ...raidcomp.Encounter) raidPack {
 	return raidPack{
 		Kind: raidPackKind, Version: raidPackVersion, PackName: "test pack",
@@ -103,6 +113,7 @@ func TestRaidPackRoutes_DisabledWhenStoreNil(t *testing.T) {
 // envelope correct), per-encounter export, and the 404 path.
 func TestRaidPack_ExportRoundTrip(t *testing.T) {
 	_, r, s := newRaidPackTestRouter(t)
+	seedTestAow(t, s)
 	if err := s.SaveEncounter(&raidcomp.Encounter{
 		ID: "vulak", Name: "Vulak'Aerr", Zone: "Kael Drakkel", Status: raidcomp.StatusActive,
 		Comps: []raidcomp.CompRow{{Role: "damage", Min: 18, Rec: 22}},
@@ -158,7 +169,8 @@ func TestRaidPack_ExportRoundTrip(t *testing.T) {
 // TestRaidPack_ImportPreviewValidation covers the preview's structural
 // rejections and its per-encounter validation annotations.
 func TestRaidPack_ImportPreviewValidation(t *testing.T) {
-	_, r, _ := newRaidPackTestRouter(t)
+	_, r, s := newRaidPackTestRouter(t)
+	seedTestAow(t, s)
 
 	cases := []struct {
 		name    string
@@ -182,7 +194,7 @@ func TestRaidPack_ImportPreviewValidation(t *testing.T) {
 	}
 
 	// Per-encounter annotations: conflict, warnings, and each validation error class.
-	existing := validImportEncounter("aow") // collides with the seed
+	existing := validImportEncounter("aow") // collides with the fixture
 	existing.Name = "Renamed AoW"
 	noZone := validImportEncounter("no-zone")
 	noZone.ZoneID = 0
@@ -244,6 +256,7 @@ func TestRaidPack_ImportPreviewValidation(t *testing.T) {
 // rails (empty selection, unknown fields, hand-built invalid payloads).
 func TestRaidPack_ImportCommit(t *testing.T) {
 	_, r, s := newRaidPackTestRouter(t)
+	seedTestAow(t, s)
 
 	seedAow, err := s.GetEncounter("aow")
 	if err != nil {
