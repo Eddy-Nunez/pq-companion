@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -272,8 +273,8 @@ func (h *raidsHandler) importCommit(w http.ResponseWriter, r *http.Request) {
 // resolution and the import-source stamp live here; the store handles the
 // multi-table transaction.
 func (h *raidsHandler) commitOne(leaves []raidcomp.RoleLeaf, enc raidcomp.Encounter, overwrite bool) error {
-	if len(raidImportErrors(leaves, enc)) > 0 {
-		return errors.New("encounter failed import validation")
+	if errs := raidImportErrors(leaves, enc); len(errs) > 0 {
+		return errors.New(strings.Join(errs, "; "))
 	}
 	existing, err := h.store.GetEncounter(enc.ID)
 	if err != nil && !errors.Is(err, raidcomp.ErrNotFound) {
