@@ -1,8 +1,9 @@
 // Integration tests for the raid composition PACK export/import surface
 // (backend/internal/api/raidpacks.go). Runs against a live backend
 // (PQ_BASE_URL) and the REAL user.db — every created object is namespaced
-// `e2e-pack-<run>` and cleaned up in afterAll; nothing here touches seed
-// data (the only pre-existing id used read-only is the seeded `aow`).
+// `e2e-pack-<run>` and cleaned up in afterAll. Encounters are not auto-seeded
+// (upstream a12bc7a5), so a fixture encounter is created in beforeAll where a
+// pre-existing id is needed.
 //
 // Covered:
 //   - Export-all envelope (kind/version/exported_at) + includes the seed
@@ -25,8 +26,9 @@ const LOCAL = `e2e-pack-${RUN}-local` // CRUD-created, provenance checks
 const IMP = `e2e-pack-${RUN}-imp` // import-created, children + round-trip
 const BAD = `e2e-pack-${RUN}-bad` // hand-built invalid commit target
 const DUP = `e2e-pack-${RUN}-dup` // duplicate-comp rollback target
+const FIX = `e2e-pack-${RUN}-fix` // pre-created fixture (stands in for a seed)
 
-const ALL_IDS = [LOCAL, IMP, BAD, DUP]
+const ALL_IDS = [LOCAL, IMP, BAD, DUP, FIX]
 const PROV = `e2e-pack-${RUN}-prov` // provisioning flow encounter
 const PROV_ROLE = `e2e-provrole-${RUN}` // its missing taxonomy role
 
@@ -76,6 +78,21 @@ test.describe.serial('raid pack export/import', () => {
     for (const id of ALL_IDS) {
       await request.delete(`/api/raids/encounters/${id}`)
     }
+    // Stores no longer auto-seed encounters (upstream a12bc7a5) — create a
+    // fixture for the tests that need a pre-existing id.
+    const mk = await request.post('/api/raids/encounters', {
+      data: {
+        id: FIX,
+        name: 'Pack Fixture Boss',
+        zone: 'Kael Drakkel',
+        status: 'active',
+        comps: [
+          { role: 'tank', sub_role: 'defensive', min: 2, rec: 3 },
+          { role: 'damage', min: 8, rec: 10 },
+        ],
+      },
+    })
+    expect(mk.status()).toBe(201)
   })
 
   test.afterAll(async ({ request }) => {
@@ -96,7 +113,7 @@ test.describe.serial('raid pack export/import', () => {
     expect(Array.isArray(pack.encounters)).toBe(true)
     expect(pack.encounters.length).toBeGreaterThan(0)
     const ids = pack.encounters.map((e: { id: string }) => e.id)
-    expect(ids).toContain('aow') // seeded knowledge base ships in export-all
+    expect(ids).toContain(FIX) // the created fixture ships in export-all
     for (const e of pack.encounters) {
       expect(typeof e.id).toBe('string')
       expect(typeof e.name).toBe('string')
@@ -107,11 +124,11 @@ test.describe.serial('raid pack export/import', () => {
   test('per-encounter export carries children; missing id 404s', async ({
     request,
   }) => {
-    const res = await request.get('/api/raids/encounters/aow/export')
+    const res = await request.get(`/api/raids/encounters/${FIX}/export`)
     expect(res.status()).toBe(200)
     const pack = await res.json()
     expect(pack.encounters.length).toBe(1)
-    expect(pack.encounters[0].id).toBe('aow')
+    expect(pack.encounters[0].id).toBe(FIX)
     expect(pack.encounters[0].comps.length).toBeGreaterThan(0)
 
     const missing = await request.get('/api/raids/encounters/e2e-nope/export')
@@ -157,7 +174,7 @@ test.describe.serial('raid pack export/import', () => {
     const res = await request.post('/api/raids/import/preview', {
       data: pack(
         packEncounter(IMP, { zone_id: 0 }), // fresh id, no zone -> warning
-        packEncounter('aow'), // collides with the seed -> exists
+        packEncounter(FIX), // collides with the local fixture -> exists
         packEncounter(`${IMP}-bad`, {
           comps: [
             { role: 'tank', sub_role: 'defensive', min: 1, rec: 2 },
@@ -189,7 +206,7 @@ test.describe.serial('raid pack export/import', () => {
     expect(byId[IMP].exists).toBe(false)
     expect((byId[IMP].warnings ?? []).join(' ')).toContain('zone_id')
 
-    expect(byId.aow.exists).toBe(true)
+    expect(byId[FIX].exists).toBe(true)
 
     // Unknown comp roles are surfaced as missing_roles (the wizard offers
     // auto-provisioning), NOT as blocking errors.

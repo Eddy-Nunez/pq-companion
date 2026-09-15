@@ -39,7 +39,9 @@ test.describe.serial('Raid Composition page', () => {
   })
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/#/raids', { waitUntil: 'domcontentloaded' })
+    // Upstream moved the check page to /raids/check (/#/raids is now the
+    // Raid Summary dashboard).
+    await page.goto('/#/raids/check', { waitUntil: 'domcontentloaded' })
     await expect(
       page.getByRole('heading', { name: 'Raid Composition Check' }),
     ).toBeVisible()
@@ -98,18 +100,22 @@ test.describe.serial('Raid Composition page', () => {
     // the re-run check, not clear back to the placeholder.
     await select.selectOption({ index: 1 })
     const picked = await select.inputValue()
-    await page.getByRole('button', { name: 'Check composition' }).click()
-    await expect(page.getByText('MIN — Hard floor')).toBeVisible()
+    // Upstream a00611e1: picking an encounter auto-runs the check (no button
+    // click). Upstream 907dbf91 merged MIN/REC into one report table; the
+    // report header's "members classed" line renders whenever a report exists.
+    await expect(page.getByText(/members classed/).first()).toBeVisible()
 
     await page.getByRole('button', { name: 'Refresh' }).click()
     await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled()
     await expect(select).toHaveValue(picked)
-    await expect(page.getByText('MIN — Hard floor')).toBeVisible()
+    await expect(page.getByText(/members classed/).first()).toBeVisible()
   })
 })
 
 test.describe.serial('Raid Editor page', () => {
   let raidsWasEnabled = false
+  const RUN = Date.now().toString(36)
+  const ENC = `e2e-smoke-enc-${RUN}`
 
   test.beforeAll(async ({ request }) => {
     const cfg = await (await request.get(`${apiBase}/api/config`)).json()
@@ -118,9 +124,22 @@ test.describe.serial('Raid Editor page', () => {
       cfg.preferences.raids_enabled = true
       await request.put(`${apiBase}/api/config`, { data: cfg })
     }
+    // Stores no longer auto-seed encounters (upstream a12bc7a5) — create a
+    // fixture so the editor has something to list, whatever the user.db state.
+    const mk = await request.post(`${apiBase}/api/raids/encounters`, {
+      data: {
+        id: ENC,
+        name: 'Smoke Fixture Boss',
+        zone: 'Kael Drakkel',
+        status: 'active',
+        comps: [{ role: 'damage', min: 5, rec: 8 }],
+      },
+    })
+    expect(mk.status()).toBe(201)
   })
 
   test.afterAll(async ({ request }) => {
+    await request.delete(`${apiBase}/api/raids/encounters/${ENC}`)
     if (!raidsWasEnabled) {
       const cfg = await (await request.get(`${apiBase}/api/config`)).json()
       cfg.preferences.raids_enabled = false
@@ -130,8 +149,8 @@ test.describe.serial('Raid Editor page', () => {
 
   test('lists encounters and offers the taxonomy editor', async ({ page }) => {
     await page.goto('/#/raids/editor', { waitUntil: 'domcontentloaded' })
-    // The seeded AoW encounter must appear in the encounter list.
-    await expect(page.getByText('Avatar of War').first()).toBeVisible()
+    // The fixture encounter must appear in the encounter list.
+    await expect(page.getByText('Smoke Fixture Boss').first()).toBeVisible()
     // The taxonomy editor section renders (seeded labels, not raw ids).
     await expect(
       page.getByText(/Role Taxonomy|Remove Greater Curse|Tank/i).first(),

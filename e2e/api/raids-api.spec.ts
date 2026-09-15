@@ -1,7 +1,8 @@
 // Integration tests for the raid REST surface, against a running Go backend
 // (PQ_BASE_URL, default the dev handshake port 17654). The raidcomp store
-// self-seeds the role taxonomy and the Avatar of War encounter on first
-// open, so these hold on a fresh user.db as well as a lived-in one.
+// self-seeds the role TAXONOMY on first open; encounters are NOT auto-seeded
+// (upstream a12bc7a5), so encounter-dependent tests create their own fixtures
+// and clean up.
 import { expect, test } from '@playwright/test'
 
 test.describe('GET /api/raids/taxonomy', () => {
@@ -75,23 +76,64 @@ test.describe('GET /api/raids/roster', () => {
 })
 
 test.describe('GET /api/raids/encounters', () => {
-  test('lists encounters including the seeded AoW', async ({ request }) => {
+  const RUN = Date.now().toString(36)
+  const ENC = `e2e-api-enc-${RUN}`
+
+  test.afterAll(async ({ request }) => {
+    await request.delete(`/api/raids/encounters/${ENC}`)
+  })
+
+  test('lists created encounters (knowledge base starts empty)', async ({
+    request,
+  }) => {
+    const mk = await request.post('/api/raids/encounters', {
+      data: {
+        id: ENC,
+        name: 'API Fixture Boss',
+        zone: 'Kael Drakkel',
+        status: 'active',
+        comps: [{ role: 'damage', min: 2, rec: 3 }],
+      },
+    })
+    expect(mk.status()).toBe(201)
+
     const res = await request.get('/api/raids/encounters')
     expect(res.status()).toBe(200)
     const body = await res.json()
     expect(Array.isArray(body.encounters)).toBe(true)
-    const aow = body.encounters.find((e: { id: string }) => e.id === 'aow')
-    expect(aow, 'seeded Avatar of War encounter').toBeTruthy()
+    const fixture = body.encounters.find((e: { id: string }) => e.id === ENC)
+    expect(fixture, 'created fixture appears in the list').toBeTruthy()
   })
 })
 
 test.describe('POST /api/raids/check', () => {
+  const RUN = Date.now().toString(36)
+  const ENC = `e2e-api-check-${RUN}`
+
+  test.afterAll(async ({ request }) => {
+    await request.delete(`/api/raids/encounters/${ENC}`)
+  })
+
   test('produces a structured MIN/REC report for a tiny roster', async ({
     request,
   }) => {
+    const mk = await request.post('/api/raids/encounters', {
+      data: {
+        id: ENC,
+        name: 'Check Fixture Boss',
+        zone: 'Kael Drakkel',
+        status: 'active',
+        comps: [
+          { role: 'tank', sub_role: 'defensive', min: 1, rec: 2 },
+          { role: 'damage', min: 5, rec: 6 },
+        ],
+      },
+    })
+    expect(mk.status()).toBe(201)
+
     const res = await request.post('/api/raids/check', {
       data: {
-        encounter_id: 'aow',
+        encounter_id: ENC,
         roster: [
           { name: 'Thud', class: 'war' },
           { name: 'Anden', class: 'cleric' },
@@ -100,7 +142,7 @@ test.describe('POST /api/raids/check', () => {
     })
     expect(res.status()).toBe(200)
     const report = await res.json()
-    expect(report.encounter_id).toBe('aow')
+    expect(report.encounter_id).toBe(ENC)
     expect(report.roster_total).toBe(2)
     expect(report.roster_mapped).toBe(2)
     expect(Array.isArray(report.min)).toBe(true)
