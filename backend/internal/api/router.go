@@ -404,6 +404,10 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Post("/encounters", raidsH.createEncounter)
 			r.Put("/encounters/{id}", raidsH.updateEncounter)
 			r.Delete("/encounters/{id}", raidsH.deleteEncounter)
+			r.Get("/export", raidsH.exportPack)
+			r.Get("/encounters/{id}/export", raidsH.exportEncounter)
+			r.Post("/import/preview", raidsH.importPreview)
+			r.Post("/import/commit", raidsH.importCommit)
 			r.Post("/check", raidsH.checkComp)
 		})
 		r.Route("/backups", func(r chi.Router) {
