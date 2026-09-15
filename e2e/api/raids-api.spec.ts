@@ -18,13 +18,15 @@ test.describe('GET /api/raids/taxonomy', () => {
     }>(body.roles)) {
       expect(typeof role.label).toBe('string')
       // A role is either flat (own class list) or a parent of sub-roles;
-      // parents omit classes. Leaves always carry a non-empty class list.
+      // parents omit classes. Leaves always carry a REAL classes array —
+      // possibly empty: import-provisioned stub roles legitimately have no
+      // class mappings until the user assigns them (never null though).
       if (role.classes !== undefined) {
-        expect(role.classes.length).toBeGreaterThan(0)
+        expect(Array.isArray(role.classes)).toBe(true)
       } else {
         expect(Object.keys(role.sub_roles ?? {}).length).toBeGreaterThan(0)
         for (const sub of Object.values(role.sub_roles ?? {})) {
-          expect(sub.classes.length).toBeGreaterThan(0)
+          expect(Array.isArray(sub.classes)).toBe(true)
         }
       }
     }
