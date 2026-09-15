@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react'
-import { Upload, X, AlertTriangle, CheckCircle2, SkipForward, FileJson } from 'lucide-react'
+import { Upload, X, AlertTriangle, CheckCircle2, SkipForward, FileJson, Sparkles } from 'lucide-react'
 import {
   previewRaidImport,
   commitRaidImport,
+  provisionRaidRoles,
 } from '../../services/api'
 import type {
   RaidPack,
@@ -40,14 +41,31 @@ export default function RaidImportDialog({
   const [committing, setCommitting] = useState(false)
   const [commitError, setCommitError] = useState<string | null>(null)
   const [result, setResult] = useState<RaidImportCommitResult | null>(null)
+  // Taxonomy paths provisioned (or already present) during this wizard run —
+  // shared across items since provisioning is path-global.
+  const [coveredPaths, setCoveredPaths] = useState<Set<string>>(new Set())
+  const [provisioningItem, setProvisioningItem] = useState<number | null>(null)
+  const [provisionError, setProvisionError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const hasErrors = (item: RaidImportPreviewItem): boolean =>
     !!item.errors && item.errors.length > 0
 
+  const missingAll = (item: RaidImportPreviewItem): string[] =>
+    item.missing_roles ?? []
+
+  const effectiveMissing = (item: RaidImportPreviewItem): string[] =>
+    missingAll(item).filter((p) => !coveredPaths.has(p))
+
+  const importable = (item: RaidImportPreviewItem): boolean =>
+    !hasErrors(item) && effectiveMissing(item).length === 0
+
   const selectedCount = useMemo(
-    () => (preview ? preview.encounters.filter((_, i) => choices[i]?.selected).length : 0),
-    [preview, choices],
+    () =>
+      preview
+        ? preview.encounters.filter((it, i) => choices[i]?.selected && importable(it)).length
+        : 0,
+    [preview, choices, coveredPaths],
   )
 
   async function handleFile(file: File): Promise<void> {
@@ -67,7 +85,7 @@ export default function RaidImportDialog({
       setPreview(p)
       const next: Record<number, ItemChoice> = {}
       p.encounters.forEach((item, i) => {
-        next[i] = { selected: !hasErrors(item), overwrite: false }
+        next[i] = { selected: !hasErrors(item) && (item.missing_roles ?? []).length === 0, overwrite: false }
       })
       setChoices(next)
     } catch (err) {
@@ -79,6 +97,40 @@ export default function RaidImportDialog({
 
   function setChoice(i: number, patch: Partial<ItemChoice>): void {
     setChoices((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }))
+  }
+
+  // handleProvision creates stub taxonomy rows for an item's missing comp
+  // paths. Provisioning is idempotent and path-global: after success every
+  // item whose missing paths are now covered unlocks (and auto-selects, so
+  // the CTA flow ends with the encounter ready to import).
+  async function handleProvision(i: number): Promise<void> {
+    if (!preview) return
+    const item = preview.encounters[i]
+    const paths = effectiveMissing(item)
+    if (paths.length === 0) return
+    setProvisioningItem(i)
+    setProvisionError(null)
+    try {
+      const res = await provisionRaidRoles(paths)
+      const covered = new Set(coveredPaths)
+      for (const p of [...res.created, ...res.present]) covered.add(p)
+      setCoveredPaths(covered)
+      // Unlock + auto-select every item this just made importable.
+      setChoices((prev) => {
+        const next = { ...prev }
+        preview.encounters.forEach((it, j) => {
+          const missing = (it.missing_roles ?? []).filter((p) => !covered.has(p))
+          if (!hasErrors(it) && missing.length === 0 && next[j]) {
+            next[j] = { ...next[j], selected: true }
+          }
+        })
+        return next
+      })
+    } catch (err) {
+      setProvisionError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setProvisioningItem(null)
+    }
   }
 
   async function handleCommit(): Promise<void> {
@@ -213,7 +265,7 @@ export default function RaidImportDialog({
                         <input
                           type="checkbox"
                           checked={!!choice?.selected}
-                          disabled={bad || committing}
+                          disabled={bad || committing || effectiveMissing(item).length > 0}
                           onChange={(e) => setChoice(i, { selected: e.target.checked })}
                         />
                         {item.encounter.name}
@@ -249,6 +301,41 @@ export default function RaidImportDialog({
                           <option value="overwrite">Overwrite (use pack)</option>
                         </select>
                       </label>
+                    )}
+                    {missingAll(item).length > 0 && (
+                      <div className="flex items-center gap-1.5 text-[11px] pl-5 flex-wrap">
+                        <span className="flex items-start gap-1.5" style={{ color: 'var(--color-accent)' }}>
+                          <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                          <span>
+                            Missing role{missingAll(item).length === 1 ? '' : 's'} not in your taxonomy:{' '}
+                            <span className="font-medium">{missingAll(item).join(', ')}</span>
+                            {effectiveMissing(item).length === 0
+                              ? ' — created as stubs (no class mapping until you edit them)'
+                              : ' — auto-provision to enable import; stubs have no class mapping until you edit them'}
+                          </span>
+                        </span>
+                        <button
+                          onClick={() => void handleProvision(i)}
+                          disabled={provisioningItem !== null || committing}
+                          className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded font-medium disabled:opacity-60"
+                          style={
+                            effectiveMissing(item).length === 0
+                              ? { backgroundColor: 'var(--color-success)', color: '#fff' }
+                              : { backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }
+                          }
+                        >
+                          {effectiveMissing(item).length === 0 ? (
+                            <>
+                              <CheckCircle2 size={11} /> Roles created
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={11} />{' '}
+                              {provisioningItem === i ? 'Provisioning…' : 'Auto-provision'}
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
                     {(item.errors ?? []).map((e) => (
                       <div key={e} className="flex items-start gap-1.5 text-[11px] pl-5" style={{ color: 'var(--color-danger)' }}>

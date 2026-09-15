@@ -100,12 +100,15 @@ func newRaidPack(name string, encs []raidcomp.Encounter) raidPack {
 // raidImportPreviewItem is one encounter from an uploaded pack, annotated
 // with what commit would do. Errors block that encounter's import; warnings
 // don't. Exists marks an id already present locally (the UI then offers
-// skip-vs-overwrite per encounter, defaulting to skip).
+// skip-vs-overwrite per encounter, defaulting to skip). MissingRoles lists
+// comp paths absent from the local taxonomy — not an error: the wizard
+// offers to auto-provision stub roles so the encounter can import.
 type raidImportPreviewItem struct {
-	Encounter raidcomp.Encounter `json:"encounter"`
-	Exists    bool               `json:"exists"`
-	Errors    []string           `json:"errors,omitempty"`
-	Warnings  []string           `json:"warnings,omitempty"`
+	Encounter    raidcomp.Encounter `json:"encounter"`
+	Exists       bool               `json:"exists"`
+	Errors       []string           `json:"errors,omitempty"`
+	Warnings     []string           `json:"warnings,omitempty"`
+	MissingRoles []string           `json:"missing_roles,omitempty"`
 }
 
 type raidImportPreviewResponse struct {
@@ -134,7 +137,10 @@ func (h *raidsHandler) importPreview(w http.ResponseWriter, r *http.Request) {
 		if _, err := h.store.GetEncounter(enc.ID); err == nil {
 			item.Exists = true
 		}
-		item.Errors = raidImportErrors(leaves, enc)
+		item.Errors = raidImportErrors(enc)
+		if missing := missingRolePaths(leaves, enc); len(missing) > 0 {
+			item.MissingRoles = missing
+		}
 		if enc.ZoneID == 0 {
 			item.Warnings = append(item.Warnings,
 				"zone_id is not set — encounter detection will not match until a zone is assigned")
@@ -176,25 +182,21 @@ func decodeRaidPack(w http.ResponseWriter, r *http.Request) (raidPack, bool) {
 }
 
 // raidImportErrors validates one imported encounter the same way commit will
-// (Encounter.Validate + taxonomy membership + duplicate comp rows) so the
-// preview never promises something commit would reject. Duplicate comp rows
-// matter beyond cosmetics: SaveEncounter inserts them inside its transaction
-// and the (encounter_id, comp_level, role, sub_role) PK violation rolls the
-// whole save back — surfaced here as an error instead of a surprise.
-func raidImportErrors(leaves []raidcomp.RoleLeaf, enc raidcomp.Encounter) []string {
+// (Encounter.Validate + duplicate comp rows) so the preview never promises
+// something commit would reject. Unknown comp roles are deliberately NOT an
+// error here — they are surfaced as missing_roles so the wizard can offer
+// auto-provisioning; commit re-checks them via SaveEncounter's own taxonomy
+// guard. Duplicate comp rows matter beyond cosmetics: SaveEncounter inserts
+// them inside its transaction and the (encounter_id, comp_level, role,
+// sub_role) PK violation rolls the whole save back — surfaced here as an
+// error instead of a surprise.
+func raidImportErrors(enc raidcomp.Encounter) []string {
 	var errs []string
 	if err := enc.Validate(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	allowed := make(map[string]bool, len(leaves))
-	for _, l := range leaves {
-		allowed[l.Path()] = true
-	}
 	seen := map[string]bool{}
 	for _, c := range enc.Comps {
-		if !allowed[c.Path()] {
-			errs = append(errs, fmt.Sprintf("raidcomp: comp role %q not in taxonomy", c.Path()))
-		}
 		if seen[c.Path()] {
 			errs = append(errs, fmt.Sprintf("raidcomp: duplicate comp row %q", c.Path()))
 		}
@@ -203,7 +205,68 @@ func raidImportErrors(leaves []raidcomp.RoleLeaf, enc raidcomp.Encounter) []stri
 	return errs
 }
 
-// ── Import commit ──────────────────────────────────────────────────────────
+// missingRolePaths returns the deduped comp paths of an encounter that are
+// absent from the local taxonomy.
+func missingRolePaths(leaves []raidcomp.RoleLeaf, enc raidcomp.Encounter) []string {
+	allowed := make(map[string]bool, len(leaves))
+	for _, l := range leaves {
+		allowed[l.Path()] = true
+	}
+	var missing []string
+	seen := map[string]bool{}
+	for _, c := range enc.Comps {
+		if !allowed[c.Path()] && !seen[c.Path()] {
+			missing = append(missing, c.Path())
+			seen[c.Path()] = true
+		}
+	}
+	return missing
+}
+
+// ── Role provisioning (import convenience) ─────────────────────────────
+
+// provisionRolesRequest asks for stub taxonomy rows for comp paths missing
+// from the local taxonomy (raid pack import convenience).
+type provisionRolesRequest struct {
+	Paths []string `json:"paths"`
+}
+
+type provisionRolesResponse struct {
+	Created []string `json:"created"`
+	Present []string `json:"present"`
+}
+
+// provisionRoles creates the missing stub roles. Idempotent — already-present
+// paths are reported, never overwritten. Encounters that failed preview with
+// missing_roles become importable after this.
+func (h *raidsHandler) provisionRoles(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	var req provisionRolesRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(req.Paths) == 0 {
+		writeError(w, http.StatusBadRequest, "no role paths supplied")
+		return
+	}
+	created, present, err := h.store.ProvisionRoles(req.Paths)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if created == nil {
+		created = []string{}
+	}
+	if present == nil {
+		present = []string{}
+	}
+	writeJSON(w, http.StatusOK, provisionRolesResponse{Created: created, Present: present})
+}
+
+// ── Import commit ───────────────────────────────────────────────────────────
 
 // raidImportCommitItem is one user-selected encounter from the preview and
 // its conflict choice. Overwrite only matters when the id already exists; it
@@ -273,8 +336,12 @@ func (h *raidsHandler) importCommit(w http.ResponseWriter, r *http.Request) {
 // resolution and the import-source stamp live here; the store handles the
 // multi-table transaction.
 func (h *raidsHandler) commitOne(leaves []raidcomp.RoleLeaf, enc raidcomp.Encounter, overwrite bool) error {
-	if errs := raidImportErrors(leaves, enc); len(errs) > 0 {
+	if errs := raidImportErrors(enc); len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
+	}
+	if missing := missingRolePaths(leaves, enc); len(missing) > 0 {
+		return fmt.Errorf("comp role(s) not in taxonomy (provision them first): %s",
+			strings.Join(missing, ", "))
 	}
 	existing, err := h.store.GetEncounter(enc.ID)
 	if err != nil && !errors.Is(err, raidcomp.ErrNotFound) {

@@ -3294,6 +3294,7 @@ import type {
   RaidImportPreview,
   RaidImportCommitRequest,
   RaidImportCommitResult,
+  RaidRoleProvisionResult,
 } from '../types/raid'
 
 export function getRaidTaxonomy(): Promise<RaidTaxonomy> {
@@ -3356,4 +3357,8 @@ export function previewRaidImport(pack: RaidPack): Promise<RaidImportPreview> {
 
 export function commitRaidImport(req: RaidImportCommitRequest): Promise<RaidImportCommitResult> {
   return post<RaidImportCommitResult>('/api/raids/import/commit', req)
+}
+
+export function provisionRaidRoles(paths: string[]): Promise<RaidRoleProvisionResult> {
+  return post<RaidRoleProvisionResult>('/api/raids/roles/provision', { paths })
 }

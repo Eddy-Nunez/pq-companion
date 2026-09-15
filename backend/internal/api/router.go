@@ -398,6 +398,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Get("/roles", raidsH.listRoles)
 			r.Post("/roles", raidsH.saveRole)
 			r.Delete("/roles", raidsH.deleteRole)
+			r.Post("/roles/provision", raidsH.provisionRoles)
 			r.Get("/roster", raidsH.getRoster)
 			r.Get("/encounters", raidsH.listEncounters)
 			r.Get("/encounters/{id}", raidsH.getEncounter)
