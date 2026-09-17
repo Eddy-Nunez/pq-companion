@@ -9,6 +9,27 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.22.0-beta.5 — 2026-09-15
+
+Fifth unofficial dogfood build, built from the `feat/raidcomp-export-import` branch on a fork of PQ Companion — now merged with the maintainer's `main` (through the raid polish release) and carrying the raid composition pack feature. The maintainer's release notes remain authoritative for the app as a whole.
+
+### New since v0.22.0-beta.4
+- **Raid composition packs** — the Raid Editor gains Export All, per-encounter Export, and an Import wizard. Packs are portable JSON files (`kind: pq-companion.raidcomp-pack`) you can share between guilds or machines: the preview shows validation errors, zero-zone warnings, and already-exists conflicts before anything is written; each conflicting encounter defaults to skip (overridable per item); missing comp roles can be auto-provisioned as stubs right from the wizard (a stub renders as a permanent GAP in the checker until you assign classes in the Taxonomy Editor); and the summary reports saved / skipped / failed per encounter. Nothing is written until you commit.
+- **Raid Summary dashboard** (merged from upstream) — `/#/raids` is now a live, encounter-agnostic dashboard of who's in the raid: per-class member counts with zero-coverage warnings for critical classes, driven by the Zeal pipe. Composition Check moved to `/#/raids/check`, and the section has a three-tab sub-sidebar (Summary / Composition Check / Raid Editor).
+- **Trigger category nesting** (merged from upstream) — one level of sub-categories in the Triggers UI, with "split into subcategories" for slash-named categories.
+- **Slow timers disambiguated by spawn id** (merged from upstream) — same-named slow targets in one camp (two "a skyflux" and friends) now get separate timer rows when Zeal reports different spawn ids, instead of piling onto one row.
+- **Linked boss info** (merged from upstream) — an encounter can reference its NPC in the knowledge base; the Composition Check page shows the boss's fight info when set.
+
+### Fixes since v0.22.0-beta.4
+- **Raid disband is now detected** — Zeal sends no "raid over" signal, so the roster card used to keep claiming a live raid after a disband. The roster now flips to "not in a raid" within ~35 seconds of the last roster update.
+- **Auto-reload on zoning** — the Composition Check page re-pulls encounters and roster when the live Zeal zone changes, so the dropdown re-sorts and the report follows without a manual Refresh. The zone watch survives the seconds-long quiet gap while zoning (your pick is still never overwritten — ordering only).
+- **The check runs itself** (merged from upstream) — picking an encounter auto-runs the composition check; the plain Check button is gone (the manual-roster form keeps its own button). MIN and REC render in one combined table.
+- **Fresh installs start with an empty raid knowledge base** (merged from upstream) — the sample "Avatar of War" encounter is no longer auto-created, and the legacy seeded row is removed on first open (encounters you created yourself are untouched).
+- Provisioned stub roles (created by pack imports) always marshal their class list as an empty array — a `null` there crashed the whole Taxonomy Editor page.
+
+### Notes
+- Pre-release fork build for guild dogfooding; not the official release. Auto-updates are not effective on this build — install new builds manually.
+
 ## v0.21.2 — 2026-09-12
 
 Overlay Text joins the fading-soon alert types for both triggers and the global spell-timer defaults, timer overlays get bottom-up stacking and a white urgent-text option, and the Wishlist can auto-clear an entry when you loot it yourself.
