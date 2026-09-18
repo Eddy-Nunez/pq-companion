@@ -143,6 +143,28 @@ the Go↔TS duplicated type layer — the single largest structural win of the
 migration (plan §1.3). The known exceptions are the two graph pages (xyflow +
 dagre) and drag-reorder; neither is in this change's scope.
 
+**Verified 2026-09-18 — this needs no Node at all.** The `esbuild` and
+`tailwind` hex packages are not Node wrappers: each downloads a standalone
+platform binary. `mix assets.build` was confirmed to succeed with `node`
+**absent from PATH** (tailwind fetched `tailwindcss-linux-x64` from GitHub
+releases; esbuild fetched `@esbuild/linux-x64` directly from the npm registry
+without an npm client). Tailwind resolves to v4.3.0, the same version the
+reference pins — so the `@theme` tokens port verbatim.
+
+**Consequence for the JS-hook requirement:** Node is only needed for npm
+*libraries*, and the surface is narrow — `@xyflow/react` (4 files; the 2 graph
+panels are ~692 LOC + `schemaGraph.ts` at 481 LOC) and `dagre` (2 files, plain
+JS, no React). `@dnd-kit` is deliberately **not** ported: the plan is
+server-side move controls with one vanilla-JS sortable hook, reused across
+trigger categories and wishlist slots.
+
+**Deferred, deliberately:** whether to reuse React Flow for the two graph panels
+(Wave 10) or rewrite ~400 LOC of rendering in SVG. This change adds **no**
+`package.json`. Adopting npm later is additive rather than a pipeline change,
+because the hex esbuild task bundles from `node_modules` when present — and Node
+is already installed in WSL (v22.23.1, npm 12.0.1), so the cost of "retaining
+Node" is zero either way. Revisit in Wave 10; do not re-litigate at Phase 0.
+
 ## Risks / Trade-offs
 
 - **[Exqlite has no usable Windows NIF build]** → Acceptance criterion 3 settles

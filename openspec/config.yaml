@@ -96,10 +96,18 @@ context: |
   - Ecto + `ecto_sqlite3`/Exqlite; **two repos**: `PQ.QuarmRepo` (read-only game
     data) and `PQ.UserRepo` (read-write user data)
   - Tailwind v4 (reuse the existing theme tokens from `frontend/src/index.css`
-    so visual parity holds)
+    so visual parity holds). Verified 2026-09-18: the `tailwind` hex package
+    ships the same version the reference pins (v4.3.0) as a standalone binary.
   - Phoenix.PubSub for realtime — one topic per domain, replacing the old
     broadcast-everything WebSocket hub
-  - esbuild for the minimal JS that remains (xyflow graph pages, drag-reorder)
+  - `esbuild` (hex package) for the minimal JS that remains. Verified 2026-09-18:
+    it downloads a standalone platform binary and `mix assets.build` succeeds with
+    `node` **absent from PATH** — the default asset pipeline needs **no Node at
+    all**. Only *libraries* would need npm: `@xyflow/react` for the 2 graph panels
+    (Wave 10) and `dagre` (plain JS). `@dnd-kit` is NOT ported — the plan is
+    server-side move controls plus one vanilla-JS sortable hook. Adopting npm
+    later is additive: the hex esbuild task bundles from `node_modules` when
+    present, and Node is already installed in WSL (v22.23.1).
   - Windows target. `mix release` for packaging.
 
   ## Non-negotiable constraints

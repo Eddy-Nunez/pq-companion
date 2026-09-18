@@ -113,3 +113,16 @@ backend/internal/emote/testdata/*
 
 # ── Erlang/Elixir ─────────────────────────────────────────────────────────────
 erl_crash.dump
+
+# ── Elixir / Phoenix build artifacts ─────────────────────────────────────────
+# `mix deps.get` populates deps/ and `mix compile` populates _build/ — both are
+# hundreds of MB and platform-specific (NIFs are .so on Linux, .dll on Windows,
+# so they must never be shared between the WSL and Windows build spaces).
+/phoenix/_build/
+/phoenix/deps/
+/phoenix/tmp/
+/phoenix/priv/static/
+/phoenix/priv/data/
+/phoenix/priv/repo/*.db
+/phoenix/priv/repo/*.db-*
+/phoenix/*.ez
