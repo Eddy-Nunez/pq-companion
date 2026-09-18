@@ -1626,8 +1626,8 @@ hardening — no new features, but a broad sweep of reliability fixes.
   purely a display favorite — unpinning never deletes tracked history,
   and searching surfaces any faction's known data whether pinned or not,
   even for a non-active character. Log Backfill support scans existing
-  `/con` history to seed a baseline. Gated behind Settings > Developer >
-  Flags, off by default.
+  `/con` history to seed a baseline. Promoted out of Developer > Flags to
+  a permanent nav item in v0.22.0.
 - **CH Chain possible-miss detection** — each chain callout's captured
   target is watched for Complete Healing's heal-landed bystander text
   (and optionally Superior Healing's for Druid DCH slots); if it never
@@ -2026,15 +2026,30 @@ name-based path when a field is nil, so older Zeal is unaffected.
   raid roster wire format sends class as a name and level as a string
   rather than the numbers first assumed, which had silently dropped every
   roster update — the decoder is now tolerant of both. The composition
-  check's encounter is now always a manual pick (multiple encounters can
+  check's encounter is always a manual pick (multiple encounters can
   share a zone, so auto-detection couldn't pick one unambiguously) kept
-  in sync across the check page, dashboard panel, and popout overlay. The
-  knowledge base ships with a single seeded encounter (Avatar of War) —
-  add your own via the Raid Editor. Candidate names on a short row are
+  in sync across the check page, dashboard panel, and popout overlay, and
+  the picker orders by proximity to your live zone. Encounters can be
+  exported and imported as JSON packs, auto-provisioning any taxonomy
+  roles a pack references that don't exist locally yet. The knowledge
+  base ships with a single seeded encounter (Avatar of War) — add your
+  own via the Raid Editor. Candidate names on a short row are
   class-eligible members, not actual assignments, so the same person can
   be counted toward more than one role's need at once; treat the report
-  as a staffing guide, not a final call. Gated behind Settings > Developer
-  > Flags, off by default.
+  as a staffing guide, not a final call. Promoted out of Developer >
+  Flags to a permanent **Raids** nav item in v0.22.0.
+
+## Unreleased — Planes of Power Flag Tracker
+
+- **PoP Flags** — a per-character checklist page for the Planes of Power
+  planar-progression flags (Tiers 1–4 and Plane of Time), with
+  prerequisite locking and any-of grouping for quest paths where multiple
+  routes satisfy the same milestone (e.g. the six Plane of Justice
+  trials). Flags live server-side as qglobals that aren't exposed by the
+  game DB or Zeal, so progress is a manual checklist seeded from a Seer
+  "guided meditation" paste — live auto-detection from log lines and the
+  Seer NPC is planned once PoP is live on Quarm. Promoted out of
+  Developer > Flags to a permanent nav item in v0.22.0.
 
 ## Phase 11 — Project Website
 _Planned_
