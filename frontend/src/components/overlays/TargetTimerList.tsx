@@ -1,6 +1,8 @@
 import React from 'react'
 import { Swords } from 'lucide-react'
 import { SpellIcon } from '../Icon'
+import { useTimerAppearance } from '../../hooks/useTimerAppearance'
+import { fmtRemaining } from '../../lib/timeFormat'
 import type { ActiveTimer, TimerCategory } from '../../types/timer'
 
 // Category accents mirror the dedicated buff/detrim overlays so a spell reads
@@ -16,13 +18,7 @@ const CATEGORY_COLORS: Record<TimerCategory, string> = {
   custom: '#38bdf8',
 }
 
-function fmtRemaining(secs: number): string {
-  if (secs <= 0) return '0s'
-  if (secs < 60) return `${Math.ceil(secs)}s`
-  return `${Math.ceil(secs / 60)}m`
-}
-
-function TimerRow({ timer }: { timer: ActiveTimer }): React.ReactElement {
+function TimerRow({ timer, showSeconds }: { timer: ActiveTimer; showSeconds: boolean }): React.ReactElement {
   const pct =
     timer.duration_seconds > 0
       ? Math.max(0, Math.min(1, timer.remaining_seconds / timer.duration_seconds))
@@ -123,7 +119,7 @@ function TimerRow({ timer }: { timer: ActiveTimer }): React.ReactElement {
             fontWeight: 600,
           }}
         >
-          {fmtRemaining(timer.remaining_seconds)}
+          {fmtRemaining(timer.remaining_seconds, showSeconds)}
         </span>
       </div>
     </div>
@@ -137,6 +133,7 @@ function TimerRow({ timer }: { timer: ActiveTimer }): React.ReactElement {
  * the dashboard NPC panel and the popped-out NPC overlay window.
  */
 export default function TargetTimerList({ timers }: { timers: ActiveTimer[] }): React.ReactElement {
+  const appearance = useTimerAppearance()
   if (timers.length === 0) {
     return (
       <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: 0, padding: '4px 2px' }}>
@@ -147,7 +144,7 @@ export default function TargetTimerList({ timers }: { timers: ActiveTimer[] }): 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {timers.map((t) => (
-        <TimerRow key={t.id} timer={t} />
+        <TimerRow key={t.id} timer={t} showSeconds={appearance.showSeconds} />
       ))}
     </div>
   )

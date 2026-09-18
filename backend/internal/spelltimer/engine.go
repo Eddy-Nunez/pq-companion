@@ -1000,7 +1000,18 @@ func (e *Engine) StartExternal(name string, category string, durationSecs, displ
 	if spellID > 0 && e.db != nil {
 		if s, err := e.db.GetSpell(spellID); err == nil && s != nil {
 			spell = s
-			durationSecs = e.applyDurationModifiers(spell, durationSecs)
+			// A custom timer's duration is whatever the trigger author typed
+			// (often a recast/cooldown, not the spell's buff duration) even
+			// when it's linked back to a spell for its icon — e.g. a "New
+			// Trigger from Spell" timer built from an AA like Paragon or
+			// Savagery. Re-extending that typed value by the caster's own
+			// AA/item duration foci double-counts an extension the editor
+			// never applied when it seeded the duration, making the timer
+			// outlast the real buff. Buff/detrimental categories still get
+			// modifiers applied, matching the automatic spell-landed pipeline.
+			if cat != CategoryCustom {
+				durationSecs = e.applyDurationModifiers(spell, durationSecs)
+			}
 			resolvedIcon = spell.NewIcon
 			isCharm = isCharmSpell(spell)
 		}

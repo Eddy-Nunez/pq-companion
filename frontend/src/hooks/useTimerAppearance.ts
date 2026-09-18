@@ -23,6 +23,8 @@ export interface TimerAppearance {
   stackFromBottom: boolean
   /** Keep row text white instead of switching to red under 20% remaining. */
   urgentTextWhite: boolean
+  /** Show minutes and seconds (e.g. "4m 32s") instead of minutes-only. */
+  showSeconds: boolean
 }
 
 // Built-in defaults, matching the panels' historical hardcoded values.
@@ -33,6 +35,7 @@ const DEFAULTS: TimerAppearance = {
   rowPadding: 3,
   stackFromBottom: false,
   urgentTextWhite: false,
+  showSeconds: false,
 }
 
 /**
@@ -62,6 +65,7 @@ function resolve(st: SpellTimerSettings | undefined): TimerAppearance {
     rowPadding: st.timer_row_padding || DEFAULTS.rowPadding,
     stackFromBottom: st.timer_bar_stack_from_bottom ?? DEFAULTS.stackFromBottom,
     urgentTextWhite: st.timer_bar_urgent_text_white ?? DEFAULTS.urgentTextWhite,
+    showSeconds: st.timer_show_seconds ?? DEFAULTS.showSeconds,
   }
 }
 

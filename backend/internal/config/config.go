@@ -203,6 +203,12 @@ type SpellTimerSettings struct {
 	// remaining (legibility preference). Off by default (red is the
 	// long-standing look). Frontend-only; the engine never reads it.
 	TimerBarUrgentTextWhite bool `yaml:"timer_bar_urgent_text_white,omitempty" json:"timer_bar_urgent_text_white,omitempty"`
+
+	// TimerShowSeconds, when true, formats buff/detrimental timer countdowns
+	// as minutes and seconds (e.g. "4m 32s") instead of the default
+	// rounded-up minutes-only display ("5m"). Off by default. Frontend-only;
+	// the engine never reads it.
+	TimerShowSeconds bool `yaml:"timer_show_seconds,omitempty" json:"timer_show_seconds,omitempty"`
 }
 
 // DPSClassColors holds the user-customisable bar colours for the DPS meter

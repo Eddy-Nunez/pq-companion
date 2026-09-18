@@ -10,6 +10,7 @@ import OverlayWindow from '../OverlayWindow'
 import CreateTriggerModal from '../CreateTriggerModal'
 import SpellSearchPicker from '../SpellSearchPicker'
 import { buildSpellTriggerPrefill } from '../../lib/spellHelpers'
+import { fmtRemaining } from '../../lib/timeFormat'
 import type { ActiveTimer, TimerCategory, TimerState } from '../../types/timer'
 import type { LogTailerStatus } from '../../types/logEvent'
 import type { Spell } from '../../types/spell'
@@ -42,12 +43,6 @@ function detrimTarget(targetName: string, activePlayer: string): string {
   if (targetName === activePlayer) return ''
   if (targetName === 'You') return ''
   return targetName
-}
-
-function fmtRemaining(secs: number): string {
-  if (secs <= 0) return '0s'
-  if (secs < 60) return `${Math.ceil(secs)}s`
-  return `${Math.ceil(secs / 60)}m`
 }
 
 // Count-up label for an overdue (kept-expired) row. overdue is how long the
@@ -109,7 +104,7 @@ function DetrimRow({ timer, activePlayer, appearance }: { timer: ActiveTimer; ac
           title={expired ? 'Expired — recast to refresh, or dismiss with ✕' : undefined}
           style={{ fontSize: appearance.timeFontSize, color: urgent ? '#f87171' : color, fontVariantNumeric: 'tabular-nums', flexShrink: 0, fontWeight: urgent ? 700 : 400 }}
         >
-          {expired ? fmtOverdue(overdue) : fmtRemaining(timer.remaining_seconds)}
+          {expired ? fmtOverdue(overdue) : fmtRemaining(timer.remaining_seconds, appearance.showSeconds)}
         </span>
         <button
           onClick={() => removeTimer(timer.id).catch(() => {})}

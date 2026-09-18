@@ -410,6 +410,13 @@ export interface SpellTimerSettings {
    * default (red is the long-standing look).
    */
   timer_bar_urgent_text_white?: boolean
+
+  /**
+   * When true, buff/detrimental timer countdowns show minutes and seconds
+   * (e.g. "4m 32s") instead of the default rounded-up minutes-only display
+   * ("5m"). Off by default.
+   */
+  timer_show_seconds?: boolean
 }
 
 // CHChainSettings configures the Complete-Heal-chain overlay matcher. Mirrors

@@ -2802,6 +2802,29 @@ export default function SettingsPage(): React.ReactElement {
                 </span>
               </span>
             </label>
+
+            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.spell_timer?.timer_show_seconds ?? false}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    spell_timer: { ...config.spell_timer, timer_show_seconds: e.target.checked },
+                  })
+                }
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  Show seconds on buff/detrimental timers
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                  By default countdowns over a minute round up to the nearest minute (e.g. "5m"). Enable
+                  this to show minutes and seconds instead (e.g. "4m 32s").
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* ── Custom timer alerts ──────────────────────────────────────── */}

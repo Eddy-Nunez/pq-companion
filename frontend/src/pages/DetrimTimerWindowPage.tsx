@@ -21,6 +21,7 @@ import { useOverlayAlertMute } from '../hooks/useOverlayAlertMute'
 import { DETRIM_TIMER_ALERTS_KEY } from '../lib/overlayAlertMute'
 import { clearTimers, getTimerState, removeTimer } from '../services/api'
 import { SpellIcon } from '../components/Icon'
+import { fmtRemaining } from '../lib/timeFormat'
 import type { ActiveTimer, TimerCategory, TimerState } from '../types/timer'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -51,12 +52,6 @@ function detrimTarget(targetName: string, activePlayer: string): string {
   if (targetName === activePlayer) return ''
   if (targetName === 'You') return ''
   return targetName
-}
-
-function fmtRemaining(secs: number): string {
-  if (secs <= 0) return '0s'
-  if (secs < 60) return `${Math.ceil(secs)}s`
-  return `${Math.ceil(secs / 60)}m`
 }
 
 function barColor(remaining: number, total: number, category: TimerCategory): string {
@@ -178,7 +173,7 @@ function TimerRow({
             textShadow: '0 1px 2px rgba(0,0,0,0.9)',
           }}
         >
-          {fmtRemaining(timer.remaining_seconds)}
+          {fmtRemaining(timer.remaining_seconds, appearance.showSeconds)}
         </span>
         {showRemove && (
           <button
