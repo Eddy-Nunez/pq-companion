@@ -180,6 +180,18 @@ have `LANG=C.UTF-8` and run clean — this only appears under a stripped
 environment (`env -i`), which is exactly what a CI runner looks like. Set
 `LANG=C.UTF-8` (or `ELIXIR_ERL_OPTIONS="+fnu"`) in CI. Tracked in task 7.1.
 
+**`file_system` needs `inotify-tools` on Linux, and it is not installed.**
+`phoenix_live_reload` depends on `file_system`, which shells out to the
+`inotifywait` executable. Without it the app still boots and serves, but logs
+`` `inotify-tools` is needed to run `file_system` `` and
+`{:error, :fs_inotify_bootstrap_error}` — and **live reload silently does
+nothing**. Fix is one command: `sudo apt install inotify-tools` (3.22.6.0-4 is
+available; it needs your password). There is no sudo-free path — upstream ships
+source tarballs only, and `autoconf`/`make` are absent. Affects task 6.2
+(live reload) and Wave 3 (log watching). See task 1.5 for why this makes a
+poll-based watcher worth reconsidering as the primary implementation rather than
+a fallback.
+
 **`erl_crash.dump` on a clean exit.** Invoking `erl` from a captured-output
 pipeline can produce a crash dump whose slogan is a boot-time `badarg` writing
 to `standard_error` ("the device does not exist"). It is not an application
