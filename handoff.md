@@ -47,6 +47,50 @@ directories, so it cannot follow them. Irrelevant if Windows never runs `mix` �
 which is the plan (Burrito builds from WSL). If Windows-side `mix` is ever
 needed, delete the symlinks first or set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` there.
 
+#### Residual cost of keeping the SOURCE on 9p
+
+Measured 2026-09-18 with a dep-free 300-module mix project, `mix compile
+--force`, **301 `.beam` files verified in every case**:
+
+| configuration | full recompile | vs best |
+|---|---|---|
+| all ext4 | **3.4s** | — |
+| **current** (source 9p, build ext4) | **9.2s** | **2.7×** |
+| all 9p | **15.3s** | 4.5× |
+
+So the symlink recovered ~40% (15.3s -> 9.2s) but **2.7× remains**, and the whole
+residual is source reads: **~19ms per source file**, because 9p's per-file
+open/stat overhead dominates. At a few hundred modules that is roughly 6–15s
+extra per *full* compile. Real project today (15 files): full 7.4s, incremental
+1.7s, `mix test` 5.2s, `git status` 3.0s, `rg` 0.09s.
+
+*(A first run of this probe reported 1.14s for the current arrangement — faster
+than the all-ext4 baseline, which is impossible. It was discarded and re-run with
+the compiler output visible and beam counts checked. Recorded because it nearly
+became a wrong finding.)*
+
+**Honest assessment.** The symlink is unambiguously good. The *move* to `/mnt/c`
+is a trade, and it was argued on a premise that did not survive: the stated reason
+was "Windows-based builds", and Burrito then removed exactly that — it builds the
+Windows artifact *from WSL*. What remains is genuine (Windows-side **validation**
+for tasks 1.4/1.5, native editing, no `\\wsl$` UNC quirks) but it is a different
+reason than the one given. The measurement should have come first.
+
+**Why it is nevertheless probably right.** Full recompiles are rare — incremental
+compile is 1.7s — so the penalty lands on first build, `mix clean`, dependency
+changes and branch switches, not on every edit. **CI is unaffected** (GitHub
+runners are Linux/ext4).
+
+#### Fallback if the source-read cost starts to bite: two independent clones
+
+A worktree cannot satisfy both sides at once — Windows validation needs source
+reachable *and* a Windows-native `_build`; WSL wants source on ext4. The clean
+answer is **two free-standing clones** (the repo is only ~34 MB packed): an ext4
+clone for WSL, the `/mnt/c` one for Windows, synced through `origin`. Both sides
+get optimal I/O, and it removes the absolute-`gitdir` sharp edge below entirely
+because a clone's `.git` is self-contained. Not worth doing until the cost is
+actually felt.
+
 ### Worktree git pointers — half relative, half absolute, on purpose
 
 Windows-side git was **broken** in this tree until 2026-09-18:
@@ -188,12 +232,29 @@ https://github.com/jasonsoprovich/pq-companion/releases/download/data-latest/qua
 
 ### User-side recommendation
 
-**Install Erlang/Elixir on Windows natively** (the official Elixir installer
-bundles OTP). This is unavoidable and not a Docker/mise question: Phase 0 tasks
-**1.4** (Exqlite Windows NIF loads) and **1.5** (`file_system` Windows watching),
-and Wave 3's named-pipe spike, can only be validated on Windows. A Linux
-container or WSL would test the Linux NIF and prove nothing — 1.4 exists
-specifically to settle whether `ecto_sqlite3` is viable as the data layer.
+**DONE 2026-09-18 — Erlang/OTP and Elixir are installed on the Windows side.**
+(Confirmed necessary: tasks **1.4** (Exqlite Windows NIF loads) and **1.5**
+(`file_system` watching), plus Wave 3's named-pipe spike, can only be validated on
+Windows — a Linux pass tests the Linux NIF and proves nothing.)
+
+Winget has **no Elixir package** (`winget search elixir` returns only Gleam and
+Livebook, which merely tag it). `Erlang.ErlangOTP` *is* present; winget's newest
+27.x is **27.3.4.13** (Linux has 27.3.4.17 — same patch level, immaterial). Elixir
+comes from the official release assets, which include both
+`elixir-otp-27.exe` (installer) and `elixir-otp-27.zip` (portable) with sha256
+sums.
+
+Remaining Windows-side setup before 1.4/1.5 can actually run:
+
+1. `mix local.hex --force`, `mix local.rebar --force`,
+   `mix archive.install hex phx_new --force` — the Windows toolchain needs its own
+   copies.
+2. **Do not run `mix` from Windows in this tree while the symlinks exist.**
+   Delete `phoenix/_build` and `phoenix/deps` first (both gitignored, so git does
+   not care), or set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` to Windows-local paths.
+   Windows must build its own artefacts anyway — sharing them across platforms is
+   exactly what the `.so` vs `.dll` split forbids.
+3. Set a UTF-8 locale (`LANG=C.UTF-8`) — see the latin1 gotcha below.
 
 ### Gotchas discovered this session
 
