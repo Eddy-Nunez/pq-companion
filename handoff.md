@@ -1,9 +1,85 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 26/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 30/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 8 — 2026-09-18 (Wave 0 to 30/34: CI + wave verification)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session landed the Elixir CI job (tasks 7.2, 7.3) and the wave verification
+(tasks 8.1, 8.2). Updates 1–7 remain current except where this section says
+otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 30/34**. Done: 1.1–1.3, 1.6, 2.1–2.5,
+3.1–3.5, 4.1–4.6, 5.1–5.3, 6.1–6.3, **7.2, 7.3, 8.1, 8.2**. Not done: **1.4, 1.5**
+(Windows), **7.1, 7.4** (blocked — see below).
+
+Branch `feat/phoenix-migration`, working tree clean. `mix test` → **78 tests,
+0 failures**. Whole tree now passes `mix format --check-formatted`.
+
+### The wave-0 acceptance walk found one unmet criterion
+
+`docs/phoenix-migration-plan.md` §3.8 lists six Phase 0 criteria. Five are met
+or blocked; **criterion 4 is not met by this change**: “`config.yaml`
+round-trips: load → change → atomic save → reload, byte-identical to the Go
+app's output”. Wave 0 task 5.3 explicitly scopes settings *loading and saving*
+to `add-data-model` (wave 2) and only asserts boot leaves the file untouched.
+This is a real plan/task tension — the plan puts it in Phase 0, the task list
+defers it — and it is recorded rather than glossed: **do not archive
+`add-phoenix-scaffold` as if §3.8 were fully satisfied; either accept the
+deferral explicitly or move the criterion.** The full per-criterion result is
+in the 8.1 entry.
+
+### ⚠️ CI is written but has never run — GitHub Actions is disabled on the fork
+
+`.github/workflows/ci.yml` gained a `test-phoenix` job:
+`erlef/setup-beam@v1` with `version-file: .tool-versions` +
+`version-type: strict` (a version file *requires* strict — checked against the
+action's README), `LANG=C.UTF-8` + `ELIXIR_ERL_OPTIONS=+fnu`, an
+`actions/cache` over `phoenix/deps`/`_build` keyed on `mix.lock`, the
+`quarm.db` download, then `deps.get`, `compile --warnings-as-errors`,
+`format --check-formatted` and `mix test`. The trigger now also includes
+`feat/phoenix-migration`, so this branch gates and the existing Go/TS jobs run
+on it.
+
+**Every step was verified locally with the exact job environment**
+(`LANG=C.UTF-8 ELIXIR_ERL_OPTIONS=+fnu MIX_ENV=test`): all exit 0, 78/0 tests,
+no latin1 warning. But **no GitHub run has ever happened on this fork**: the
+public Actions API reports `total_count: 0` runs (checked well after the push),
+and the workflows are only listed as `active` definitions. GitHub disables
+Actions on forks by default. **To close tasks 7.1 and 7.4, enable Actions**
+(repo Settings → Actions → General, or the “Workflows aren’t being run on this
+forked repository” banner), then push; the next push runs `Go Tests`,
+`TypeScript Typecheck` and `Elixir Tests` together. Do not run the TypeScript
+job locally — `npm ci` from WSL would replace the Windows Electron binaries.
+
+### Verification this session
+
+- **7.2** — the format gate fails on a deliberately misformatted file (exit 1)
+  and passes once formatted (exit 0). The last pre-existing unformatted file
+  (`error_html_test.exs`, generator output) was formatted, so the gate is a
+  plain whole-tree check with no allowlist.
+- **7.3** — data-backed tests read all four game tables with `quarm.db` present,
+  and skip with an explicit `IO.warn` (suite still green) when it is removed.
+  The CI download step mirrors the Go job's proven `gh release download`.
+
+### Next
+
+1. **1.4 / 1.5** — Windows-only; see updates 2 and 6 for the remaining setup
+   (hex/rebar/phx_new, remove the `_build`/`deps` symlinks before Windows `mix`,
+   UTF-8 locale). WSL can invoke Windows `mix` via `cmd.exe`, but the symlinks
+   must be handled first — do not disturb the WSL build cache.
+2. **7.1 / 7.4** — enable Actions on the fork, push, and confirm `Go Tests`,
+   `TypeScript Typecheck` and `Elixir Tests` are green in one run.
+3. **Archive** `add-phoenix-scaffold` only after 1.4, 1.5, 7.1 and 7.4 are
+   genuinely verified — and after deciding what to do about §3.8 criterion 4
+   (settings round-trip) above.
+
+---
 
 ## SESSION UPDATE 7 — 2026-09-18 (Wave 0 to 26/34: dev workflow verified)
 
