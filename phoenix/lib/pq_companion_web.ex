@@ -48,7 +48,22 @@ defmodule PQCompanionWeb do
 
   def live_view do
     quote do
-      use Phoenix.LiveView
+      use Phoenix.LiveView, layout: {PQCompanionWeb.Layouts, :window}
+
+      unquote(html_helpers())
+    end
+  end
+
+  @doc """
+  Same as `live_view/0` but with the chrome-less layout.
+
+  Overlay windows must render no sidebar and no titlebar, so the layout is a
+  compile-time property rather than a runtime guard — an overlay cannot
+  accidentally render chrome because it never has the chrome layout.
+  """
+  def overlay_view do
+    quote do
+      use Phoenix.LiveView, layout: {PQCompanionWeb.Layouts, :bare}
 
       unquote(html_helpers())
     end

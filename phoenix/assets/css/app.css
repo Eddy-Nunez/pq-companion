@@ -45,3 +45,46 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+/* ── PQ Companion theme tokens ────────────────────────────────────────────────
+   Ported VERBATIM from the reference's frontend/src/index.css @theme block so
+   visual parity is achievable. Tailwind resolves to the same v4.3.0 the
+   reference pins, so these are drop-in.
+
+   --color-danger is included deliberately: the reference defines it as an alias
+   of --color-destructive because ~20 call sites referenced it (mostly with a
+   hardcoded fallback), but it was never actually declared — so the Raids GAP
+   pill and error banners painted nothing at all. Carrying the alias prevents
+   that whole class of bug. */
+@theme {
+  --color-background: #0a0a0a;
+  --color-surface: #111111;
+  --color-surface-2: #1a1a1a;
+  --color-border: #262626;
+  --color-border-subtle: #1c1c1c;
+
+  --color-foreground: #f0f0f0;
+  --color-muted: #6b6b6b;
+  --color-muted-foreground: #a0a0a0;
+
+  /* Brand accent — classic EQ gold */
+  --color-primary: #c9a84c;
+  --color-primary-hover: #d9b85c;
+  --color-primary-foreground: #0a0a0a;
+
+  /* Semantic colours */
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fef2f2;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+  --color-danger: #ef4444;
+
+  --scrollbar-width: 12px;
+  --scrollbar-thumb: #3a3a3a;
+  --scrollbar-thumb-hover: #4a4a4a;
+}
+
+/* Overlay windows are see-through. A class on the shell rather than a JS
+   document.body mutation, so it cannot be left applied by a failed render. */
+.body-transparent { background-color: transparent; }

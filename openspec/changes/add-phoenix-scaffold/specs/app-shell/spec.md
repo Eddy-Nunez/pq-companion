@@ -31,12 +31,12 @@ main window (sidebar, titlebar, content), `:overlay` for overlay windows (no
 chrome, transparent background), and `:bare` for onboarding and modal surfaces
 (no sidebar).
 
-#### Scenario: Main window uses the root layout
+#### Scenario: Main window uses the window layout
 
 - **WHEN** the main-window route renders
 - **THEN** the response includes the sidebar and titlebar regions
 
-#### Scenario: Overlay window uses the overlay layout
+#### Scenario: Overlay window uses the overlay layout and the bare inner
 
 - **WHEN** an overlay route renders
 - **THEN** the response omits the sidebar and titlebar regions and applies the

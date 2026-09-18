@@ -1,159 +1,96 @@
 defmodule PQCompanionWeb.Layouts do
   @moduledoc """
-  This module holds layouts and related functionality
-  used by your application.
+  Window layouts.
+
+  Three window classes, expressed as an HTML shell plus an inner layout:
+
+  | window class | shell             | inner            |
+  |--------------|-------------------|------------------|
+  | main window  | `root/1` (opaque) | `window/1`       |
+  | overlay      | `overlay/1`       | `bare/1`         |
+  | bare         | `root/1` (opaque) | `bare/1`         |
+
+  Note on naming: `add-phoenix-scaffold` originally called the main-window class
+  `:root`. That collides with Phoenix's own "root layout" concept (the outermost
+  HTML document, set via `put_root_layout`), so the window class is `:window` and
+  `root/1` keeps its Phoenix meaning. The spec was updated to match.
   """
   use PQCompanionWeb, :html
 
-  # Embed all files in layouts/* within this module.
-  # The default root.html.heex file contains the HTML
-  # skeleton of your application, namely HTML headers
-  # and other static content.
   embed_templates "layouts/*"
 
   @doc """
-  Renders your app layout.
+  The main window: titlebar, sidebar and content.
 
-  This function is typically invoked from every template,
-  and it often contains your application menu, sidebar,
-  or similar.
+  The sidebar itself is wave 1; this is its slot plus the titlebar region.
 
-  ## Examples
-
-      <Layouts.app flash={@flash}>
-        <h1>Content</h1>
-      </Layouts.app>
-
+  Note: as a LiveView layout this receives `@inner_content`, not a named slot.
+  The generator's `app/1` used `render_slot(@inner_block)` and worked only
+  because `config :phoenix_live_view, layout: false` means it was always called
+  explicitly as `<Layouts.app>` from a template. A real layout is invoked by
+  Phoenix with `inner_content`.
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
+  attr :flash, :map, default: %{}
+  attr :window, :map, default: nil
+  attr :inner_content, :any, default: nil
 
-  attr :current_scope, :map,
-    default: nil,
-    doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
-
-  slot :inner_block, required: true
-
-  def app(assigns) do
+  def window(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
+    <div id="main-window" class="flex h-screen flex-col bg-(--color-background)">
+      <header
+        id="titlebar"
+        class="flex h-9 shrink-0 items-center border-b border-(--color-border) px-3"
+      >
+        <span class="text-xs font-medium text-(--color-muted-foreground)">
+          {@window && @window.label}
+        </span>
+      </header>
+      <div class="flex min-h-0 flex-1">
+        <nav
+          id="sidebar"
+          class="w-52 shrink-0 overflow-y-auto border-r border-(--color-border) bg-(--color-surface)"
+          aria-label="Main navigation"
+        >
+          <%!-- wave 1 (add-sidebar-navigation) renders PQWeb.Nav here --%>
+          <p class="p-3 text-xs text-(--color-muted)">navigation arrives in wave 1</p>
+        </nav>
+        <main id="content" class="min-w-0 flex-1 overflow-y-auto">
+          {@inner_content}
+        </main>
       </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-    </header>
+    </div>
+    """
+  end
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </main>
+  @doc """
+  Content only — no titlebar, no sidebar.
 
-    <.flash_group flash={@flash} />
+  Used by overlay windows (which must have no chrome) and by bare routes such as
+  the onboarding wizard and modals. Receives `@inner_content` as a layout.
+  """
+  attr :flash, :map, default: %{}
+  attr :window, :map, default: nil
+  attr :inner_content, :any, default: nil
+
+  def bare(assigns) do
+    ~H"""
+    <div id="bare-window" class="min-h-0">
+      {@inner_content}
+    </div>
     """
   end
 
   @doc """
   Shows the flash group with standard titles and content.
-
-  ## Examples
-
-      <.flash_group flash={@flash} />
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
-  attr :id, :string, default: "flash-group", doc: "the optional id of flash container"
+  attr :flash, :map, required: true
+  attr :id, :string, default: "flash-group"
 
   def flash_group(assigns) do
     ~H"""
     <div id={@id} aria-live="polite">
       <.flash kind={:info} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
-
-      <.flash
-        id="client-error"
-        kind={:error}
-        title="We can't find the internet"
-        phx-disconnected={
-          show(".phx-client-error #client-error")
-          |> JS.remove_attribute("hidden", to: ".phx-client-error #client-error")
-        }
-        phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
-        hidden
-      >
-        Attempting to reconnect
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-      </.flash>
-
-      <.flash
-        id="server-error"
-        kind={:error}
-        title="Something went wrong!"
-        phx-disconnected={
-          show(".phx-server-error #server-error")
-          |> JS.remove_attribute("hidden", to: ".phx-server-error #server-error")
-        }
-        phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}
-        hidden
-      >
-        Attempting to reconnect
-        <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
-      </.flash>
-    </div>
-    """
-  end
-
-  @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
-
-  See <head> in root.html.heex which applies the theme before page load.
-  """
-  def theme_toggle(assigns) do
-    ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 [[data-theme-source=system]_&]:!left-0 transition-[left]" />
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-      >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-      >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
-
-      <button
-        class="flex p-2 cursor-pointer w-1/3"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-      >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
-      </button>
     </div>
     """
   end
