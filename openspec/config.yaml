@@ -1,0 +1,188 @@
+schema: spec-driven
+
+context: |
+  PQ Companion — desktop companion app for the EverQuest emulated server
+  "Project Quarm". This repo is MID-MIGRATION from a Go + Electron + React
+  stack to a single Elixir / Phoenix LiveView app.
+
+  ## Migration posture (read this first)
+
+  - **Permanent fork divergence, NOT for upstream.** This migration is a personal
+    aspiration. It is never proposed to the maintainer's repo. Base on and rebase
+    onto `upstream/main`, but never push to `upstream` and never open a PR from
+    `feat/phoenix-migration`. It is long-lived and rebase-prone — force-pushes to
+    `origin` after a rebase are expected. At Wave 11 it becomes the fork's `main`.
+  - **Clean-room rewrite.** The Elixir app replaces the Go backend, React
+    renderer and Electron main process. No dual-running, no strangler.
+  - `backend/`, `frontend/`, `electron/` are **FROZEN REFERENCE**. Read them for
+    behavior, fixtures, DDL and tests — never edit them. They are **deleted as
+    each port lands** (see "Duplicated logic" below), not held until the end.
+  - The new app lives in **`phoenix/`**. All new code goes there. Never co-locate
+    a Go and an Elixir implementation of the same behavior in one folder.
+  - `docs/phoenix-migration-plan.md` is the master plan: assessment, target
+    architecture, and the 12-wave roadmap. OpenSpec changes are the executable
+    breakdown of that plan — one change per wave. When the two disagree, the
+    plan wins on *sequencing* and the OpenSpec spec wins on *behavior*.
+
+  ## Duplicated logic — the policy
+
+  The reference duplicates logic in three ways: Go↔TypeScript mirrors, the
+  hand-written `frontend/src/types/` tree (3,922 LOC, 35 files) mirroring Go
+  structs, and hand-maintained code→label maps in both languages. There is **no
+  CI guard** enforcing parity today, so drift was caught by hand — an actual
+  label bug (spell `targettype=4` labelled "Single (Pet)" instead of "PB AE",
+  affecting 325 spells) was found by manually reading an audit report.
+
+  Triage each apparent duplication into one of four buckets:
+
+  1. **Delete with no replacement.** Anything that exists only because there was
+     a Go↔TS boundary: the `types/` tree, and `enumsCache.ts` (177 LOC — it is
+     a runtime *cache* hydrated from the backend, not a second definition, and on
+     fetch failure it silently renders stub labels like "Tradeskill 75").
+     Server-rendered LiveView makes both impossible, which deletes that bug class.
+  2. **Collapse to one definition.** Genuine same-fact duplicates. The sharpest
+     is special abilities, which exists in **three** places today: Go
+     `db/special_abilities.go` (parsing), Go `db/enums/special_abilities.go`
+     (labels), and `frontend/src/lib/npcHelpers.ts` (both, 175 LOC) — and the
+     reference's own `claude.md` documents the mirror. Also the game-data members
+     of the 31 files containing `map[int]string` maps.
+  3. **Keep as data, single-owner.** The hand-maintained JSON catalogs
+     (`aa_descriptions.json`, `pop_gated.json`, `quest_sources.json`,
+     `tradeskill_paths.json`, `popflag/flags.json`) load from one place and are
+     validated by a test.
+  4. **Keep separate — do NOT merge.** Presentation and client-only concerns that
+     merely look like duplicates: `combatantColor.ts`, `chChainPatterns.ts`,
+     `overlayTextStyle.ts`. Merging these is over-consolidation.
+
+  **Anti-drift rule.** Consolidating once is not enough; re-divergence must be
+  structurally hard. If a remaining JS hook (xyflow graph pages, drag-reorder)
+  needs labels or codes, the server SHALL render them into the page payload — the
+  hook must never carry its own copy. A guard test asserts no second definition
+  of a collapsed catalog exists.
+
+  ## Deleting reference code (delete-as-you-go)
+
+  Delete a reference package **in the same change that lands its port**, once the
+  port's tests are green. Do not hold the whole Go tree until Wave 11.
+
+  - For Waves 3–6, also record one golden-file parity pass (same input through
+    the Go app and the Elixir app, diffed) before deleting.
+  - Nothing is ever lost: the Go app lives permanently on `upstream/main`, so any
+    deleted file is one `git show upstream/main:<path>` away. This is the reason
+    deleting from the working tree costs nothing.
+  - Keeping dead code in-tree is how "did I edit the frozen tree?" happens. Every
+    wave's closing task must state which reference packages were deleted and must
+    assert the remaining reference trees are untouched.
+
+  ## What OpenSpec specs describe here
+
+  Specs describe the **behavior of the Elixir app being built**, not the Go app
+  and not the migration process. After all waves archive, `openspec/specs/` is
+  the complete behavioral contract of PQ Companion and doubles as the parity
+  checklist against the frozen reference.
+
+  Capability tree (seeded by the first three changes; later waves extend it):
+
+    Foundation      app-shell, desktop-shell, navigation, data-store, settings,
+                    dev-toolchain
+    Pipeline        log-pipeline, zeal-integration
+    Features        game-database, character-profile, combat-tracking,
+                    spell-timers, trigger-engine, overlays, maps, raids
+    Lifecycle       app-backup, build-release
+
+  ## Tech stack (target)
+
+  - Elixir 1.18 / Erlang OTP 27, Phoenix 1.8+ with LiveView, HEEx
+  - Ecto + `ecto_sqlite3`/Exqlite; **two repos**: `PQ.QuarmRepo` (read-only game
+    data) and `PQ.UserRepo` (read-write user data)
+  - Tailwind v4 (reuse the existing theme tokens from `frontend/src/index.css`
+    so visual parity holds)
+  - Phoenix.PubSub for realtime — one topic per domain, replacing the old
+    broadcast-everything WebSocket hub
+  - esbuild for the minimal JS that remains (xyflow graph pages, drag-reorder)
+  - Windows target. `mix release` for packaging.
+
+  ## Non-negotiable constraints
+
+  1. **Windows-local.** Runs on the same machine as the game. Not a hosted web
+     app. Zeal file exports and the EQ log are local; ZealPipes is a Windows
+     named pipe.
+  2. **Two build spaces, one directory.** Primary development is WSL against
+     `/mnt/c/...`; the target is Windows. `_build/` and `deps/` must NOT be shared
+     between the two sides — compiled NIFs are platform-specific (`.so` vs
+     `.dll`) and Exqlite is a NIF. Set `MIX_BUILD_PATH` per side. Only
+     Windows-specific validation runs on Windows: the Exqlite NIF load,
+     `file_system` watching, the named-pipe spike, and anything touching the real
+     EQ directory or overlay windows.
+  3. **Overlay windows** are transparent, always-on-top, click-through, floating
+     over a DirectX game. A browser cannot do this — only a native shell. The
+     shell is behind a **swappable adapter** (`PQ.Shell`) because the
+     Electron-vs-Tauri decision is deliberately deferred. `PQ.Shell.Browser`
+     ships first so nothing is blocked on that decision.
+  4. **`quarm.db` is read-only** and shipped (~85 MB, 15 tables). Never write to
+     it, never hand-edit it — it is regenerated by the `data-release` workflow.
+  5. **`user.db` holds real user data** (50 tables) with no migration-version
+     table in the Go app. Adoption must never lose data: back up before
+     migrating, fail loudly on schema drift, never silently ignore an unknown
+     column.
+  6. **`config.yaml` key names are frozen.** They are user data and must stay
+     readable by the Go app for rollback.
+
+  ## Conventions
+
+  - Elixir: `mix format`, ExUnit, table-driven tests where the reference tests
+    are table-driven. Credo + Dialyzer in CI.
+  - Conventional Commits, same as the reference repo.
+  - Tests are the only safety net for a clean-room rewrite. Port the reference
+    test *fixtures* verbatim before writing the code they exercise — ranked
+    porting assets are in Appendix C of the migration plan. Highest value:
+    `internal/logparser/*_test.go` (real EQ log lines),
+    `internal/zealpipe/*_test.go` (reverse-engineered wire format),
+    `internal/db/*_test.go` (game math).
+  - Do NOT port `internal/converter` or `internal/mapgen` — they are build-time
+    tooling and stay in Go, run by GitHub Actions.
+  - `LIMITATIONS.md` documents 18 sections of known failure modes. Each is a
+    regression test for the rewrite, and several (notably §13.1, the
+    broadcast-everything hub) are things the PubSub design fixes outright.
+  - **Grep the reference before implementing anything non-trivial.** The
+    reference contains hand-maintained catalogs and 31 files of code→label maps;
+    check whether the fact you need already exists once, and collapse rather than
+    re-copy.
+
+rules:
+  proposal:
+    - State which migration wave (0-11 from docs/phoenix-migration-plan.md) the
+      change implements
+    - Name the frozen reference packages the change ports from, and the ones it
+      deletes
+    - List the reference LOC and test LOC being ported, so scope is visible
+    - For any collapsed duplication, name every existing copy being collapsed
+      (e.g. special abilities has three) and the guard test that prevents a
+      fourth
+  tasks:
+    - Every task must name how it is verified (a test, a command, or an
+      observable behavior)
+    - Tasks porting reference behavior must cite the reference file or test they
+      port from
+    - Mark a task [x] only with its verification result recorded
+    - Include a task deleting each ported reference package once its tests are
+      green (delete-as-you-go), and a closing task asserting the reference trees
+      still present are untouched
+    - After Waves 3-6, include a golden-file parity pass before deleting
+  design:
+    - Record which decisions are deliberately deferred (e.g. the shell adapter)
+      and what they are blocked on
+    - Note any LIMITATIONS.md section the change fixes or must preserve
+    - When a fact appears in more than one place in the reference, classify each
+      copy into the four buckets in "Duplicated logic" above
+
+operations:
+  apply:
+    guidance:
+      - Work only in phoenix/ unless the task explicitly says otherwise; the
+        reference trees are frozen
+      - Prefer porting the reference test fixtures first, then the code
+  archive:
+    guidance:
+      - Confirm the wave's acceptance criteria in docs/phoenix-migration-plan.md
+        are met before archiving
