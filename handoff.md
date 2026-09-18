@@ -1,59 +1,65 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 33/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 complete — 34/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
 
-## SESSION UPDATE 10 — 2026-09-18 (Wave 0 to 33/34: CI is running on the fork)
+## SESSION UPDATE 10 — 2026-09-18 (Wave 0 COMPLETE — 34/34; CI fully green)
 
 **Read this first — where it conflicts with anything below, this wins.**
-This session enabled Actions on the fork and observed the first real CI run.
-Update 9 remains current except where this section says otherwise.
+This session enabled Actions on the fork, observed CI, and closed the last two
+tasks. Update 9 remains current except where this section says otherwise.
 
 ### Where the work stands
 
-`openspec list` → **`add-phoenix-scaffold` 33/34**. The only task left is **7.4**
-(Go is red on the fork — see below).
+`openspec list` → **`add-phoenix-scaffold` ✓ Complete (34/34)** — every Wave 0
+task is done. What remains is a decision and the archive, not work:
 
-### CI ran: Elixir green, TypeScript green, Go red (environmental)
+1. the §3.8 criterion-4 tension (settings round-trip deferred to wave 2 per
+   task 5.3 — see update 8), and
+2. `openspec archive add-phoenix-scaffold`.
 
-Actions was enabled via the fork's banner (“Workflows aren't being run on this
-forked repository”). Run **`35405245550`** (commit `076f198a`):
+Branch `feat/phoenix-migration`, clean tree. 78 tests, 0 failures; compile
+`--warnings-as-errors` and format gates clean on WSL and Windows.
+
+### CI is fully green on the fork
+
+Enabling Actions took **two** things, and the first was a decoy: the *permissions*
+dropdown (“Allow all actions and reusable workflows”) is not the fork switch. The
+fork banner — “Workflows aren't being run on this forked repository” → “I
+understand my workflows, go ahead and enable them” — is. Once that was clicked,
+runs appeared.
+
+Run **`35405903263`** (commit `9f873818`) is **all green in one run**:
 
 | Job | Result |
 |---|---|
-| **Elixir Tests** | **success** — setup-beam from `.tool-versions`, cache, deps.get, compile `--warnings-as-errors`, format gate, tests (78/0) |
+| **Elixir Tests** | **success** — setup-beam from `.tool-versions`, deps cache, deps.get, compile `--warnings-as-errors`, format gate, `mix test` (78/0) |
 | **TypeScript Typecheck** | **success** |
-| **Go Tests** | **failure** at `Run tests` |
+| **Go Tests** | **success** |
 
-**The Go failure is environmental, not a regression.** The fork has no
-`data-latest` release, so the Go job's `Download game database` step falls
-through to its `::warning::` and `backend/data/quarm.db` is absent.
-`openTestDB` (`backend/internal/db/queries_test.go`) does
-`t.Fatalf("open db: %v")` when the file cannot be opened — so the db tests
-**fail hard rather than skipping**, contrary to the CI step's reassuring
-comment. Nothing in this migration touches Go code, and upstream's same job is
-green with the artifact present.
+### The Go red herring
 
-**To close 7.4:** create a `data-latest` release **on the fork** with `quarm.db`
-attached (`https://github.com/Eddy-Nunez/pq-companion/releases/new`; the file is
-`phoenix/priv/data/quarm.db`, 86 MB), then re-run CI. The Go job downloads it
-and goes green. Do **not** “fix” this by making the Go job skip — that would mask
-real db-test failures upstream.
+The first run (`35405245550`) had Go red, and it was **environmental, not a
+regression**: the fork had no `data-latest` release, so `backend/data/quarm.db`
+was absent, and `openTestDB` (`backend/internal/db/queries_test.go`) does
+`t.Fatalf` — the db tests **fail hard rather than skipping**, contrary to the CI
+step's comment. Attaching `quarm.db` to a `data-latest` release **on the fork**
+fixed it and the next run was green. Do not “fix” this by making Go skip — that
+would mask real db failures upstream.
 
 ### Footnote
 
-Two empty commits (`0aa732f0`, `076f198a`) were pushed only to trigger runs once
-Actions was enabled; drop them when convenient. Every push to the branch now
-triggers CI, so until the fork has `data-latest`, expect the Go job to stay red.
+Empty trigger commits `0aa732f0`, `076f198a` and `9f873818` exist only to start
+runs; drop them when convenient. Every push to the branch now runs CI.
 
 ### Next
 
-1. Create the fork's `data-latest` release (above) → 7.4 goes green → **34/34**.
-2. Decide on the §3.8 criterion-4 tension (settings round-trip deferred to
-   wave 2 per task 5.3) — see update 8.
-3. `openspec archive add-phoenix-scaffold`.
+1. Decide §3.8 criterion 4 — amend the plan to point at `add-data-model`
+   (recommended), or implement the round-trip early. See update 8.
+2. `openspec archive add-phoenix-scaffold`, which promotes the delta specs into
+   `openspec/specs/` and makes it the Wave 0 contract.
 
 ---
 
