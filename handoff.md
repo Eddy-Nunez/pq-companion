@@ -59,7 +59,9 @@ are ~136 MB outside the repo; delete them if the space is ever needed.
 1. **7.1 / 7.4** — enable Actions on the fork (repo Settings → Actions →
    General), push, and confirm `Go Tests`, `TypeScript Typecheck` and
    `Elixir Tests` are green in one run. The workflow is written and every step
-   passes locally; nothing else is pending.
+   passes locally; nothing else is pending. `actionlint` v1.7.12 also reports
+   `.github/workflows/ci.yml` clean (action inputs, expressions, shellcheck), so
+   the only unverified surface is the runner environment.
 2. Then decide on the §3.8 criterion-4 tension (settings round-trip deferred to
    wave 2 per task 5.3) and `openspec archive add-phoenix-scaffold`.
 
