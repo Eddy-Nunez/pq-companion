@@ -1,9 +1,113 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 8/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 9/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 3 — 2026-09-18 (Wave 0 to 9/34: task 2.5 complete — daisyUI out, Lucide in)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session finished the last open piece of task 2.5 (the component restyle
+and the icon decision). Everything from updates 1 and 2 below is still current
+except where this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 9/34**. Done: 1.1, 1.2, 1.3, 1.6,
+2.1, 2.2, 2.3, 2.4, **2.5 (now fully complete — tokens, restyle, icons)**.
+Untouched: 1.4, 1.5 (need Windows), 3.x, 4.x, 5.x, 6.x, 7.x, 8.x. Waves 1 and 2
+changes (`add-sidebar-navigation`, `add-data-model`) are still 0/27 and 0/55.
+
+Branch `feat/phoenix-migration`, tip **`551f178f`**, working tree clean, pushed
+to `origin`. `mix test` → **37 tests, 0 failures** (was 27 — the 10 new tests
+are `test/pq_companion_web/core_components_test.exs`, each pinning one 2.5
+verification). `mix compile --warnings-as-errors` clean, `mix assets.build` OK,
+`mix format --check-formatted` clean on the touched files.
+
+### What landed (commit `551f178f`)
+
+**Task 2.5, the restyle half:** `core_components.ex` had 93 daisyUI class
+references (`btn`, `alert-*`, `toast-*`, `input`/`select`/`textarea`/`checkbox`
+classes, `fieldset`, `label` class, `table-zebra`, `list-row`, `text-error`,
+`text-base-content/70`) across 501 lines — none resolved after daisyUI was
+removed, so every generated component rendered unstyled. All replaced with the
+reference's token utilities (`bg-(--color-surface)` etc.), matching its measured
+visual language: `px-3 py-1.5 text-sm rounded` buttons (primary =
+`--color-primary` bg; soft = transparent + `--color-border`), `w-full rounded
+border … px-3 py-1.5 text-sm outline-none` inputs with
+`focus:border-(--color-primary)` and `border-(--color-danger)` on error, the
+reference's `text-[10px] font-semibold uppercase tracking-widest` table
+headers, and a bottom-right flash toast (`fixed bottom-4 right-4`, surface bg,
+Lucide icons, `--color-info`/`--color-danger` accents). I restyled the flash
+against `ZealNotification.tsx` (the reference's toast) rather than the old
+daisyUI `toast`/`alert` classes. `layouts.ex` was already clean (2.2 rewrote it).
+
+**Icon decision — standardise on vendored Lucide, drop heroicons.** The
+reference renders every icon with `lucide-react` in **151 files** (pinned
+`1.16.0`), and wave 1's design D3 already commits to vendoring those paths into
+`PQWeb.Components.NavIcons`. Keeping heroicons for generic UI would mean two
+icon sets — the exact hazard the task names. So `icon/1` now emits one vendored
+`<svg>` per name (`info`, `circle-alert`, `x`; paths taken verbatim from the
+reference's pinned lucide-react), with lucide's default stroke attributes
+(fill none, `stroke: currentColor`, stroke-width 2, round caps/joins). Removed:
+`@plugin "../vendor/heroicons"` from `app.css`, `assets/vendor/heroicons.js`,
+and the `{:heroicons, …}` dep from `mix.exs` (unlocked from `mix.lock`).
+
+### Next, in dependency order (updated — item 1 is done)
+
+1. **3.1–3.5 — the `PQ.Shell` behaviour.** The behaviour + window struct
+   (plan §2.4 has the exact callback draft: `open`/`close`/`resize`/
+   `set_click_through`/`focus`/`list`), `PQ.Shell.Browser` as the dev default,
+   the conformance suite (must fail *naming the missing operation* against an
+   incomplete stub), and `push_event`/`handleEvent` for bounds/zoom/
+   display-only/lock. Groundwork already in place: the overlay layout emits the
+   `pq-window` meta and `PQCompanion.Windows.meta_payload/1` carries all native
+   props. Watch: the spec requires a **session token** and **bounds** key in
+   the payload, which `meta_payload/1` doesn't yet emit — decide during 3.2
+   whether they ride in the struct, the payload builder, or `PQ.Shell`.
+2. **4.1–4.6** — the two Ecto repos (`QuarmRepo` structurally read-only), the
+   read-only guard test, and the on-disk footprint resolution.
+3. **5.1–5.3** — `~/.pq-companion/runtime.json` plus the stdout record.
+4. **6.1–6.3** — dev workflow docs (live reload unblocked: `inotify-tools` is
+   installed).
+5. **7.1–7.4** — CI (UTF-8 locale requirement recorded in 7.1).
+6. **8.1–8.2** — wave verification, then `openspec archive add-phoenix-scaffold`.
+
+Note the whole tree still fails `mix format --check-formatted` on pre-existing
+files outside 2.5 (e.g. `windows.ex`, the two HTML shells) — I reverted mix
+format's sweep of unrelated files to keep this change focused. The 7.2
+formatting gate will force the full-tree sweep; do it then with a task of its
+own.
+
+### Things learned the hard way this session
+
+1. **`~H` treats `@foo` as an assign, so a module attribute cannot be read
+   inside a `~H` template.** `Map.fetch!(@lucide, @name)` inside `~H` compiled
+   (attribute „set but never used" warning) and would have failed at runtime as
+   a missing *assign*. The vendored icon map is read in a plain function
+   (`lucide_svg/2`) that the template calls — module attributes live in normal
+   code, assigns in templates.
+2. **`render_component` calls a function component with the assigns map
+   verbatim — a do-block slot is not wired into `assigns`.** Passing
+   `render_component(&button/1, ...) do "Go" end` left `inner_block` unset and
+   raised `KeyError`/`FunctionClauseError` on `render_slot`. A slot must be
+   passed as its entry structure: `%{__slot__: :inner_block, inner_block: fn
+   _changed, _arg -> content end}` (helper `slot/1` in the test file).
+3. **`render_component` needs every required assign explicitly** — `input/1`
+   without a `field:` needs `value:` passed, or it raises `KeyError`. The
+   do-block/slot discover-y above and this are LiveViewTest ergonomics, not
+   app bugs — worth a note when adding component tests in later waves.
+4. **Flash maps use string keys.** `Phoenix.Flash.get(%{error: "boom"}, :error)`
+   returns nil; `%{"error" => "boom"}` works. Test fixtures must use string
+   keys (they come from `fetch_live_flash` that way).
+5. **Grep assertions over source need care with substrings.** A test claiming
+   no `btn` survives still passes on `def button` — `button` does not contain
+   the contiguous substring `btn`. Assert the actual class strings
+   (`class="btn"`, `table-zebra`, `alert-error`), not bare words, and keep
+   `label`/`fieldset` out of the banned list (they're native HTML elements).
+
+---
 
 ## SESSION UPDATE 2 — 2026-09-18 (Wave 0 to 8/34: app scaffolded, windows built)
 
