@@ -8,12 +8,12 @@ defmodule PQCompanionWeb.CoreComponents do
   with doc strings and declarative assigns. You may customize and style
   them in any way you want, based on your application growth and needs.
 
-  The foundation for styling is Tailwind CSS, a utility-first CSS framework,
-  augmented with daisyUI, a Tailwind CSS plugin that provides UI components
-  and themes. Here are useful references:
-
-    * [daisyUI](https://daisyui.com/docs/intro/) - a good place to get
-      started and see the available components.
+  The foundation for styling is Tailwind CSS, a utility-first CSS framework.
+  daisyUI was removed for this migration — these components are being restyled
+  against the reference app's own `@theme` tokens (wave 0 task 2.5). Until that
+  lands, the daisyUI class names below (`btn`, `alert`, `input`, `select`,
+  `table`, `list`, …) do not resolve and these components render unstyled.
+  Here are useful references:
 
     * [Tailwind CSS](https://tailwindcss.com) - the foundational framework
       we build on. You will use it for layout, sizing, flexbox, grid, and

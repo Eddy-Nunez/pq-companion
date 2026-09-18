@@ -58,18 +58,29 @@ defmodule PQCompanion.MixProject do
        app: false,
        compile: false,
        depth: 1},
-      {:daisyui,
-       github: "saadeghi/daisyui",
-       tag: "v5.5.20",
-       sparse: "packages/bundle",
-       app: false,
-       compile: false,
-       depth: 1},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+
+      # ── Added for the PQ Companion migration (wave 0 task 1.3) ──────────────
+      # daisyUI was removed: the reference hand-rolls components against its own
+      # `@theme` tokens, and daisyUI's theme variables collide with them by name.
+      # See openspec/changes/add-phoenix-scaffold design D7.
+
+      # Watching the EverQuest directory (log, Zeal exports, .ini files).
+      # NOTE: Windows backends are unverified — wave 0 task 1.5 settles it, and
+      # the fallback is a poll-based GenServer. Only wave 3 depends on this.
+      {:file_system, "~> 1.1"},
+
+      # Validating config load options (settings changeset work, wave 2).
+      {:nimble_options, "~> 1.1"},
+
+      # Quality gates — dev/test only, not in a release.
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
 
