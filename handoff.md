@@ -1,9 +1,107 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 9/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 14/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 4 — 2026-09-18 (Wave 0 to 14/34: the shell contract is real)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session landed all of section 3 (tasks 3.1–3.5), the first slice that is a
+real contract rather than a placeholder. Updates 1–3 remain current except where
+this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 14/34**. Done: 1.1, 1.2, 1.3, 1.6,
+2.1, 2.2, 2.3, 2.4, 2.5, **3.1–3.5**. Untouched: 1.4, 1.5 (need Windows), 4.x,
+5.x, 6.x, 7.x, 8.x. Waves 1 and 2 changes (`add-sidebar-navigation`,
+`add-data-model`) are still 0/27 and 0/55.
+
+Branch `feat/phoenix-migration`, tip **`177736ea`**, working tree clean.
+`mix test` → **53 tests, 0 failures** (was 37). `mix compile --warnings-as-errors`
+clean, `mix assets.build` OK, `mix format --check-formatted` clean on every
+file this session touched. Real server: `/` and `/w/npc` both 200 with a
+complete `pq-window` spec.
+
+### What landed
+
+| Module | What |
+|---|---|
+| `lib/pq_companion/shell.ex` | The behaviour (six callbacks), the `window` type, `spec/1`, `to_json/1`, token signing/verification, config-selected dispatch |
+| `lib/pq_companion/shell/browser.ex` | Dev-default adapter: records specs, reports native-only props as `:unmet` |
+| `lib/pq_companion/shell/conformance.ex` | `run/1` — `:ok` or `{:error, reasons}` naming the failed operation |
+| `lib/pq_companion/window_state.ex` | ETS-backed runtime overrides: bounds, zoom, display_only, click_through, locked |
+| `lib/pq_companion_web/shell_events.ex` | `push_event`/`handleEvent` for the five live properties |
+
+Both window classes now render the `pq-window` meta tag (the main window's comes
+from `root.html.heex`), carrying the session token and bounds. `assets/js/app.js`
+gained the `PqWindow` hook (debounced bounds reporting) and a `phx:pq:window`
+listener that forwards pushed patches to `window.pqShell` when a native shell
+injects it.
+
+### The three decisions this session actually made
+
+1. **The module is `PQCompanion.Shell`, not `PQ.Shell`.** The plan and the specs
+   write the short `PQ.*`/`PQWeb.*` aliases, but the generated app's namespace is
+   `PQCompanion` and every existing module uses it. Renaming the tree to match the
+   alias is churn with no behavioural gain. **This is a standing discrepancy** —
+   wave 1's specs say `PQWeb.Nav` where the code will be `PQCompanionWeb.Nav`.
+   Either the specs adopt the real namespace or a deliberate rename happens; do
+   not let the two spellings both appear in code. Resolve it in wave 1, when
+   `PQWeb.Nav` is written.
+2. **`token` and `bounds` live in `Shell.spec/1`, and `Windows.meta_payload/1`
+   was deleted.** The static registry (`PQCompanion.Windows`) stays a pure
+   declaration; the spec builder merges it with runtime state from
+   `PQCompanion.WindowState` and signs a fresh per-window token
+   (`Phoenix.Token.sign`, salt `pq-window`). Keeping the old string-keyed builder
+   alongside would have been two sources of truth for the same JSON.
+3. **The conformance suite is a function (`run/1`), not a test-generating
+   macro.** Only that shape lets a test assert the *failure* path — it runs
+   `run/1` against `IncompleteAdapter` and asserts the error names `close/1`.
+
+### Next, in dependency order
+
+1. **4.1–4.6 — the two Ecto repos.** `PQ.UserRepo` (read-write, WAL, busy
+   timeout) and `PQ.QuarmRepo` (structurally read-only), the read-only guard
+   test, raw reads of `items`/`spells_new`/`npc_types`/`zone`, and the on-disk
+   footprint resolution. `quarm.db` is still absent — fetch it before 4.3:
+   `curl -L -o backend/data/quarm.db
+   https://github.com/jasonsoprovich/pq-companion/releases/download/data-latest/quarm.db`
+2. **5.1–5.3** — `~/.pq-companion/runtime.json` plus the stdout record.
+3. **6.1–6.3** — dev workflow docs (live reload unblocked: `inotify-tools` is
+   installed).
+4. **7.1–7.4** — CI (UTF-8 locale requirement recorded in 7.1).
+5. **8.1–8.2** — wave verification, then `openspec archive add-phoenix-scaffold`.
+
+Windows-side 1.4/1.5 are still outstanding and still need hex/rebar/phx_new plus
+the `_build`/`deps` symlink removal described in update 2.
+
+### Things learned the hard way this session
+
+1. **`mix format` reformats the `<script>` tags in `.heex` shell files** into a
+   two-line empty-element shape. `windows.ex` and both HTML shells were
+   previously unformatted (update 3 recorded this); formatting them is a net
+   gain, but the `</script>` on its own line is the formatter's doing, not a
+   mistake to revert — reverting re-breaks `--check-formatted`.
+2. **`function_exported?/3` is the right gate for the conformance suite, but it
+   lies until the module is loaded.** `Code.ensure_loaded(adapter)` first. And a
+   stub must *not* carry `@behaviour`, or the missing callbacks become compile
+   warnings and the runtime check never gets a chance to be the interesting one.
+3. **An ETS table read from a render path must not serialize behind a
+   GenServer.** `WindowState.get/1` reads the `:public` table directly; writes go
+   through `GenServer.call`. Window renders happen concurrently and
+   `Shell.spec/1` is on that path.
+4. **Tests that write global state must be `async: false`.** The browser adapter
+   records state and `WindowState` is global; `shell_test.exs` and
+   `shell_events_test.exs` are sync. ExUnit runs sync modules after async ones,
+   so the async `windows_test` reads are not racing the writes.
+5. **The real-server check is worth the 6 seconds.** `mix phx.server` + `curl`
+   proved both layouts emit the tag end-to-end; the LiveView tests alone would
+   not have caught e.g. a root-layout guard that only worked for overlays.
+
+---
 
 ## SESSION UPDATE 3 — 2026-09-18 (Wave 0 to 9/34: task 2.5 complete — daisyUI out, Lucide in)
 
