@@ -85,6 +85,18 @@ defmodule PQCompanion.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
+      # `mix dev` is the one-command development startup (wave 0 task 6.1).
+      # It deliberately does not chain `setup`: `setup` ends with
+      # `run priv/repo/seeds.exs`, which starts the whole application before
+      # `phx.server` can set `serve_endpoints`, so the endpoint would never bind.
+      dev: [
+        "deps.get",
+        "ecto.create --quiet",
+        "ecto.migrate --quiet",
+        "assets.setup",
+        "assets.build",
+        "phx.server"
+      ],
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],

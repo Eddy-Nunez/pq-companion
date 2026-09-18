@@ -1,9 +1,77 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 23/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 26/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 7 — 2026-09-18 (Wave 0 to 26/34: dev workflow verified)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session landed section 6 (tasks 6.1–6.3). Updates 1–6 remain current except
+where this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 26/34**. Done: 1.1–1.3, 1.6, 2.1–2.5,
+3.1–3.5, 4.1–4.6, 5.1–5.3, **6.1–6.3**. Remaining: **1.4, 1.5** (Windows) and
+**7.1–7.4, 8.1–8.2**.
+
+Branch `feat/phoenix-migration`, working tree clean. `mix test` → **78 tests,
+0 failures**. `mix compile --warnings-as-errors` clean, format clean on touched
+files.
+
+### What landed
+
+- **`phoenix/README.md`** rewritten for the migration: prerequisites, the
+  `quarm.db` download, `inotify-tools`, `mix dev`, the runtime record/port
+  fallback, common commands, and a module map.
+- **`mix dev` alias** — one-command startup: deps, DB create/migrate, assets,
+  serve.
+- **Verified live reload** and a **real-browser pass over all 16 overlays**.
+
+### The `mix dev` trap (worth remembering for any future alias)
+
+`dev: ["setup", "phx.server"]` **does not work.** `setup` ends with
+`run priv/repo/seeds.exs`, which starts the whole application. `phx.server` then
+sets `serve_endpoints: true` and calls `app.start`, but the app is already
+started, so the endpoint **never binds a listener** — the app appears to run,
+serves nothing, and writes no runtime record. The alias now spells out
+`deps.get`, `ecto.create --quiet`, `ecto.migrate --quiet`, `assets.setup`,
+`assets.build`, `phx.server` so nothing starts the app before `phx.server`.
+The general rule: **inside one `mix` invocation, never run an app-starting task
+before `phx.server`.**
+
+### Verification this session
+
+- **6.1** — `mix dev` served `/` and `/w/dps` with 200 and wrote
+  `~/.pq-companion/runtime.json` (port 4000), removed on stop.
+- **6.2** — with `mix phx.server` running, a WSL-side edit to `window_live.ex`
+  was hot-recompiled with no restart: the next `GET /` showed the new string and
+  the log showed `Compiling 1 file (.ex)`. `inotify-tools` is installed. (The
+  update-1 caveat stands: Windows-native writes produce no inotify events.)
+- **6.3** — real headless Chrome (`agent-browser`, CDP) against `mix dev`:
+  **16/16 overlay routes rendered their own label**; screenshots of the main
+  window and `/w/dps` confirm styling and the transparent overlay body.
+
+### Observation, not a problem
+
+While checking listeners, a random loopback port owned by `Mix.Sync.PubSub`
+shows up under `mix run`/`mix phx.server`. It is Mix's dev recompilation
+coordination socket, not our application, and it does not exist in a release.
+`Runtime.actual_port/1` asks Bandit directly, so it is unaffected.
+
+### Next
+
+1. **7.1–7.4** — CI: `erlef/setup-beam` pinned to `.tool-versions`, the UTF-8
+   locale (`LANG=C.UTF-8`), a formatting gate, the game-database download step,
+   and confirming the existing Go/TS jobs still run.
+2. **8.1–8.2** — walk `docs/phoenix-migration-plan.md` §3.8 and the
+   reference-tree diff, then `openspec archive add-phoenix-scaffold`.
+3. **1.4/1.5** — still Windows-only (hex/rebar/phx_new, remove the
+   `_build`/`deps` symlinks before Windows `mix`, UTF-8 locale).
+
+---
 
 ## SESSION UPDATE 6 — 2026-09-18 (Wave 0 to 23/34: the app announces itself)
 

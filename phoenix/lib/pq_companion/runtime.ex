@@ -70,7 +70,11 @@ defmodule PQCompanion.Runtime do
   """
   @spec choose_port(integer()) :: non_neg_integer()
   def choose_port(preferred) do
-    case :gen_tcp.listen(preferred, [:binary, ip: {127, 0, 0, 1}, active: false]) do
+    # `reuseaddr` matters: a just-freed port can be in TIME_WAIT, and a probe
+    # without it reports the port busy and needlessly falls back.
+    options = [:binary, ip: {127, 0, 0, 1}, active: false, reuseaddr: true]
+
+    case :gen_tcp.listen(preferred, options) do
       {:ok, socket} ->
         :gen_tcp.close(socket)
         preferred

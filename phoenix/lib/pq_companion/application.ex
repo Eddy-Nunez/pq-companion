@@ -52,13 +52,17 @@ defmodule PQCompanion.Application do
     if PQCompanion.Runtime.server_enabled?() do
       case PQCompanion.Runtime.announce_from() do
         {:ok, record} ->
-          Logger.info("runtime announced",
-            port: record["port"],
-            record: PQCompanion.Runtime.record_path()
+          Logger.info(
+            "runtime announced at #{PQCompanion.Runtime.record_path()} port=#{record["port"]}"
           )
 
+        # The app was started without serving (e.g. `mix run`, `mix compile`):
+        # there is no listener to announce, and that is not a failure.
+        {:error, :no_server_found} ->
+          :ok
+
         {:error, reason} ->
-          Logger.warning("could not announce the runtime record", reason: inspect(reason))
+          Logger.warning("could not announce the runtime record: #{inspect(reason)}")
       end
     end
 
