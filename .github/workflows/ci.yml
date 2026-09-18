@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `feat/phoenix-migration` is the long-lived migration branch; it becomes
+    # `main` at wave 11. Running CI on it keeps the Go/TS jobs honest too.
+    branches: [main, feat/phoenix-migration]
   pull_request:
     branches: [main]
 
@@ -61,3 +63,72 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  # ── Elixir/Phoenix tests (the migration) ─────────────────────────────────────
+  test-phoenix:
+    name: Elixir Tests
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      # With no locale the BEAM starts in latin1 name encoding and Elixir warns
+      # it "may malfunction". EQ item and NPC names are not guaranteed ASCII, so
+      # this is a correctness requirement, not cosmetic (wave 0 task 7.1).
+      LANG: C.UTF-8
+      ELIXIR_ERL_OPTIONS: "+fnu"
+      MIX_ENV: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          # Erlang/Elixir versions come from the same pin the local toolchain
+          # (mise) and the release build use — one source of truth.
+          version-file: .tool-versions
+          version-type: strict
+
+      - name: Cache dependencies and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            phoenix/deps
+            phoenix/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('phoenix/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      # The game database is not in version control. Data-backed tests run when
+      # it is present and skip with an explicit warning when it is not — never
+      # reported as passing (wave 0 task 7.3).
+      - name: Download game database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p phoenix/priv/data
+          if gh release download data-latest \
+              --pattern "quarm.db" \
+              --dir phoenix/priv/data \
+              --repo "$GITHUB_REPOSITORY" 2>/dev/null; then
+            echo "quarm.db downloaded ($(du -sh phoenix/priv/data/quarm.db | cut -f1))"
+          else
+            echo "::warning::quarm.db not found in data-latest release — data-backed tests will be skipped"
+          fi
+
+      - name: Fetch dependencies
+        working-directory: phoenix
+        run: mix deps.get
+
+      - name: Compile with warnings as errors
+        working-directory: phoenix
+        run: mix compile --warnings-as-errors
+
+      - name: Check formatting
+        working-directory: phoenix
+        run: mix format --check-formatted
+
+      - name: Run tests
+        working-directory: phoenix
+        run: mix test
