@@ -118,11 +118,16 @@ erl_crash.dump
 # `mix deps.get` populates deps/ and `mix compile` populates _build/ — both are
 # hundreds of MB and platform-specific (NIFs are .so on Linux, .dll on Windows,
 # so they must never be shared between the WSL and Windows build spaces).
-/phoenix/_build/
-/phoenix/deps/
+/phoenix/_build
+/phoenix/deps
 /phoenix/tmp/
 /phoenix/priv/static/
 /phoenix/priv/data/
 /phoenix/priv/repo/*.db
 /phoenix/priv/repo/*.db-*
 /phoenix/*.ez
+
+# `_build` and `deps` are symlinks to an ext4 cache (see handoff.md):
+# the source tree stays Windows-visible on /mnt/c while build artefacts avoid
+# the 9p penalty. Patterns deliberately have no trailing slash so the symlinks
+# themselves are ignored, not just real directories.

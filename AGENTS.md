@@ -6,7 +6,12 @@ This is the **migration tree**:
 
 - Branch: `feat/phoenix-migration`, branched from `upstream/main` @ `d2c35557`
 - Path: `/mnt/c/Users/eddyn/pq-companion-phoenix` (= `C:\Users\eddyn\pq-companion-phoenix`)
-- Worktree — `.git` here is a **file**, not a directory
+- WSL convenience symlink: `/home/nunez/pq-companion-phoenix` -> the path above
+- Worktree — `.git` here is a **file**, not a directory (and its pointer is
+  deliberately *relative*; see "Worktree git pointers" below)
+- `phoenix/_build` and `phoenix/deps` are **symlinks to an ext4 cache**, not real
+  directories — source is Windows-visible, build artefacts are not (see "Two
+  build spaces")
 - The **original checkout** (`/mnt/c/Users/eddyn/pq-companion`) is the shipping Go
   app on its own branches. **Do not do migration work there.** Run
   `git worktree list` to see both.
@@ -43,34 +48,65 @@ fork "upstream" — the handoff docs and PR descriptions depend on this wording.
 
 ## Two build spaces — WSL and Windows
 
-The target is Windows, but the primary development environment is WSL. Both are
-pointed at this same directory (`/mnt/c/...` is the Windows filesystem), which
-makes one thing dangerous:
+The target is Windows, but the primary development environment is WSL. The tree
+is laid out to satisfy both:
 
-> **`_build/` and `deps/` artifacts must never be shared between the WSL side and
-> the Windows side.** Compiled NIFs are platform-specific (`.so` vs `.dll`) —
-> Exqlite is a NIF, and it is the data layer. Sharing a build directory across
-> the two sides produces confusing load failures.
+```
+/mnt/c/Users/eddyn/pq-companion-phoenix     source — Windows-visible
+/home/nunez/pq-companion-phoenix            symlink to the above, for WSL
+  └── phoenix/_build -> /home/nunez/.cache/pq-companion-phoenix/_build
+  └── phoenix/deps   -> /home/nunez/.cache/pq-companion-phoenix/deps
+```
+
+**Source lives on the Windows filesystem; build artefacts live on ext4.** That
+split is not cosmetic. Measured on this box (2026-09-18), scaffold only:
+
+| operation | artefacts on 9p | artefacts on ext4 |
+|---|---|---|
+| `mix deps.get` | 1m31s | **3.7s** |
+| `mix compile --force` | 2m35s | **6.8s** |
+| `mix test` | 2m18s | **5.0s** |
+
+~25×, and it scales badly as the app grows. Mix also honours `MIX_BUILD_PATH`
+and `MIX_DEPS_PATH` if you ever prefer them over symlinks.
 
 Rules:
 
-- **WSL: everything by default.** Day-to-day dev, `mix test`, `mix format`,
-  `openspec`, all feature work. This is the fast path.
-- **Windows: only what must actually run on Windows.** At minimum, and *early*:
-  - the Exqlite NIF load (Phase 0 task 1.4) — this decides whether `ecto_sqlite3`
-    is viable at all, and it is the one check that is worthless in WSL
-  - `file_system` directory watching (Phase 0 task 1.5) — fallback is a polling
-    GenServer if the Windows backend is unavailable
-  - the named-pipe bridge spike (Wave 3)
-  - anything touching the real EQ directory, Zeal exports, or overlay windows
-- **Separate the build path per side.** Set `MIX_BUILD_PATH` to a
-  platform-specific directory (e.g. `_build/wsl` / `_build/win`). Verify during
-  Phase 0 task 1.4 whether any dependency's native build also writes into
-  `deps/`; if it does, give the Windows side its own **detached** worktree
-  (`git worktree add --detach`) rather than fighting the build path.
-- Never `npm install` from WSL into either tree — the reference warns that this
-  breaks the Windows electron binaries. The Elixir app should need no `npm` at
+- **WSL does all building.** From WSL the symlinks resolve normally, so `mix`
+  behaves as if everything were local and fast.
+- **Windows cannot follow those two symlinks.** Windows reports them as 0-byte
+  reparse points (`Archive, ReparsePoint`, `IsDir=False`), not directories. Fine,
+  because Windows does not build — Burrito cross-builds the Windows sidecar
+  *from WSL*. Windows only ever *runs* the resulting `.exe`.
+- **If Windows-side `mix` is ever genuinely needed**, delete the `_build`/`deps`
+  symlinks first or set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` on the Windows side,
+  otherwise Windows trips over the reparse points.
+- **`_build`/`deps` must never be shared between the two sides.** Compiled NIFs
+  are platform-specific (`.so` vs `.dll`) and Exqlite is a NIF. Keeping Windows
+  artefacts out of the tree sidesteps that entire class of problem.
+- Never `npm install` from WSL into the reference tree — it breaks the Windows
+  electron binaries in `node_modules`. The Elixir app should need no `npm` at
   all; if it does, that is worth questioning.
+
+### Worktree git pointers: keep them RELATIVE
+
+This worktree's `.git` pointer and the main repo's
+`.git/worktrees/pq-companion-phoenix/gitdir` are **deliberately relative**:
+
+```
+worktree .git   -> gitdir: ../pq-companion/.git/worktrees/pq-companion-phoenix
+admin gitdir    -> ../../../pq-companion-phoenix/.git
+```
+
+git writes these as *absolute* paths, and when this worktree was created from WSL
+it wrote `/mnt/c/...`, which Windows git cannot resolve — Windows-side git failed
+with `fatal: not a git repository` until they were made relative. Relative
+pointers resolve identically from both sides.
+
+> **Fragile:** any future `git worktree add`, `git worktree repair`, or tool that
+> rewrites these will make them absolute again and silently break Windows-side
+> git. If Windows git reports "not a git repository", check these two files
+> first. Verify from either side with `git rev-parse --abbrev-ref HEAD`.
 
 ## Elixir/Phoenix migration — read this before writing any code
 

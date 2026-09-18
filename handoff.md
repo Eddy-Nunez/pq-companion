@@ -9,24 +9,64 @@
 
 **Read this first — where it conflicts with anything below, this wins.**
 
-### Where the trees are — they moved this session
+### Where the trees are
 
-| Tree | Path | Filesystem | Branch | Role |
-|---|---|---|---|---|
-| Migration | `/home/nunez/pq-companion-phoenix` | **ext4** (`/dev/sdd`) | `feat/phoenix-migration` @ `0aa89896` | The rewrite. All new work. |
-| Reference | `/mnt/c/Users/eddyn/pq-companion` | Windows (9p) | `feat/raidcomp-pack` @ `81816394` | Shipping Go app. Frozen reference. |
+| Tree | Path | Branch | Role |
+|---|---|---|---|
+| Migration | `/mnt/c/Users/eddyn/pq-companion-phoenix` | `feat/phoenix-migration` @ `13d36fed` | The rewrite. All new work. |
+| Reference | `/mnt/c/Users/eddyn/pq-companion` | `feat/raidcomp-pack` @ `81816394` | Shipping Go app. Frozen reference. |
 
-`git worktree list` from either tree shows both. The migration tree **moved off
-`/mnt/c` this session** — see the 9p gotcha below for why. The move was done with
-`git worktree remove` + `git worktree add`, not `git worktree move` (which fails
-cross-device: `Invalid cross-device link`).
+`git worktree list` from either tree shows both.
 
-`~/pq-companion-phoenix` is on ext4, so it is **not** directly reachable from
-Windows Explorer. Windows-side work reaches it via
-`\\wsl$\Ubuntu\home\nunez\pq-companion-phoenix`, or use a second detached
-worktree on `/mnt/c` if that proves awkward. This trade was deliberate: the 9p
-penalty is catastrophic for Elixir and the Windows side only needs the source
-occasionally.
+**The migration tree has moved twice.** It was cut on `/mnt/c`, moved to ext4 for
+speed, then moved **back** to `/mnt/c` on 2026-09-18 because Windows-side builds
+were expected. The speed problem was then solved a better way — by relocating
+only the build artefacts:
+
+```
+/mnt/c/Users/eddyn/pq-companion-phoenix     source — Windows-visible
+/home/nunez/pq-companion-phoenix            symlink to the above, for WSL
+  └── phoenix/_build -> /home/nunez/.cache/pq-companion-phoenix/_build
+  └── phoenix/deps   -> /home/nunez/.cache/pq-companion-phoenix/deps
+```
+
+That recovers essentially all the lost speed — measured on the scaffold alone:
+
+| operation | artefacts on 9p | artefacts on ext4 |
+|---|---|---|
+| `mix deps.get` | 1m31s | **3.7s** |
+| `mix compile --force` | 2m35s | **6.8s** |
+| `mix test` | 2m18s | **5.0s** |
+
+Both moves used `git worktree remove` + `git worktree add`, never
+`git worktree move` — that fails cross-device with `Invalid cross-device link`,
+and `remove`+`add` is safe whenever the branch is already pushed.
+
+**Caveat:** Windows sees `_build`/`deps` as 0-byte reparse points, not
+directories, so it cannot follow them. Irrelevant if Windows never runs `mix` —
+which is the plan (Burrito builds from WSL). If Windows-side `mix` is ever
+needed, delete the symlinks first or set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` there.
+
+### Worktree git pointers must be RELATIVE
+
+Windows-side git was **broken** in this tree until 2026-09-18:
+
+```
+fatal: not a git repository: /mnt/c/Users/eddyn/pq-companion/.git/worktrees/pq-companion-phoenix
+```
+
+git writes the worktree pointer as an *absolute* path, and creating the worktree
+from WSL wrote `/mnt/c/...`, which Windows git cannot resolve. Fixed by making
+both pointers relative — they then resolve identically from either side:
+
+```
+worktree .git   -> gitdir: ../pq-companion/.git/worktrees/pq-companion-phoenix
+admin gitdir    -> ../../../pq-companion-phoenix/.git
+```
+
+Any future `git worktree add` / `git worktree repair` (git 2.43 has no
+`--relative-paths`) will rewrite these as absolute and silently break Windows git
+again. If that error reappears, fix these two files first.
 
 ### Fork posture — permanent divergence, NOT upstream
 
@@ -250,6 +290,56 @@ openspec archive <change>                       # promote deltas into specs/
   abilities collapses from **three** copies to one. `combatantColor.ts`,
   `chChainPatterns.ts`, `overlayTextStyle.ts` stay separate — presentation, not
   duplication.
-- **Two build spaces.** WSL/ext4 for dev; Windows for NIF/watcher/named-pipe
-  validation. `_build` and `deps` must never be shared between them (NIFs are
-  platform-specific: `.so` vs `.dll`).
+- **Two build spaces.** Source is Windows-visible on `/mnt/c`; build artefacts
+  live on ext4 via symlinks (~25× faster). Windows never runs `mix` — see the
+  Windows strategy below.
+- **No `npm`, no `package.json`.** Verified: the `esbuild` and `tailwind` hex
+  packages download standalone platform binaries, and `mix assets.build`
+  succeeds with `node` absent from PATH. Tailwind resolves to v4.3.0, the exact
+  version the reference pins, so its `@theme` tokens port verbatim. `floki` was
+  dropped as redundant (`lazy_html` is the Phoenix 1.8 default). daisyUI was
+  removed — see task 2.5 for the component restyle it forces.
+
+### Windows strategy — Burrito, and what Windows is actually for
+
+Windows is needed for three things, and **Docker cannot provide any of them**
+(verified 2026-09-18: the engine is `OSType=linux`, and pulling a Windows base
+image fails with `no matching manifest for linux/amd64/v3`; containers are also
+headless, so they can't host transparent overlays over a DirectX game, and
+container isolation severs the host-process visibility Zeal's `\\.\pipe\zeal_<pid>`
+needs).
+
+| Need | How it's met |
+|---|---|
+| Build the Windows artifact | **Burrito**, cross-building from WSL |
+| Run the deliverable | The Burrito `.exe` (bundles ERTS — no Elixir install on Windows) |
+| Zeal named pipe | The Burrito `.exe`, running natively beside the game |
+
+**Burrito is the key decision.** Its README states it directly: *"We support
+targeting Windows (x86_64) from MacOS and Linux, we do not officially support
+building ON Windows, it's recommended you use WSL if your development machine is
+Windows."* That is this setup exactly. It produces a self-extracting archive
+bundling the BEAM code + the target ERTS + NIF artifacts, so the Windows side
+never needs an Elixir install at all.
+
+Toolchain installed via mise, no sudo: **zig 0.15.2** (Burrito requires exactly
+0.15.2), **7zip 26.03**, and `xz` (already present). Note mise ships the binary as
+`7zz`, while Burrito looks for `7z` — a shim was added at `~/.local/bin/7z`.
+
+Use **`skip_nifs: true`** and drop in Exqlite's precompiled Windows NIF rather
+than asking Zig to cross-compile SQLite. That NIF is confirmed to exist:
+`exqlite-nif-2.17-x86_64-windows-msvc-0.40.0.tar.gz` is in exqlite's checksum
+matrix, with `{:win32, :nt} => %{include_default_ones: true}` in `cc_precompiler`
+— so Windows needs **no C toolchain** on the primary path. This sharply lowers
+the "Exqlite has no usable Windows NIF" risk that `add-phoenix-scaffold`'s design
+originally rated High.
+
+**Still open for Wave 11:** Burrito builds the Elixir *sidecar*, not the GUI. If
+the shell is Electron, that needs its own Windows build (electron-builder can
+target Windows from Linux via wine, or build natively — the reference already has
+a working Windows electron-builder flow). Wave 11 is two artifacts, not one.
+
+**Still unresolved:** whether a Windows-native Elixir install is needed for tasks
+1.4/1.5 validation. A Burrito build per check is slow to iterate on, so a native
+install may still be the pragmatic choice for *validation*. Do not assume Burrito
+removes that need for Phase 0.

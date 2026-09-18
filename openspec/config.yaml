@@ -115,13 +115,18 @@ context: |
   1. **Windows-local.** Runs on the same machine as the game. Not a hosted web
      app. Zeal file exports and the EQ log are local; ZealPipes is a Windows
      named pipe.
-  2. **Two build spaces, one directory.** Primary development is WSL against
-     `/mnt/c/...`; the target is Windows. `_build/` and `deps/` must NOT be shared
-     between the two sides — compiled NIFs are platform-specific (`.so` vs
-     `.dll`) and Exqlite is a NIF. Set `MIX_BUILD_PATH` per side. Only
-     Windows-specific validation runs on Windows: the Exqlite NIF load,
-     `file_system` watching, the named-pipe spike, and anything touching the real
-     EQ directory or overlay windows.
+  2. **Two build spaces.** Source is Windows-visible at
+     `/mnt/c/Users/eddyn/pq-companion-phoenix`; build artefacts live on ext4 via
+     symlinks (`phoenix/_build`, `phoenix/deps` -> `~/.cache/pq-companion-phoenix/`),
+     worth ~25× on compile/test time. `_build`/`deps` must never be shared between
+     the WSL and Windows sides — compiled NIFs are platform-specific (`.so` vs
+     `.dll`) and Exqlite is a NIF. **Windows does not build.** The Windows
+     artifact is cross-built from WSL with **Burrito** (zig 0.15.2 + 7zip, both
+     from mise, no sudo) using `skip_nifs: true` plus Exqlite's precompiled
+     Windows MSVC NIF. Windows is only ever used to *run* the resulting `.exe`:
+     the Exqlite NIF load, `file_system` watching, the named-pipe spike, and
+     anything touching the real EQ directory or overlay windows. Docker cannot
+     help with any of this — see the plan's Windows strategy.
   3. **Overlay windows** are transparent, always-on-top, click-through, floating
      over a DirectX game. A browser cannot do this — only a native shell. The
      shell is behind a **swappable adapter** (`PQ.Shell`) because the
