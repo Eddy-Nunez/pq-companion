@@ -550,29 +550,6 @@ type Preferences struct {
 	// (e.g. a player running a hate-amp buff). May be nil/omitted.
 	RaidThreatPlayerMods map[string]int `yaml:"raid_threat_player_mods,omitempty" json:"raid_threat_player_mods,omitempty"`
 
-	// PoPFlagsEnabled gates the Planes of Power flagging tracker (per-character
-	// planar-progression checklist + dependency graph). Dev-gated, off by
-	// default — PoP isn't live on Project Quarm yet, so this is a preview/build-
-	// ahead feature whose live-detection paths can only be tuned post-release.
-	PoPFlagsEnabled bool `yaml:"pop_flags_enabled,omitempty" json:"pop_flags_enabled"`
-
-	// FactionTrackerEnabled gates the session Faction Tracker (per-character
-	// faction wishlist + a running better/worse tally inferred from the log's
-	// "Your faction standing with X got better/worse" lines, with a
-	// best-effort point estimate for changes that correlate to a resolved
-	// kill). Dev-gated, off by default: EQ never logs a faction's absolute
-	// value or point amount, so this is always an approximate session-only
-	// view, not a real faction number — see LIMITATIONS.md.
-	FactionTrackerEnabled bool `yaml:"faction_tracker_enabled,omitempty" json:"faction_tracker_enabled"`
-
-	// RaidsEnabled gates the Raids section (role taxonomy editor, encounter
-	// knowledge base, and the live MIN/REC composition checker). Dev-gated,
-	// off by default while it's tested against real raids: the knowledge base
-	// ships with a single seeded encounter (Avatar of War), and the checker's
-	// candidate counts are class-eligibility, not actual assignments — one
-	// member can be counted toward more than one role's need at once.
-	RaidsEnabled bool `yaml:"raids_enabled,omitempty" json:"raids_enabled"`
-
 	// NPCOverlayDashboardSections controls which optional sections of the
 	// NPC overlay are visible in the dashboard panel. Name, zone, pet
 	// owner, raid/rare badges, and the HP bar are always shown regardless

@@ -434,36 +434,15 @@ export default function OverlaysDashboard(): React.ReactElement {
     ),
   )
 
-  // Raid Readiness only makes sense to offer once the Raids feature itself is
-  // on (Settings → Developer → Flags → Raid Composition) — same reactive-read
-  // pattern as Discord Voice above, since raids_enabled is also a runtime
-  // preference the user can flip at any time.
-  const [raidsEnabled, setRaidsEnabled] = useState(false)
-  const refreshRaidsEnabled = useCallback(() => {
-    getConfig()
-      .then((c) => setRaidsEnabled(c.preferences.raids_enabled ?? false))
-      .catch(() => {})
-  }, [])
-  useEffect(() => { refreshRaidsEnabled() }, [refreshRaidsEnabled])
-  useWebSocket(
-    useCallback(
-      (msg: { type: string }) => {
-        if (msg.type === WSEvent.ConfigUpdated) refreshRaidsEnabled()
-      },
-      [refreshRaidsEnabled],
-    ),
-  )
-
   // Panel keys actually offered in the UI: hps is gated by SHOW_HPS_PANEL
-  // (shared with the sidebar's pop-out-all toggle); discordVoice and
-  // raidReadiness are gated by their respective settings above; the rest
-  // (including the Threat Meter) are always available.
+  // (shared with the sidebar's pop-out-all toggle); discordVoice is gated by
+  // the setting above; the rest (including Raid Readiness and the Threat
+  // Meter) are always available.
   const visiblePanelKeys = useMemo(() => {
     let keys = VISIBLE_DASHBOARD_PANEL_KEYS
     if (!discordVoiceEnabled) keys = keys.filter((k) => k !== 'discordVoice')
-    if (!raidsEnabled) keys = keys.filter((k) => k !== 'raidReadiness')
     return keys
-  }, [discordVoiceEnabled, raidsEnabled])
+  }, [discordVoiceEnabled])
 
   useEffect(() => {
     saveDashboardLayout(layout)
@@ -922,7 +901,7 @@ export default function OverlaysDashboard(): React.ReactElement {
             onLayoutChange={handleLayoutChange('zoneLockouts')}
           />
         )}
-        {raidsEnabled && layout.raidReadiness.visible && (
+        {layout.raidReadiness.visible && (
           <RaidReadinessPanel
             key={`raidReadiness-${layoutVersion}`}
             defaultX={layout.raidReadiness.x}

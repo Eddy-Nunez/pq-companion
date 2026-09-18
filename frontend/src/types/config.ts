@@ -217,17 +217,6 @@ export interface Preferences {
   raid_threat_class_mods?: Record<string, number>
   // Per-player hate adjustment (player name → signed %), added on top of class.
   raid_threat_player_mods?: Record<string, number>
-  // Planes of Power flagging tracker (dev-gated, off by default; preview until
-  // PoP launches on Quarm).
-  pop_flags_enabled?: boolean
-  // Session Faction Tracker (dev-gated, off by default). EQ never logs a
-  // faction's absolute value or point amount, so this is always an
-  // approximate session-only view, not a real faction number.
-  faction_tracker_enabled?: boolean
-  // Raids section: role taxonomy editor, encounter knowledge base, and the
-  // live MIN/REC composition checker (dev-gated, off by default while it's
-  // tested against real raids).
-  raids_enabled?: boolean
   npc_overlay_dashboard_sections: NPCOverlaySections
   npc_overlay_popout_sections: NPCOverlaySections
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing

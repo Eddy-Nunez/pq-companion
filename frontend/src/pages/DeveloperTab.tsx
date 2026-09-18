@@ -128,22 +128,9 @@ function FlagsPanel(): React.ReactElement {
       .finally(() => setSaving(false))
   }
 
-  // ── PoP flagging ──────────────────────────────────────────────────────
-  const popFlagsEnabled = Boolean(config?.preferences?.pop_flags_enabled)
-  const togglePopFlags = (): void => savePrefs({ pop_flags_enabled: !popFlagsEnabled })
-
-  // ── Session Faction Tracker ───────────────────────────────────────────
-  const factionTrackerEnabled = Boolean(config?.preferences?.faction_tracker_enabled)
-  const toggleFactionTracker = (): void =>
-    savePrefs({ faction_tracker_enabled: !factionTrackerEnabled })
-
   // ── Raid-wide threat meter ────────────────────────────────────────────
   const raidThreatEnabled = Boolean(config?.preferences?.raid_threat_enabled)
   const toggleRaidThreat = (): void => savePrefs({ raid_threat_enabled: !raidThreatEnabled })
-
-  // ── Raid Composition ──────────────────────────────────────────────────
-  const raidsEnabled = Boolean(config?.preferences?.raids_enabled)
-  const toggleRaids = (): void => savePrefs({ raids_enabled: !raidsEnabled })
 
   return (
     <div className="flex flex-col gap-4">
@@ -245,127 +232,6 @@ function FlagsPanel(): React.ReactElement {
             }}
           >
             {raidThreatEnabled ? 'Enabled' : 'Disabled'}
-          </button>
-        </div>
-      </section>
-
-      {/* ── PoP flagging ──────────────────────────────────────────────────── */}
-      <section
-        className="rounded-lg p-4"
-        style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-      >
-        <div className="mb-3 flex items-center gap-2">
-          <FlaskConical size={14} style={{ color: 'var(--color-primary)' }} />
-          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
-            PoP flagging tracker
-          </h2>
-        </div>
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-            Adds a <strong>PoP Flags</strong> page: a per-character checklist of
-            the Planes of Power planar-progression flags (Tiers 1&ndash;4 +
-            Plane of Time), with prerequisite locking. Flags live server-side as
-            qglobals that aren&rsquo;t in the game DB or Zeal, so for now every
-            step is a manual toggle &mdash; auto-detection from the Seer NPC and
-            live log lines comes once PoP is live on Quarm.
-          </p>
-          <button
-            type="button"
-            onClick={togglePopFlags}
-            disabled={!config || saving}
-            className="shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: popFlagsEnabled ? 'var(--color-primary)' : 'var(--color-surface-2)',
-              color: popFlagsEnabled ? 'var(--color-background)' : 'var(--color-muted-foreground)',
-              border: '1px solid var(--color-border)',
-              cursor: !config || saving ? 'default' : 'pointer',
-              opacity: !config || saving ? 0.6 : 1,
-            }}
-          >
-            {popFlagsEnabled ? 'Enabled' : 'Disabled'}
-          </button>
-        </div>
-      </section>
-
-      {/* ── Faction Tracker ─────────────────────────────────────── */}
-      <section
-        className="rounded-lg p-4"
-        style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-      >
-        <div className="mb-3 flex items-center gap-2">
-          <FlaskConical size={14} style={{ color: 'var(--color-primary)' }} />
-          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
-            Faction Tracker
-          </h2>
-        </div>
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-            Adds a per-character faction wishlist and a <strong>Factions</strong>{' '}
-            page that tallies &ldquo;Your faction standing with X got
-            better/worse&rdquo; lines for the factions you&rsquo;ve starred, with a
-            best-effort point estimate when a change can be tied to a resolved
-            kill, plus a bucket bar from your last <code>/con</code> reading
-            (flagged if taken while illusioned). Progress persists per
-            character across restarts until you explicitly clear it. EQ never
-            logs a faction&rsquo;s absolute value or point amount, so none of
-            this is ever a claim about your real standing.
-          </p>
-          <button
-            type="button"
-            onClick={toggleFactionTracker}
-            disabled={!config || saving}
-            className="shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: factionTrackerEnabled ? 'var(--color-primary)' : 'var(--color-surface-2)',
-              color: factionTrackerEnabled ? 'var(--color-background)' : 'var(--color-muted-foreground)',
-              border: '1px solid var(--color-border)',
-              cursor: !config || saving ? 'default' : 'pointer',
-              opacity: !config || saving ? 0.6 : 1,
-            }}
-          >
-            {factionTrackerEnabled ? 'Enabled' : 'Disabled'}
-          </button>
-        </div>
-      </section>
-
-      {/* ── Raid Composition ────────────────────────────────────── */}
-      <section
-        className="rounded-lg p-4"
-        style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-      >
-        <div className="mb-3 flex items-center gap-2">
-          <FlaskConical size={14} style={{ color: 'var(--color-primary)' }} />
-          <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
-            Raid Composition
-          </h2>
-        </div>
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-            Adds a <strong>Raids</strong> section: a user-editable role taxonomy,
-            an encounter knowledge base, and a MIN/REC composition checker
-            compared against the live Zeal raid roster (or a manually-entered
-            one). Contributed by Kav (Intervention), ported from his eqmon
-            project. The knowledge base ships with a single seeded
-            encounter (Avatar of War) — add your own via the Raid Editor.
-            Candidate names on a short row are class-eligible members, not
-            actual assignments, so the same person can be counted toward more
-            than one role&rsquo;s need at once; treat the report as a staffing
-            guide, not a final call.
-          </p>
-          <button
-            type="button"
-            onClick={toggleRaids}
-            disabled={!config || saving}
-            className="shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: raidsEnabled ? 'var(--color-primary)' : 'var(--color-surface-2)',
-              color: raidsEnabled ? 'var(--color-background)' : 'var(--color-muted-foreground)',
-              border: '1px solid var(--color-border)',
-              cursor: !config || saving ? 'default' : 'pointer',
-              opacity: !config || saving ? 0.6 : 1,
-            }}
-          >
-            {raidsEnabled ? 'Enabled' : 'Disabled'}
           </button>
         </div>
       </section>

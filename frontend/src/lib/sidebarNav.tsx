@@ -71,16 +71,16 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: '/characters/wishlist', label: 'Wishlist', icon: <Star size={16} /> },
       { to: '/characters/upgrades', label: 'Gear Upgrades', icon: <Wand2 size={16} /> },
       { to: '/characters/tasks', label: 'Tasks', icon: <ListChecks size={16} /> },
-      { to: '/pop-flags', label: 'PoP Flags', icon: <Flag size={16} />, flag: 'pop_flags_enabled' },
+      { to: '/pop-flags', label: 'PoP Flags', icon: <Flag size={16} /> },
       { to: '/trader-tracker', label: 'Trader Tracker', icon: <Store size={16} /> },
-      { to: '/characters/factions', label: 'Factions', icon: <Scale size={16} />, flag: 'faction_tracker_enabled' },
+      { to: '/characters/factions', label: 'Factions', icon: <Scale size={16} /> },
     ],
   },
   {
     id: 'raids',
     label: 'Raids',
     items: [
-      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} />, flag: 'raids_enabled' },
+      { to: '/raids', label: 'Raid Composition', icon: <ShieldCheck size={16} /> },
     ],
   },
   {
@@ -104,11 +104,7 @@ export const NAV_SECTIONS: NavSection[] = [
 // preferences. Centralized here so the live sidebar and the Navigation settings
 // editor gate the same dev-preview tabs identically.
 export function navFlags(prefs?: Partial<Preferences>): Record<string, boolean> {
-  return {
-    pop_flags_enabled: Boolean(prefs?.pop_flags_enabled),
-    faction_tracker_enabled: Boolean(prefs?.faction_tracker_enabled),
-    raids_enabled: Boolean(prefs?.raids_enabled),
-  }
+  return {}
 }
 
 // visibleNavSections filters out flag-gated items whose flag isn't enabled, then

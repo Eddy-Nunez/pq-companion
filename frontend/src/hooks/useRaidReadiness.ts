@@ -14,9 +14,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useWebSocket } from './useWebSocket'
 import { usePlayerPosition } from './usePlayerPosition'
-import { getRaidEncounters, getRaidRoster, checkRaidComp, getConfig } from '../services/api'
+import { getRaidEncounters, getRaidRoster, checkRaidComp } from '../services/api'
 import type { CheckReport, CheckRosterInput, RaidEncounter, RaidRosterSnapshot } from '../types/raid'
-import type { Config } from '../types/config'
 
 // normalizeZone makes zone-name comparisons forgiving across Zeal's short
 // names vs the knowledge base's display names (letters+digits only, lowercase).
@@ -140,17 +139,8 @@ export function useRaidReadiness(): RaidReadinessState {
   // while the Zeal pipe is connected, so pos.zone tracks the character across
   // zoning. On a change, refresh() re-pulls encounters + roster and re-runs
   // the check — the dropdown re-sorts to put current-zone encounters on top
-  // and the report follows the new zone context. Gated behind raids_enabled
-  // (the flag that surfaces the raid UI at all): the hook can be mounted with
-  // the flag off via a direct URL, and there's no reason to churn fetches on
-  // every zoning for a feature that's switched off.
+  // and the report follows the new zone context.
   const pos = usePlayerPosition()
-  const [raidsEnabled, setRaidsEnabled] = useState(false)
-  useEffect(() => {
-    void getConfig()
-      .then((c: Config) => setRaidsEnabled(Boolean(c.preferences?.raids_enabled)))
-      .catch(() => setRaidsEnabled(false))
-  }, [])
   // lastZoneRef is STICKY: zoning takes several seconds during which the pipe
   // is silent and usePlayerPosition ages out to null (STALE_MS < zone load).
   // Storing that null here would forget the previous zone and the new zone's
@@ -163,9 +153,9 @@ export function useRaidReadiness(): RaidReadinessState {
     if (!zone) return // stale gap / no pipe — remember what we had
     const prev = lastZoneRef.current
     lastZoneRef.current = zone
-    if (!raidsEnabled || prev === null || prev === zone) return
+    if (prev === null || prev === zone) return
     void refresh()
-  }, [pos?.zone, raidsEnabled, refresh])
+  }, [pos?.zone, refresh])
 
   // adoptSelection applies a selection that arrived from another surface
   // (IPC relay or mount-time catch-up) and runs a check. Never re-publishes
