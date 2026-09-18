@@ -1,9 +1,126 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 14/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 20/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 5 — 2026-09-18 (Wave 0 to 20/34: the two databases are open)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session landed all of section 4 (tasks 4.1–4.6). Updates 1–4 remain current
+except where this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 20/34**. Done: 1.1, 1.2, 1.3, 1.6,
+2.1–2.5, **3.1–3.5**, **4.1–4.6**. Untouched: 1.4, 1.5 (need Windows), 5.x, 6.x,
+7.x, 8.x. Waves 1 and 2 changes are still 0/27 and 0/55.
+
+Branch `feat/phoenix-migration`, working tree clean. `mix test` → **71 tests,
+0 failures** (was 53), and the same 71 pass with `quarm.db` removed (data-backed
+tests skip with an explicit warning). `mix compile --warnings-as-errors` clean,
+`mix format --check-formatted` clean on every file this session touched. Real
+server: `/`, `/assets/css/app.css` and `/assets/js/app.js` all 200.
+
+### ⚠️ First thing that bit: the `priv` symlink was dangling
+
+This is the most important finding of the session, and it pre-dated it.
+Because `_build` is itself a symlink to the ext4 cache, the relative `priv` link
+Mix writes *inside* it resolves against the cache directory and dangles. So
+`Application.app_dir(:pq_companion, "priv/...")` pointed at a non-existent path:
+**static assets were 404ing and `priv/data/quarm.db` looked missing.** The
+earlier sessions never noticed because they only asserted HTTP 200 on HTML.
+
+**Fix applied (per-machine, in the cache):**
+
+```bash
+ln -sfn /mnt/c/Users/eddyn/pq-companion-phoenix/phoenix/priv \
+        ~/.cache/pq-companion-phoenix/priv
+```
+
+Recorded in `AGENTS.md` under the two-build-space rules, with the verification
+test (`File.dir?(Application.app_dir(:pq_companion, "priv/static"))`). The
+structural fix, if the symlink layout is ever revisited, is `MIX_BUILD_PATH` /
+`MIX_DEPS_PATH` instead of symlinking `_build`/`deps`.
+
+### What landed
+
+| Module | What |
+|---|---|
+| `lib/pq_companion/paths.ex` | The reference footprint in one place: home, `user.db`, `config.yaml`, `backups/`, `logs/server.log`, plus `quarm.db` |
+| `lib/pq_companion/user_repo.ex` | `Ecto.Repo` for `~/.pq-companion/user.db`, WAL + 5s busy timeout, path from `Paths` |
+| `lib/pq_companion/quarm_database.ex` | `Ecto.Repo` for the shipped game DB, `mode: :readonly` |
+| `lib/pq_companion/quarm_repo.ex` | Read-only facade feature code uses; every write raises before SQLite; the four wave-0 table reads; boot check |
+| `lib/pq_companion/read_only_repo_error.ex`, `missing_game_database_error.ex` | The two actionable errors |
+
+The generated `PQCompanion.Repo` was deleted; `ecto_repos` is now
+`[PQCompanion.UserRepo]` (only user data has migrations). `quarm.db` was
+downloaded to `phoenix/priv/data/quarm.db` (86 MB, gitignored).
+
+### The decisions this session made
+
+1. **`PQCompanion.QuarmRepo` is a facade, not an `Ecto.Repo`.** Ecto.Repo's
+   generated `insert`/`update`/`delete` are not `defoverridable` — redefining
+   them compiles to an unreachable clause. To make the write rejection
+   *structural* (in Elixir, before SQLite, as the spec demands) the public name
+   must be a plain module that delegates reads to the real repo
+   (`PQCompanion.QuarmDatabase`) and only ever raises on writes. Two layers: the
+   facade rejects in Elixir; the connection is opened `mode: :readonly` as
+   defence in depth.
+2. **The game DB is not in `ecto_repos`.** It has no migrations and is never
+   created or altered. `PQCompanion.UserRepo` is the only migration target.
+3. **The test suite boots without the artifact.** `quarm_db_required` is false in
+   test, and `QuarmRepo.available?/0` keeps the read-only connection out of the
+   supervision tree when the artifact is absent, so the suite runs and
+   data-backed tests skip with an explicit `IO.warn` instead of the whole app
+   failing to start (task 7.3 depends on this).
+
+### Known deviation to fix before wave 11: `immutable=1`
+
+The reference opens `quarm.db` as `file:<path>?mode=ro&immutable=1` (see
+`backend/internal/db/db.go`). **exqlite 0.40 exposes neither `immutable` nor
+`SQLITE_OPEN_URI`**, and ecto_sqlite3 forces `journal_mode: :wal`, so our
+read-only connection can create `-wal`/`-shm` siblings next to the artifact and
+would **fail on a genuinely unwritable install directory** (e.g. `Program
+Files`). Contents still cannot change. The full note is in
+`quarm_database.ex`; resolve it before the Windows installer ships — either by
+upstreaming an `:immutable` option to exqlite or by keeping the artifact in a
+per-user-writable location. Do not let it be discovered at wave 11.
+
+### Next, in dependency order
+
+1. **5.1–5.3** — `~/.pq-companion/runtime.json` (port, pid, version) plus the
+   same record as one stdout line, and a test that the settings file is
+   untouched by boot.
+2. **6.1–6.3** — dev workflow docs (live reload is unblocked: `inotify-tools` is
+   installed).
+3. **7.1–7.4** — CI, including the UTF-8 locale requirement from 7.1 and the
+   game-database download step in 7.3.
+4. **8.1–8.2** — wave verification, then `openspec archive add-phoenix-scaffold`.
+
+Windows-side 1.4/1.5 are still outstanding (hex/rebar/phx_new, remove the
+`_build`/`deps` symlinks before running Windows `mix`, UTF-8 locale).
+
+### Things learned the hard way this session
+
+1. **A 0-byte SQLite file cannot be opened read-only.** The first design left a
+   zero-byte scratch at the artifact path so the read-only repo could start; the
+   connection pool then timed out (`connection not available`) because
+   `sqlite3_open_v2(READONLY)` needs a real database. The fix was structural:
+   omit the connection when the artifact is absent rather than fake one.
+2. **`journal_mode` is a write.** Forcing `:delete` on a read-only WAL database
+   fails the connection outright. Journal mode cannot be changed on a read-only
+   connection; only `immutable=1` (which exqlite lacks) avoids the WAL siblings.
+3. **A schemaless Ecto `select: source` is refused by ecto_sqlite3** — it cannot
+   know the columns. On a 159-column table, raw `SELECT *` is the honest tool.
+4. **Mix's `priv` symlink is relative and breaks under a symlinked `_build`.**
+   See above; this is why task 4.x looked like the game DB was missing.
+5. **`pwsh`/9p note still stands:** the 86 MB download and the two DBs live on
+   `/mnt/c`; `mix test` is still ~1.3s, so the source-read cost is not yet
+   biting.
+
+---
 
 ## SESSION UPDATE 4 — 2026-09-18 (Wave 0 to 14/34: the shell contract is real)
 

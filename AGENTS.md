@@ -84,6 +84,17 @@ Rules:
 - **`_build`/`deps` must never be shared between the two sides.** Compiled NIFs
   are platform-specific (`.so` vs `.dll`) and Exqlite is a NIF. Keeping Windows
   artefacts out of the tree sidesteps that entire class of problem.
+- **The cache needs a `priv` symlink too, or `priv/` is unreachable.** Because
+  `_build` is itself a symlink, the relative `priv` link Mix writes *inside* it
+  (`_build/<env>/lib/pq_companion/priv -> ../../../../priv`) resolves against the
+  cache directory, not the source tree, and dangles. Effect: `Application.app_dir(
+  :pq_companion, "priv/...")` returns a path that does not exist, so static
+  assets 404 and `priv/data/quarm.db` looks missing. Fix (once per machine):
+  `ln -sfn /mnt/c/Users/eddyn/pq-companion-phoenix/phoenix/priv
+  ~/.cache/pq-companion-phoenix/priv`. Verify with
+  `mix run --no-start -e 'IO.inspect(File.dir?(Application.app_dir(:pq_companion, "priv/static")))'`
+  (must print `true`). The structural fix, if this is ever revisited, is to drop
+  the `_build`/`deps` symlinks and set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` instead.
 - Never `npm install` from WSL into the reference tree — it breaks the Windows
   electron binaries in `node_modules`. The Elixir app should need no `npm` at
   all; if it does, that is worth questioning.

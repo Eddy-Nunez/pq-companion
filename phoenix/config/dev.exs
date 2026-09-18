@@ -1,8 +1,11 @@
 import Config
 
 # Configure your database
-config :pq_companion, PQCompanion.Repo,
-  database: Path.expand("../pq_companion_dev.db", __DIR__),
+#
+# The user database path is resolved from `PQCompanion.Paths` (the reference
+# footprint, `~/.pq-companion/user.db`) by `PQCompanion.UserRepo.init/2`, so it
+# is deliberately not duplicated here.
+config :pq_companion, PQCompanion.UserRepo,
   pool_size: 5,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true

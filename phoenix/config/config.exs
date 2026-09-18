@@ -9,8 +9,19 @@ import Config
 
 config :pq_companion,
   namespace: PQCompanion,
-  ecto_repos: [PQCompanion.Repo],
+  ecto_repos: [PQCompanion.UserRepo],
   generators: [timestamp_type: :utc_datetime]
+
+# Migrations stay in the generator's `priv/repo/migrations`; Ecto would otherwise
+# look under `priv/user_repo/migrations` for a repo named `UserRepo`.
+config :pq_companion, PQCompanion.UserRepo, priv: "priv/repo"
+
+# The shipped game database (quarm.db) is read-only and lives beside the app,
+# not under the app home. `PQCompanion.QuarmRepo` refuses writes in Elixir and
+# the connection is opened read-only underneath. In `:test` this is false so the
+# suite can boot without the artifact (which is not in version control) and
+# data-backed tests skip explicitly instead of failing.
+config :pq_companion, :quarm_db_required, true
 
 # Which native-shell adapter window operations are dispatched to. The browser
 # adapter is the development default so no wave before 8 is blocked on the

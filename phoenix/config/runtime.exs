@@ -39,16 +39,9 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
-      raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/pq_companion/pq_companion.db
-      """
-
-  config :pq_companion, PQCompanion.Repo,
-    database: database_path,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+  # User data lives at the reference footprint (`~/.pq-companion/user.db`),
+  # resolved by `PQCompanion.UserRepo.init/2` from `PQCompanion.Paths`, not from
+  # an environment variable — this is a desktop app, not a hosted service.
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

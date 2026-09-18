@@ -2,13 +2,20 @@ import Config
 
 # Configure your database
 #
+# Tests never touch the real `~/.pq-companion/user.db`: the explicit `database`
+# here wins over `PQCompanion.UserRepo.init/2`.
+#
 # The MIX_TEST_PARTITION environment variable can be used
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
-config :pq_companion, PQCompanion.Repo,
+config :pq_companion, PQCompanion.UserRepo,
   database: Path.expand("../pq_companion_test.db", __DIR__),
   pool_size: 5,
   pool: Ecto.Adapters.SQL.Sandbox
+
+# The game database artifact is not in version control; the suite must boot
+# without it, and data-backed tests skip with an explicit warning (task 4.3).
+config :pq_companion, :quarm_db_required, false
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
