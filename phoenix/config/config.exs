@@ -44,6 +44,12 @@ config :phoenix_live_view,
   # the attribute set on all root tags. Used for Phoenix.LiveView.ColocatedCSS.
   root_tag_attribute: "phx-r"
 
+# This app has no npm and no `assets/node_modules`, and its only client hooks are
+# plain ones in `assets/js/app.js`, so the colocated-assets compiler has nothing
+# to import. Silencing the symlink warning keeps a Windows `mix compile` clean
+# (without Developer Mode the symlink is refused with `:eperm`; nothing is lost).
+config :phoenix_live_view, :colocated_assets, disable_symlink_warning: true
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.25.4",

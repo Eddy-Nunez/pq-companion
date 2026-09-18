@@ -99,6 +99,39 @@ Rules:
   electron binaries in `node_modules`. The Elixir app should need no `npm` at
   all; if it does, that is worth questioning.
 
+### Windows toolchain, driven from WSL
+
+Windows has **Elixir 1.20.4** (`C:\Program Files\Elixir`) and **Erlang OTP
+27.3.4.13** (`C:\Program Files\Erlang OTP`) installed, but **not on PATH** —
+`cmd.exe /c where mix` finds nothing. WSL can still drive Windows `mix` through a
+CRLF batch wrapper. The checked-in working copy is
+`C:\Users\eddyn\pq-win-mix.bat`:
+
+```bat
+@echo off
+set "PATH=C:\Program Files\Erlang OTP\bin;%PATH%"
+if not defined MIX_BUILD_PATH set "MIX_BUILD_PATH=C:\Users\eddyn\pq-win\build"
+if not defined MIX_DEPS_PATH set "MIX_DEPS_PATH=C:\Users\eddyn\pq-win\deps"
+if not defined MIX_ENV set "MIX_ENV=test"
+cd /d C:\Users\eddyn\pq-companion-phoenix\phoenix
+call "C:\Program Files\Elixir\bin\mix.bat" %*
+exit /b %ERRORLEVEL%
+```
+
+Invoke it as `cmd.exe /c "C:\Users\eddyn\pq-win-mix.bat" <mix args>`. The
+`MIX_BUILD_PATH`/`MIX_DEPS_PATH` redirection is the important part: Windows
+builds into `C:\Users\eddyn\pq-win\`, so the source tree's `_build`/`deps`
+symlinks (the ext4 cache) are **never touched** and Windows reuses its own
+artefacts. Windows hex 2.5.1 + rebar3 are installed under
+`C:\Users\eddyn\.mix`. Exqlite ships a precompiled Windows NIF, so no Windows C
+toolchain is needed.
+
+**Version skew to keep in mind:** Windows Elixir is 1.20.4 while `.tool-versions`
+pins 1.18.5, and Windows OTP is 27.3.4.**13** vs **.17**. Both satisfy `~> 1.17`,
+but the newer compiler warns about things 1.18 does not (it found a dead
+`require Logger`). If a Windows compile warns but the WSL one is clean, trust the
+Windows warning and fix the code.
+
 ### Worktree git pointers: worktree `.git` relative, admin `gitdir` absolute
 
 Windows-side git failed with `fatal: not a git repository` until 2026-09-18,

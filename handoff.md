@@ -1,9 +1,69 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 30/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 32/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 9 — 2026-09-18 (Wave 0 to 32/34: Windows verified from WSL)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session completed tasks 1.4 and 1.5 by driving the Windows toolchain from
+WSL. Updates 1–8 remain current except where this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 32/34**. Done: 1.1–1.3, **1.4, 1.5**,
+1.6, 2.1–2.5, 3.1–3.5, 4.1–4.6, 5.1–5.3, 6.1–6.3, 7.2, 7.3, 8.1, 8.2. Remaining:
+**7.1 and 7.4 only** → GitHub Actions is disabled on the fork (session update 8).
+
+Branch `feat/phoenix-migration`, `mix test` → **78 tests, 0 failures**, format
+clean, `compile --warnings-as-errors` clean (WSL and Windows).
+
+### What was verified on Windows
+
+- **1.4 — the Exqlite Windows NIF loads.** Direct probe:
+  `EXQLITE_NIF_OK sqlite_version=3.53.4`. Fresh `mix ecto.create` on Windows:
+  “The database for PQCompanion.UserRepo has been created”, exit 0, and
+  `pq_companion_test.db` appears. The database choice is validated on Windows.
+- **1.5 — `file_system` works on Windows.** Backend
+  `FileSystem.Backends.FSWindows`, `bootstrap: :ok` (bundled
+  `priv/inotifywait.exe`, no C toolchain), and a create in the watched dir
+  produced `{:file_event, pid, {"...created.txt", [:created]}}`. **No
+  poll-based fallback is needed on either platform** — the open question that
+  motivated it is answered. (Wave 3's tailer may still want a poll loop for log
+  *rotation*, which is a tailer concern, not a watcher workaround.)
+
+### How to drive Windows `mix` from WSL (also recorded in AGENTS.md)
+
+Windows has Elixir 1.20.4 and Erlang OTP 27.3.4.13 **installed but off PATH**.
+`C:\Users\eddyn\pq-win-mix.bat` prepends Erlang's `bin`, sets `MIX_ENV=test`,
+and points `MIX_BUILD_PATH`/`MIX_DEPS_PATH` at `C:\Users\eddyn\pq-win\{build,deps}`.
+**That redirection is the whole trick:** Windows builds into its own directory
+and the source tree's `_build`/`deps` symlinks to the ext4 cache are never
+touched (verified intact after the runs). Invoke with
+`cmd.exe /c "C:\Users\eddyn\pq-win-mix.bat" <args>`. The Windows build/deps dirs
+are ~136 MB outside the repo; delete them if the space is ever needed.
+
+### Two warnings only the newer Windows compiler produced — both fixed
+
+1. **Unused `require Logger` in `runtime.ex`.** Elixir 1.18 does not warn about
+   it; Elixir 1.20.4 does. Removed. The lesson is in AGENTS.md: the Windows
+   compiler is newer (1.20.4 vs the 1.18.5 pin), so fix what it reports.
+2. **Colocated-assets symlink refused with `:eperm`.** The app has no
+   `assets/node_modules`, so nothing is lost; silenced with
+   `config :phoenix_live_view, :colocated_assets, disable_symlink_warning: true`.
+
+### Next — only two tasks, both yours
+
+1. **7.1 / 7.4** — enable Actions on the fork (repo Settings → Actions →
+   General), push, and confirm `Go Tests`, `TypeScript Typecheck` and
+   `Elixir Tests` are green in one run. The workflow is written and every step
+   passes locally; nothing else is pending.
+2. Then decide on the §3.8 criterion-4 tension (settings round-trip deferred to
+   wave 2 per task 5.3) and `openspec archive add-phoenix-scaffold`.
+
+---
 
 ## SESSION UPDATE 8 — 2026-09-18 (Wave 0 to 30/34: CI + wave verification)
 

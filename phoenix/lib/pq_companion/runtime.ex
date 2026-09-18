@@ -23,8 +23,6 @@ defmodule PQCompanion.Runtime do
   `server-port` file in `backend/cmd/server/main.go`.
   """
 
-  require Logger
-
   alias PQCompanion.Paths
 
   @record_file "runtime.json"
