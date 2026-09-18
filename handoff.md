@@ -58,29 +58,28 @@ Committed and pushed as `0aa89896` (35 files, 5,592 insertions):
 
 Nothing has been written in `phoenix/` yet — it does not exist.
 
-### What's next — the one blocker
+### What's next — Phase 0 task 1.2
 
-**Phase 0 task 1.1: install the toolchain.** This is the only thing standing
-between here and `mix phx.new`. Decision taken 2026-09-18: **native `mise` in
-WSL**, not Docker. `mise` is not installed yet.
+**Task 1.1 (toolchain) is DONE** — see the commit log and the environment table
+below. The next command is the generator:
 
 ```bash
-curl https://mise.run | sh                      # -> ~/.local/bin/mise (no sudo)
 cd ~/pq-companion-phoenix
-mise use -g erlang@27.3.4.17 elixir@1.18.5-otp-27
-elixir --version && erl -noshell -eval 'io:format("~s~n",[erlang:system_info(otp_release)]),halt().'
+eval "$(mise activate bash)"   # or just open a new shell
+mix phx.new phoenix --app pq_companion --module PQCompanion \
+  --database sqlite3 --no-mailer --no-gettext
 ```
 
-**Watch for:** mise's `erlang` plugin may fall back to a **source build**, which
-cannot work here (no `make`, no `autoconf`, no build deps, and no `sudo` to get
-them). It must use precompiled binaries. Verified available:
-`builds.hex.pm/builds/otp/ubuntu-24.04/OTP-27.2.tar.gz` → 200 and
-`builds.hex.pm/builds/elixir/v1.18.5-otp-27.zip` → 200. If mise tries to
-compile, force the precompiled path or fall back to extracting those two
-artifacts into `~/.local` by hand. Then pin the result in `.tool-versions`.
+That is task 1.2. Then 1.3 (deps: `ecto_sqlite3`, `exqlite`, `file_system`,
+`nimble_options`, `heroicons`, `floki`; dev/test: `credo`, `dialyxir`,
+`mix_audit`), then **1.4 and 1.5 which must run on Windows** — see the user-side
+recommendation below.
 
-After that: task 1.2 (`mix phx.new phoenix --app pq_companion --module
-PQCompanion --database sqlite3 --no-mailer --no-gettext`), then 1.3 (deps).
+One thing to decide before 1.3: whether `mix phx.new`'s default `esbuild` +
+`tailwind` setup is kept as-is. The `tailwind` hex package is the current
+Phoenix way and avoids a Node dependency for CSS; `esbuild` still needs a Node
+binary for the small JS hooks later (xyflow graphs, drag-reorder). Worth
+confirming rather than inheriting the default blindly.
 
 ### Environment state
 
@@ -89,17 +88,33 @@ PQCompanion --database sqlite3 --no-mailer --no-gettext`), then 1.3 (deps).
 
 | Tool | State |
 |---|---|
-| `elixir` / `mix` / `erl` / `iex` | **MISSING** — the blocker |
-| `mise` / `asdf` / `kerl` | MISSING |
+| `elixir` `mix` `erl` `iex` | **INSTALLED** — mise, OTP 27 / Elixir 1.18.5 / Mix 1.18.5 |
+| `mise` | installed, 2026.9.11 at `~/.local/bin/mise` |
+| `hex` `rebar3` `phx_new` | installed (2.5.1 / rebar3 / phx_new 1.8.14) |
 | `curl` `unzip` `git` `python3` `pip3` `gcc` | present |
 | `make` `autoconf` `m4` `jq` | MISSING |
-| `~/.local/bin` on `PATH` | yes, already |
 | `gh` CLI | MISSING — use `curl` for `quarm.db` |
+
+**How the toolchain resolves (three paths, all verified 2026-09-18):**
+
+- `.tool-versions` in the project pins `erlang 27.3.4.17` / `elixir 1.18.5-otp-27`.
+- A **global fallback** in `~/.config/mise/config.toml` pins the same two, so the
+  shims resolve outside the project too (without it, mise errors with an
+  unhelpful message when run from any other directory).
+- `~/.bashrc` gets `mise activate bash` (interactive shells); `~/.profile` adds
+  `~/.local/share/mise/shims` to `PATH` (login and non-interactive shells, which
+  do **not** read `.bashrc` — that is why the shims line is needed for CI).
+- `erlang.compile=false` + `erlang.precompiled_os=ubuntu-24.04` are set globally.
+  A source build is impossible here — no `make`, no build deps, and no `sudo` —
+  so precompiled is forced rather than merely preferred. The whole install took
+  ~15s.
 
 **`sudo` requires a password.** No system package installs are possible without
 you. `apt` offers Elixir **1.14** / Erlang **25** (too old), Erlang Solutions has
 **no `noble` repo** (404), and there are no build deps — so precompiled is the
-only path, which is why mise is the plan.
+only path, which is why mise is the plan. This is also why the toolchain lives
+entirely under `~/.local` and `~/.config/mise`: no elevated permissions needed
+anywhere.
 
 **Windows** — has git (PortableGit), node, npm. Has **no** Elixir/Erlang/mise.
 Docker Desktop is installed and `docker` works from WSL (the Windows
