@@ -88,25 +88,32 @@ Rules:
   electron binaries in `node_modules`. The Elixir app should need no `npm` at
   all; if it does, that is worth questioning.
 
-### Worktree git pointers: keep them RELATIVE
+### Worktree git pointers: worktree `.git` relative, admin `gitdir` absolute
 
-This worktree's `.git` pointer and the main repo's
-`.git/worktrees/pq-companion-phoenix/gitdir` are **deliberately relative**:
+Windows-side git failed with `fatal: not a git repository` until 2026-09-18,
+because the worktree's `.git` pointer held an absolute WSL path. The two pointers
+need **different** treatments:
 
 ```
-worktree .git   -> gitdir: ../pq-companion/.git/worktrees/pq-companion-phoenix
-admin gitdir    -> ../../../pq-companion-phoenix/.git
+worktree  .git  = gitdir: ../pq-companion/.git/worktrees/pq-companion-phoenix
+                  RELATIVE (resolved against the worktree root; works both sides)
+
+main repo .git/worktrees/pq-companion-phoenix/gitdir
+                = /mnt/c/Users/eddyn/pq-companion-phoenix/.git
+                  ABSOLUTE (git 2.43 resolves a relative value against CWD and
+                  then reports the worktree as `prunable`; relative support only
+                  arrived in git 2.48 via worktree.useRelativePaths)
 ```
 
-git writes these as *absolute* paths, and when this worktree was created from WSL
-it wrote `/mnt/c/...`, which Windows git cannot resolve — Windows-side git failed
-with `fatal: not a git repository` until they were made relative. Relative
-pointers resolve identically from both sides.
+> ⚠️ Because the admin path is WSL-form, `git worktree prune` / `git worktree
+> remove` run from **Windows** against the reference repo would delete this
+> worktree's admin entry. Normal git commands are unaffected. **Run worktree-admin
+> commands from WSL.** If that ever bites, convert this tree to a separate
+> **clone** — a clone has no absolute cross-reference at all.
 
-> **Fragile:** any future `git worktree add`, `git worktree repair`, or tool that
-> rewrites these will make them absolute again and silently break Windows-side
-> git. If Windows git reports "not a git repository", check these two files
-> first. Verify from either side with `git rev-parse --abbrev-ref HEAD`.
+Verify from either side with `git rev-parse --abbrev-ref HEAD`; verify the admin
+pointer with `git worktree list` plus `git worktree prune --dry-run -v` (must be
+empty).
 
 ## Elixir/Phoenix migration — read this before writing any code
 

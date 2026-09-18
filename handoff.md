@@ -47,7 +47,7 @@ directories, so it cannot follow them. Irrelevant if Windows never runs `mix` �
 which is the plan (Burrito builds from WSL). If Windows-side `mix` is ever
 needed, delete the symlinks first or set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` there.
 
-### Worktree git pointers must be RELATIVE
+### Worktree git pointers — half relative, half absolute, on purpose
 
 Windows-side git was **broken** in this tree until 2026-09-18:
 
@@ -55,18 +55,39 @@ Windows-side git was **broken** in this tree until 2026-09-18:
 fatal: not a git repository: /mnt/c/Users/eddyn/pq-companion/.git/worktrees/pq-companion-phoenix
 ```
 
-git writes the worktree pointer as an *absolute* path, and creating the worktree
-from WSL wrote `/mnt/c/...`, which Windows git cannot resolve. Fixed by making
-both pointers relative — they then resolve identically from either side:
+The worktree's `.git` pointer held an *absolute WSL path*, which Windows git
+cannot resolve. The two pointers need **different** treatments, which is easy to
+get wrong:
 
 ```
-worktree .git   -> gitdir: ../pq-companion/.git/worktrees/pq-companion-phoenix
-admin gitdir    -> ../../../pq-companion-phoenix/.git
+worktree  .git  = gitdir: ../pq-companion/.git/worktrees/pq-companion-phoenix
+                  ^ RELATIVE — git resolves this against the worktree root, so it
+                    works from both WSL and Windows.
+
+main repo .git/worktrees/pq-companion-phoenix/gitdir
+                = /mnt/c/Users/eddyn/pq-companion-phoenix/.git
+                  ^ ABSOLUTE — must stay this way. git 2.43 does NOT support a
+                    relative path here; it resolves the value against the current
+                    directory, so a relative value makes git report the worktree
+                    as `prunable`. (Relative support arrived with
+                    `worktree.useRelativePaths`, git 2.48+.)
 ```
 
-Any future `git worktree add` / `git worktree repair` (git 2.43 has no
-`--relative-paths`) will rewrite these as absolute and silently break Windows git
-again. If that error reappears, fix these two files first.
+**Verified:** WSL `git worktree list` is correct and `git worktree prune
+--dry-run` is a no-op. Windows git works normally *inside* the worktree.
+
+> ⚠️ **The one sharp edge:** because that absolute path is WSL-form, running
+> `git worktree prune` or `git worktree remove` from **Windows** against the
+> *reference* repo would delete the migration worktree's admin entry
+> (confirmed via `--dry-run` from Windows: *"gitdir file points to non-existent
+> location"*). Normal git commands are unaffected — only worktree-admin commands.
+> **Run those from WSL.**
+>
+> No single absolute path can satisfy both Windows (`C:\...`) and WSL
+> (`/mnt/c/...`), so this is inherent to a dual-access worktree. If the sharp
+> edge ever bites, the robust fix is to make the migration tree a **separate
+> clone** rather than a worktree — a clone's `.git` is self-contained, so no
+> absolute cross-reference exists at all.
 
 ### Fork posture — permanent divergence, NOT upstream
 
