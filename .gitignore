@@ -110,3 +110,6 @@ backend/internal/trigger/testdata/import/*
 !backend/internal/emote/testdata/
 backend/internal/emote/testdata/*
 !backend/internal/emote/testdata/spells_en.txt
+
+# ── Erlang/Elixir ─────────────────────────────────────────────────────────────
+erl_crash.dump
