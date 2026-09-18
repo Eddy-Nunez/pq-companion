@@ -9,21 +9,23 @@ defmodule PQCompanionWeb.CoreComponents do
   them in any way you want, based on your application growth and needs.
 
   The foundation for styling is Tailwind CSS, a utility-first CSS framework.
-  daisyUI was removed for this migration — these components are being restyled
-  against the reference app's own `@theme` tokens (wave 0 task 2.5). Until that
-  lands, the daisyUI class names below (`btn`, `alert`, `input`, `select`,
-  `table`, `list`, …) do not resolve and these components render unstyled.
+  These components are styled against the reference app's own `@theme` tokens
+  (wave 0 task 2.5) — daisyUI was removed because the reference hand-rolls its
+  components and daisyUI's theme variables collided with the reference's tokens
+  by name.
   Here are useful references:
 
     * [Tailwind CSS](https://tailwindcss.com) - the foundational framework
       we build on. You will use it for layout, sizing, flexbox, grid, and
       spacing.
 
-    * [Heroicons](https://heroicons.com) - see `icon/1` for usage.
-
     * [Phoenix.Component](https://phoenix-live-view.hexdocs.pm/Phoenix.Component.html) -
       the component system used by Phoenix. Some components, such as `<.link>`
       and `<.form>`, are defined there.
+
+    * Icons — `icon/1` renders vendored **Lucide** SVG paths (the reference uses
+      `lucide-react` in ~150 files, so Lucide is the one icon set; heroicons was
+      removed). Wave 1 vendors the same convention for the sidebar nav.
 
   """
   use Phoenix.Component
@@ -62,25 +64,31 @@ defmodule PQCompanionWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] items-start gap-3 rounded-lg border px-4 py-3 shadow-lg"
+      style="background: var(--color-surface); border-color: var(--color-border)"
       {@rest}
     >
-      <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
-      ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
-        <div>
-          <p :if={@title} class="font-semibold">{@title}</p>
-          <p>{msg}</p>
-        </div>
-        <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label="close">
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
-        </button>
+      <.icon
+        :if={@kind == :info}
+        name="info"
+        class={["mt-0.5 size-5 shrink-0", @kind == :info && "text-(--color-info)"]}
+      />
+      <.icon
+        :if={@kind == :error}
+        name="circle-alert"
+        class={["mt-0.5 size-5 shrink-0", @kind == :error && "text-(--color-danger)"]}
+      />
+      <div class="min-w-0 flex-1">
+        <p :if={@title} class="font-semibold text-(--color-foreground)">{@title}</p>
+        <p class="text-sm text-(--color-muted-foreground)">{msg}</p>
       </div>
+      <button
+        type="button"
+        class="group cursor-pointer self-start text-(--color-muted) hover:text-(--color-foreground)"
+        aria-label="close"
+      >
+        <.icon name="x" class="size-4" />
+      </button>
     </div>
     """
   end
@@ -100,11 +108,19 @@ defmodule PQCompanionWeb.CoreComponents do
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
+    variants = %{
+      "primary" =>
+        "border-(--color-primary) bg-(--color-primary) text-(--color-primary-foreground) hover:bg-(--color-primary-hover)",
+      nil =>
+        "border-(--color-border) bg-transparent text-(--color-foreground) hover:bg-(--color-surface-2)"
+    }
 
     assigns =
       assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
+        [
+          "inline-flex items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
+          Map.fetch!(variants, assigns[:variant])
+        ]
       end)
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
@@ -211,8 +227,8 @@ defmodule PQCompanionWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
-      <label for={@id}>
+    <div class="mb-2">
+      <label for={@id} class="flex items-center gap-2">
         <input
           type="hidden"
           name={@name}
@@ -220,17 +236,16 @@ defmodule PQCompanionWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
-          <input
-            type="checkbox"
-            id={@id}
-            name={@name}
-            value="true"
-            checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
-            {@rest}
-          />{@label}
-        </span>
+        <input
+          type="checkbox"
+          id={@id}
+          name={@name}
+          value="true"
+          checked={@checked}
+          class={@class || "size-4 accent-(--color-primary)"}
+          {@rest}
+        />
+        <span class="text-sm text-(--color-foreground)">{@label}</span>
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
@@ -239,13 +254,17 @@ defmodule PQCompanionWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
-      <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="mb-2">
+      <label for={@id} class="block">
+        <span :if={@label} class="mb-1 block text-sm text-(--color-muted-foreground)">{@label}</span>
         <select
           id={@id}
           name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
+          class={[
+            @class ||
+              "w-full rounded border border-(--color-border) bg-(--color-surface) px-3 py-1.5 text-sm text-(--color-foreground) outline-none focus:border-(--color-primary)",
+            @errors != [] && (@error_class || "border-(--color-danger)")
+          ]}
           multiple={@multiple}
           {@rest}
         >
@@ -260,15 +279,16 @@ defmodule PQCompanionWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
-      <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="mb-2">
+      <label for={@id} class="block">
+        <span :if={@label} class="mb-1 block text-sm text-(--color-muted-foreground)">{@label}</span>
         <textarea
           id={@id}
           name={@name}
           class={[
-            @class || "w-full textarea",
-            @errors != [] && (@error_class || "textarea-error")
+            @class ||
+              "w-full rounded border border-(--color-border) bg-(--color-surface) px-3 py-1.5 text-sm text-(--color-foreground) outline-none focus:border-(--color-primary)",
+            @errors != [] && (@error_class || "border-(--color-danger)")
           ]}
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
@@ -281,17 +301,18 @@ defmodule PQCompanionWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
-      <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+    <div class="mb-2">
+      <label for={@id} class="block">
+        <span :if={@label} class="mb-1 block text-sm text-(--color-muted-foreground)">{@label}</span>
         <input
           type={@type}
           name={@name}
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
           class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
+            @class ||
+              "w-full rounded border border-(--color-border) bg-(--color-surface) px-3 py-1.5 text-sm text-(--color-foreground) outline-none focus:border-(--color-primary)",
+            @errors != [] && (@error_class || "border-(--color-danger)")
           ]}
           {@rest}
         />
@@ -304,8 +325,8 @@ defmodule PQCompanionWeb.CoreComponents do
   # Helper used by inputs to generate form errors
   defp error(assigns) do
     ~H"""
-    <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
-      <.icon name="hero-exclamation-circle" class="size-5" />
+    <p class="mt-1.5 flex items-center gap-2 text-sm text-(--color-danger)">
+      <.icon name="circle-alert" class="size-4 shrink-0" />
       {render_slot(@inner_block)}
     </p>
     """
@@ -322,10 +343,10 @@ defmodule PQCompanionWeb.CoreComponents do
     ~H"""
     <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
       <div>
-        <h1 class="text-lg font-semibold leading-8">
+        <h1 class="text-lg font-semibold leading-8 text-(--color-foreground)">
           {render_slot(@inner_block)}
         </h1>
-        <p :if={@subtitle != []} class="text-sm text-base-content/70">
+        <p :if={@subtitle != []} class="text-sm text-(--color-muted-foreground)">
           {render_slot(@subtitle)}
         </p>
       </div>
@@ -366,25 +387,34 @@ defmodule PQCompanionWeb.CoreComponents do
       end
 
     ~H"""
-    <table class="table table-zebra">
+    <table class="w-full table-fixed border-collapse text-sm text-(--color-foreground)">
       <thead>
-        <tr>
-          <th :for={col <- @col}>{col[:label]}</th>
-          <th :if={@action != []}>
+        <tr class="border-b border-(--color-border)">
+          <th
+            :for={col <- @col}
+            class="px-1.5 py-1 text-left text-[10px] font-semibold uppercase tracking-widest text-(--color-muted)"
+          >
+            {col[:label]}
+          </th>
+          <th :if={@action != []} class="px-1.5 py-1">
             <span class="sr-only">Actions</span>
           </th>
         </tr>
       </thead>
       <tbody id={@id} phx-update={is_struct(@rows, Phoenix.LiveView.LiveStream) && "stream"}>
-        <tr :for={row <- @rows} id={@row_id && @row_id.(row)}>
+        <tr
+          :for={row <- @rows}
+          id={@row_id && @row_id.(row)}
+          class="border-b border-(--color-border-subtle) last:border-b-0"
+        >
           <td
             :for={col <- @col}
             phx-click={@row_click && @row_click.(row)}
-            class={@row_click && "hover:cursor-pointer"}
+            class={["px-1.5 py-1", @row_click && "cursor-pointer hover:text-(--color-primary)"]}
           >
             {render_slot(col, @row_item.(row))}
           </td>
-          <td :if={@action != []} class="w-0 font-semibold">
+          <td :if={@action != []} class="w-0 px-1.5 py-1 font-medium">
             <div class="flex gap-4">
               <%= for action <- @action do %>
                 {render_slot(action, @row_item.(row))}
@@ -413,11 +443,11 @@ defmodule PQCompanionWeb.CoreComponents do
 
   def list(assigns) do
     ~H"""
-    <ul class="list">
-      <li :for={item <- @item} class="list-row">
-        <div class="list-col-grow">
-          <div class="font-bold">{item.title}</div>
-          <div>{render_slot(item)}</div>
+    <ul class="divide-y divide-(--color-border) overflow-hidden rounded-lg border border-(--color-border)">
+      <li :for={item <- @item} class="flex items-start gap-4 px-3 py-2">
+        <div class="min-w-0 flex-1">
+          <div class="font-semibold text-(--color-foreground)">{item.title}</div>
+          <div class="text-sm text-(--color-muted-foreground)">{render_slot(item)}</div>
         </div>
       </li>
     </ul>
@@ -425,30 +455,52 @@ defmodule PQCompanionWeb.CoreComponents do
   end
 
   @doc """
-  Renders a [Heroicon](https://heroicons.com).
+  Renders a vendored **Lucide** icon (stroke-based, 24×24).
 
-  Heroicons come in three styles – outline, solid, and mini.
-  By default, the outline style is used, but solid and mini may
-  be applied by using the `-solid` and `-mini` suffix.
+  The reference app renders every icon with `lucide-react` (~150 files), so
+  Lucide is the single icon set here; heroicons was removed (wave 0 task 2.5).
+  Paths are vendored — one `<svg>` per name — so there is no JS build step and
+  no runtime fetch. Wave 1 (`add-sidebar-navigation`, design D3) ports the
+  reference's nav icons using the same Lucide convention.
 
-  You can customize the size and colors of the icons by setting
-  width, height, and background color classes.
-
-  Icons are extracted from the `deps/heroicons` directory and bundled within
-  your compiled app.css by the plugin in `assets/vendor/heroicons.js`.
+  Size and color are set with Tailwind classes, e.g. `size-4` and
+  `text-(--color-muted)`; the stroke inherits `currentColor`.
 
   ## Examples
 
-      <.icon name="hero-x-mark" />
-      <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
+      <.icon name="x" />
+      <.icon name="circle-alert" class="text-(--color-danger)" />
   """
   attr :name, :string, required: true
   attr :class, :any, default: "size-4"
 
-  def icon(%{name: "hero-" <> _} = assigns) do
+  # Vendored Lucide SVG bodies (lucide-react 1.16.0 — the reference's pinned
+  # version). Attribute set matches lucide's default: fill none, stroke
+  # currentColor, stroke-width 2, round caps/joins. Names follow lucide's
+  # kebab-case file names; the surrounding <svg> is emitted in icon/1.
+  @lucide %{
+    "info" => ~S(<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>),
+    "circle-alert" =>
+      ~S(<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>),
+    "x" => ~S(<path d="M18 6 6 18"/><path d="m6 6 12 12"/>)
+  }
+
+  def icon(assigns) do
     ~H"""
-    <span class={[@name, @class]} />
+    {lucide_svg(@name, @class)}
     """
+  end
+
+  defp lucide_svg(name, class) when is_list(class) do
+    lucide_svg(name, class |> Enum.filter(& &1) |> Enum.join(" "))
+  end
+
+  defp lucide_svg(name, class) do
+    body = @lucide[name] || raise ArgumentError, "unknown icon: #{inspect(name)}"
+
+    Phoenix.HTML.raw("""
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="#{class}">#{body}</svg>
+    """)
   end
 
   ## JS Commands

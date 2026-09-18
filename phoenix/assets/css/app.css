@@ -9,9 +9,10 @@
 /* Required for Tailwind to automatically pick up changes in colocated CSS files in dev */
 @source "../../_build/dev/phoenix-colocated/pq_companion/*/";
 
-/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
-   The heroicons installation itself is managed by your mix.exs */
-@plugin "../vendor/heroicons";
+/* Icons are vendored Lucide SVG paths inside core_components.ex `icon/1` — no
+   plugin, no JS build step. heroicons was removed (see the daisyUI note below
+   and wave 0 task 2.5). The reference app uses lucide-react in ~150 files, so
+   Lucide is the single icon set. */
 
 /* daisyUI was removed deliberately — see openspec/changes/add-phoenix-scaffold
    design D7 and the migration plan's duplication policy.
@@ -22,16 +23,11 @@
    visual parity — and its `--color-base-*` / `--color-primary` theme variables
    collide by name with the reference's tokens.
 
-   CONSEQUENCE — tracked in wave 0 task 2.5: the generated
-   `lib/pq_companion_web/components/core_components.ex` and
-   `lib/pq_companion_web/components/layouts.ex` still carry daisyUI class names
-   (`btn`, `alert`, `input`, `select`, `table`, `list`, `menu`, `navbar`,
-   `card`, `toggle`, `skeleton`). Those classes no longer resolve, so those
-   components are unstyled until 2.5 ports the reference's `@theme` tokens and
-   restyles them. The build is unaffected — nothing uses `@apply` with them.
-
-   The reference theme tokens port verbatim, because the `tailwind` hex package
-   resolves to the same Tailwind version the reference pins (v4.3.0). */
+   CONSEQUENCE — resolved in wave 0 task 2.5: the generated components were
+   restyled off the daisyUI class names onto these tokens, and the icon story is
+   vendored Lucide (heroicons removed). The reference theme tokens port verbatim,
+   because the `tailwind` hex package resolves to the same Tailwind version the
+   reference pins (v4.3.0). */
 
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);

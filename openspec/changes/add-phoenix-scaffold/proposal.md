@@ -77,7 +77,12 @@ None. This is the first change in the migration.
   real unknown is Windows NIF support for Exqlite, which acceptance criterion 3
   settles immediately.
 - **Dependencies (new):** `ecto_sqlite3`, `exqlite`, `file_system`,
-  `nimble_options`, `heroicons`, `floki`, `credo`, `dialyxir`, `mix_audit`
+  `nimble_options`, `credo`, `dialyxir`, `mix_audit` — and `heroicons`/
+  `floki`/`daisyUI` were **deliberately dropped** during task 1.3/2.5 (see
+  tasks.md for the rationale): `floki` is redundant with `lazy_html`, daisyUI
+  collides with the reference's tokens, and the icon story is **vendored Lucide**
+  (the reference uses `lucide-react` in 151 files; wave 1's design D3 vendors
+  those paths), so the heroicons plugin, vendor JS and dep are gone.
 - **User-data impact:** this change reads `user.db` and resolves the existing
   `config.yaml` path but writes neither. The only file it writes is the new
   `runtime.json`.
