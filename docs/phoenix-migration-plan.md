@@ -434,8 +434,10 @@ verifiable, and delete them with the reference tree.
    and write a row without schema change.
 3. `PQ.QuarmRepo` reads `items`, `spells_new`, `npc_types`, `zone` and rejects a
    write.
-4. `~/.pq-companion/config.yaml` round-trips: load → change → atomic save →
-   reload, byte-identical to the Go app's output for the unchanged fields.
+4. `~/.pq-companion/config.yaml` is **left untouched** by boot — Wave 0 only
+   resolves its location. The full round-trip (load → change → atomic save →
+   reload, byte-identical to the Go app for the unchanged fields) is a **Wave 2**
+   deliverable of `add-data-model`, where the settings schema lives.
 5. The three layouts render; `/w/npc-overlay` renders a transparent route with
    the `pq-window` meta tag present and parseable.
 6. CI is green on the Elixir job.

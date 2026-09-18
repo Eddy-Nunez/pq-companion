@@ -5,8 +5,8 @@ LiveView app (`docs/phoenix-migration-plan.md`, **Wave 0**). Nothing can be
 ported until there is a running Phoenix app with the same three window classes
 the current app has, the same on-disk footprint, and a CI gate.
 
-Wave 0 is deliberately shell-independent and low-risk: it proves the toolchain,
-the two-database access pattern, and the config round-trip **before** any
+Wave 0 is deliberately shell-independent and low-risk: it proves the toolchain
+and the two-database access pattern **before** any
 feature porting starts, and it ships `PQ.Shell.Browser` so every route —
 including all 16 overlay routes — is reachable as a plain URL. That removes the
 deferred Electron-vs-Tauri decision as a blocker for everything except Wave 8.
@@ -86,6 +86,7 @@ None. This is the first change in the migration.
 - **User-data impact:** this change reads `user.db` and resolves the existing
   `config.yaml` path but writes neither. The only file it writes is the new
   `runtime.json`.
-- **Risks carried forward:** `file_system` Windows support is unverified; the
-  fallback is a polling GenServer, which only affects Wave 3. The named-pipe
-  question (§2.5 of the plan) is untouched by this change.
+- **Risks carried forward:** none remaining for the two platform unknowns this
+  change set out to settle — tasks 1.4/1.5 verified the Exqlite Windows NIF and
+  `file_system`'s `FSWindows` backend on Windows, so no polling fallback is
+  needed. The named-pipe question (§2.5 of the plan) is untouched by this change.

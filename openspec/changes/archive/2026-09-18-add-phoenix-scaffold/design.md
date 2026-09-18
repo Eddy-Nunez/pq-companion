@@ -21,7 +21,8 @@ See proposal.md — Why. Current state that shapes this design:
 - A window contract expressive enough that either Electron or Tauri can be
   implemented against it later without changing application code.
 - Both databases open, with the game database provably write-protected.
-- `config.yaml` readable and writable in place, format unchanged.
+- `config.yaml`'s location resolved and its contents left untouched; loading and
+  writing settings is Wave 2 (`add-data-model`), where the settings schema lives.
 - A dev workflow that needs no native shell, and CI that gates.
 - Settle the two unverified platform assumptions (Windows SQLite NIF, Windows
   file watching) early rather than in Wave 3.

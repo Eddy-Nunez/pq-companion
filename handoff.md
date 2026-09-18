@@ -1,4 +1,4 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 complete — 34/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 archived — next: Wave 1)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
@@ -54,12 +54,28 @@ would mask real db failures upstream.
 Empty trigger commits `0aa732f0`, `076f198a` and `9f873818` exist only to start
 runs; drop them when convenient. Every push to the branch now runs CI.
 
-### Next
+### Closed out
 
-1. Decide §3.8 criterion 4 — amend the plan to point at `add-data-model`
-   (recommended), or implement the round-trip early. See update 8.
-2. `openspec archive add-phoenix-scaffold`, which promotes the delta specs into
-   `openspec/specs/` and makes it the Wave 0 contract.
+Both remaining decisions were taken, so **Wave 0 is archived**:
+
+1. **§3.8 criterion 4 amended** (`docs/phoenix-migration-plan.md`): it now says
+   Wave 0 only leaves `config.yaml` untouched, and the round-trip is a **Wave 2**
+   `add-data-model` deliverable. The wave-0 `design.md` goal and the `proposal.md`
+   scope line were corrected to match, and the proposal's now-stale “`file_system`
+   Windows unverified” risk was updated (task 1.5 settled it).
+
+2. **`add-phoenix-scaffold` archived** as
+   `openspec/changes/archive/2026-09-18-add-phoenix-scaffold`, promoting **18
+   requirements** into `openspec/specs/{app-shell,data-store,desktop-shell,dev-toolchain}`.
+   `openspec/specs/` is now the Wave 0 contract, and `openspec list` shows only
+   the two unwritten waves.
+
+### Next: Wave 1 — `add-sidebar-navigation` (0/27)
+
+The reference asset is `frontend/src/lib/sidebarNav.tsx` (4 sections, 34 items);
+the design commits to `PQWeb.Nav` + vendored Lucide icons (`PQWeb.Components.NavIcons`).
+**Resolve the `PQ.*`/`PQWeb.*` vs `PQCompanion.*` naming discrepancy when writing
+that change** — see update 4, decision 1.
 
 ---
 
