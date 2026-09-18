@@ -1,9 +1,61 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 32/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 33/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 10 — 2026-09-18 (Wave 0 to 33/34: CI is running on the fork)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session enabled Actions on the fork and observed the first real CI run.
+Update 9 remains current except where this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 33/34**. The only task left is **7.4**
+(Go is red on the fork — see below).
+
+### CI ran: Elixir green, TypeScript green, Go red (environmental)
+
+Actions was enabled via the fork's banner (“Workflows aren't being run on this
+forked repository”). Run **`35405245550`** (commit `076f198a`):
+
+| Job | Result |
+|---|---|
+| **Elixir Tests** | **success** — setup-beam from `.tool-versions`, cache, deps.get, compile `--warnings-as-errors`, format gate, tests (78/0) |
+| **TypeScript Typecheck** | **success** |
+| **Go Tests** | **failure** at `Run tests` |
+
+**The Go failure is environmental, not a regression.** The fork has no
+`data-latest` release, so the Go job's `Download game database` step falls
+through to its `::warning::` and `backend/data/quarm.db` is absent.
+`openTestDB` (`backend/internal/db/queries_test.go`) does
+`t.Fatalf("open db: %v")` when the file cannot be opened — so the db tests
+**fail hard rather than skipping**, contrary to the CI step's reassuring
+comment. Nothing in this migration touches Go code, and upstream's same job is
+green with the artifact present.
+
+**To close 7.4:** create a `data-latest` release **on the fork** with `quarm.db`
+attached (`https://github.com/Eddy-Nunez/pq-companion/releases/new`; the file is
+`phoenix/priv/data/quarm.db`, 86 MB), then re-run CI. The Go job downloads it
+and goes green. Do **not** “fix” this by making the Go job skip — that would mask
+real db-test failures upstream.
+
+### Footnote
+
+Two empty commits (`0aa732f0`, `076f198a`) were pushed only to trigger runs once
+Actions was enabled; drop them when convenient. Every push to the branch now
+triggers CI, so until the fork has `data-latest`, expect the Go job to stay red.
+
+### Next
+
+1. Create the fork's `data-latest` release (above) → 7.4 goes green → **34/34**.
+2. Decide on the §3.8 criterion-4 tension (settings round-trip deferred to
+   wave 2 per task 5.3) — see update 8.
+3. `openspec archive add-phoenix-scaffold`.
+
+---
 
 ## SESSION UPDATE 9 — 2026-09-18 (Wave 0 to 32/34: Windows verified from WSL)
 
