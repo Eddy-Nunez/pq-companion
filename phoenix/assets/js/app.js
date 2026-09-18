@@ -26,10 +26,47 @@ import {hooks as colocatedHooks} from "phoenix-colocated/pq_companion"
 import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+
+// ── Native shell bridge ──────────────────────────────────────────────────────
+// The server is authoritative about WHAT a window is (the `pq-window` meta tag,
+// scraped by the shell's preload on load) and pushes live property changes as
+// `pq:window` events. A native shell injects `window.pqShell`; in a plain
+// browser it is absent and the event is a no-op, which is the point.
+window.addEventListener("phx:pq:window", ({detail}) => {
+  if (window.pqShell && typeof window.pqShell.apply === "function") {
+    window.pqShell.apply(detail)
+  }
+})
+
+// Reports moved/resized bounds back to the server so they are persisted and
+// re-applied on the next open. Debounced: a tab drag emits resize continuously.
+const PqWindow = {
+  mounted() {
+    this.onResize = () => {
+      clearTimeout(this.timer)
+      this.timer = setTimeout(() => {
+        this.pushEvent("pq:save_bounds", {
+          bounds: {
+            x: Math.round(window.screenX),
+            y: Math.round(window.screenY),
+            w: Math.round(window.outerWidth),
+            h: Math.round(window.outerHeight),
+          },
+        })
+      }, 250)
+    }
+    window.addEventListener("resize", this.onResize)
+  },
+  destroyed() {
+    clearTimeout(this.timer)
+    window.removeEventListener("resize", this.onResize)
+  },
+}
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, PqWindow},
 })
 
 // Show progress bar on live navigation and form submits

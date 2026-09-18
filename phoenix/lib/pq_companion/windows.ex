@@ -33,9 +33,16 @@ defmodule PQCompanion.Windows do
   # options: transparent, always-on-top, frameless, not resizable, no chrome.
   # `click_through` is false here because the reference toggles it at runtime
   # via an explicit lock control rather than defaulting to pass-through.
-  @overlay_defaults [kind: :overlay, transparent: true, always_on_top: true,
-                     click_through: false, frameless: true, resizable: false,
-                     display_only: false, zoom: 1.0]
+  @overlay_defaults [
+    kind: :overlay,
+    transparent: true,
+    always_on_top: true,
+    click_through: false,
+    frameless: true,
+    resizable: false,
+    display_only: false,
+    zoom: 1.0
+  ]
 
   # The 16 overlays, in the reference's route order. `id` matches the
   # reference's `overlayKey` so per-overlay preferences (zoom, position, lock)
@@ -92,7 +99,8 @@ defmodule PQCompanion.Windows do
   @spec overlays() :: [t()]
   def overlays do
     Enum.map(@overlays, fn {id, slug, label} ->
-      struct!(%__MODULE__{},
+      struct!(
+        %__MODULE__{},
         [id: id, slug: slug, route: "/w/" <> slug, label: label] ++ @overlay_defaults
       )
     end)
@@ -119,23 +127,4 @@ defmodule PQCompanion.Windows do
   @spec overlay?(t()) :: boolean()
   def overlay?(%__MODULE__{kind: :overlay}), do: true
   def overlay?(%__MODULE__{}), do: false
-
-  @doc "The value for the machine-readable `pq-window` meta tag (see PQCompanion.Shell)."
-  @spec meta_payload(t()) :: map()
-  def meta_payload(%__MODULE__{} = w) do
-    %{
-      "id" => w.id,
-      "slug" => w.slug,
-      "route" => w.route,
-      "title" => w.label,
-      "kind" => to_string(w.kind),
-      "transparent" => w.transparent,
-      "alwaysOnTop" => w.always_on_top,
-      "clickThrough" => w.click_through,
-      "frameless" => w.frameless,
-      "resizable" => w.resizable,
-      "displayOnly" => w.display_only,
-      "zoom" => w.zoom
-    }
-  end
 end

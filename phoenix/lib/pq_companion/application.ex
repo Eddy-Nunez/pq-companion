@@ -11,6 +11,8 @@ defmodule PQCompanion.Application do
       PQCompanionWeb.Telemetry,
       PQCompanion.Repo,
       PQCompanion.Audio,
+      PQCompanion.WindowState,
+      PQCompanion.Shell.Browser,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:pq_companion, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:pq_companion, :dns_cluster_query) || :ignore},

@@ -28,6 +28,12 @@ defmodule PQCompanionWeb.WindowLive do
     {:noreply, assign(socket, :ticks, socket.assigns.ticks + 1)}
   end
 
+  # Shell round-trip events (bounds, zoom, display-only, click-through, lock).
+  # Shared with the overlays so the two window classes cannot drift.
+  def handle_event("pq:" <> _ = event, params, socket) do
+    PQCompanionWeb.ShellEvents.handle(event, params, socket)
+  end
+
   @impl true
   def render(assigns) do
     ~H"""

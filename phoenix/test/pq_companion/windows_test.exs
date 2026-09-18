@@ -42,17 +42,29 @@ defmodule PQCompanion.WindowsTest do
     refute Windows.overlay?(main)
   end
 
-  test "the pq-window payload carries every property a shell needs" do
-    for w <- Windows.all() do
-      payload = Windows.meta_payload(w)
-      assert %{"id" => _, "route" => _, "title" => _} = payload
+  test "the shell spec carries every property a shell needs" do
+    alias PQCompanion.Shell
 
-      for key <- ~w(transparent alwaysOnTop clickThrough frameless resizable displayOnly zoom) do
-        assert Map.has_key?(payload, key), "payload for #{w.id} is missing #{key}"
+    for w <- Windows.all() do
+      spec = Shell.spec(w)
+      assert spec.id == w.id
+      assert spec.route == w.route
+      assert spec.title == w.label
+      assert is_binary(spec.token) and spec.token != ""
+
+      for key <-
+            ~w(transparent always_on_top click_through frameless resizable display_only zoom)a do
+        assert Map.has_key?(spec, key), "spec for #{w.id} is missing #{key}"
       end
 
-      assert is_boolean(payload["transparent"])
-      assert is_number(payload["zoom"])
+      assert is_boolean(spec.transparent)
+      assert is_float(spec.zoom)
+      assert {:ok, :verified} = Shell.verify_token(spec.token, w.id)
+
+      json = Jason.decode!(Shell.to_json(spec))
+      assert json["id"] == w.id
+      assert json["token"] == spec.token
+      assert json["kind"] == to_string(w.kind)
     end
   end
 

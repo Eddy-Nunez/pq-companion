@@ -30,9 +30,16 @@ defmodule PQCompanionWeb.OverlayLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id={"overlay-#{@window.id}"} class="p-2 text-(--color-foreground)">
+    <div id={"overlay-#{@window.id}"} phx-hook="PqWindow" class="p-2 text-(--color-foreground)">
       <span class="text-xs">{@window.label}</span>
     </div>
     """
+  end
+
+  # Shell round-trip events. Overlays use the same handler as the main window;
+  # no alert hooks are involved, so this cannot make an overlay emit audio.
+  @impl true
+  def handle_event("pq:" <> _ = event, params, socket) do
+    PQCompanionWeb.ShellEvents.handle(event, params, socket)
   end
 end

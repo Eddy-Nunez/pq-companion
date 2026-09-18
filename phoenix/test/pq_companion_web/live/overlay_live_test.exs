@@ -31,7 +31,7 @@ defmodule PQCompanionWeb.OverlayLiveTest do
     end
   end
 
-  describe "window spec in the document (task 3.2 groundwork)" do
+  describe "window spec in the document (task 3.2)" do
     test "the overlay emits a parseable pq-window meta tag with every key", %{conn: conn} do
       {:ok, _view, html} = live(conn, Windows.fetch("npc").route)
 
@@ -39,13 +39,7 @@ defmodule PQCompanionWeb.OverlayLiveTest do
       # captures `&quot;` and breaks Jason. An HTML parser unescapes it — which
       # is exactly what a native shell scraping the tag will do, so parsing is
       # also the more faithful test.
-      doc = LazyHTML.from_document(html)
-
-      [content] =
-        doc
-        |> LazyHTML.query(~s(meta[name="pq-window"]))
-        |> LazyHTML.attribute("content")
-      spec = Jason.decode!(content)
+      spec = pq_window_spec(html)
 
       assert spec["id"] == "npc"
       assert spec["slug"] == "npc"
@@ -59,15 +53,46 @@ defmodule PQCompanionWeb.OverlayLiveTest do
       assert spec["clickThrough"] == false
       assert spec["displayOnly"] == false
       assert is_float(spec["zoom"])
+
+      # The session token and bounds the shell contract requires (plan §2.4).
+      assert is_binary(spec["token"]) and spec["token"] != ""
+      assert Map.has_key?(spec, "bounds")
     end
 
-    test "the main window does not emit a pq-window meta tag", %{conn: conn} do
-      # Not an omission to fix: the main window is declared by the shell, and the
-      # overlay shell is the only place the spec currently travels. If the shell
-      # ends up needing a main-window spec too, add it to root.html.heex and
-      # update this test — do not let it silently drift.
+    test "the main window also declares a spec, so a shell needs no special case", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/")
-      refute html =~ ~s(name="pq-window")
+      spec = pq_window_spec(html)
+
+      assert spec["id"] == "main"
+      assert spec["kind"] == "main"
+      assert spec["transparent"] == false
+      assert spec["clickThrough"] == false
+      assert spec["resizable"] == true
+      assert is_binary(spec["token"]) and spec["token"] != ""
     end
+
+    test "both window classes declare every key the shell contract requires", %{conn: conn} do
+      required = ~w(id slug kind token route title transparent alwaysOnTop clickThrough
+                    frameless resizable displayOnly bounds zoom)
+
+      for {route, _kind} <- [{~p"/", :main}, {Windows.fetch("dps").route, :overlay}] do
+        {:ok, _view, html} = live(conn, route)
+        spec = pq_window_spec(html)
+
+        for key <- required do
+          assert Map.has_key?(spec, key), "#{route} is missing #{key}"
+        end
+      end
+    end
+  end
+
+  defp pq_window_spec(html) do
+    [content] =
+      html
+      |> LazyHTML.from_document()
+      |> LazyHTML.query(~s(meta[name="pq-window"]))
+      |> LazyHTML.attribute("content")
+
+    Jason.decode!(content)
   end
 end

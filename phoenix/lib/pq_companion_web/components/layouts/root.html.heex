@@ -5,8 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
     <.live_title default="PQ Companion" phx-no-format>{assigns[:page_title]}</.live_title>
+    <%!--
+      The main-window spec, rendered the same way the overlay shell renders it
+      (task 3.2). A shell scrapes this on load and configures the native window
+      without special-casing the main window. Guarded because the root layout is
+      the HTML document for any future non-window route too.
+    --%>
+    <meta
+      :if={assigns[:window]}
+      name="pq-window"
+      content={PQCompanion.Shell.to_json(PQCompanion.Shell.spec(assigns[:window]))}
+    />
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
-    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}></script>
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    </script>
   </head>
   <body class="bg-(--color-background) text-(--color-foreground)">
     {@inner_content}

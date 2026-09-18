@@ -10,9 +10,10 @@
       configures the native window; the LiveView stays authoritative about WHAT
       the window is, the shell about HOW to realise it. See PQCompanion.Shell.
     --%>
-    <meta name="pq-window" content={Jason.encode!(PQCompanion.Windows.meta_payload(@window))} />
+    <meta name="pq-window" content={PQCompanion.Shell.to_json(PQCompanion.Shell.spec(@window))} />
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
-    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}></script>
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    </script>
   </head>
   <%!-- body-transparent is what makes the window see-through; the reference
        achieved this by mutating document.body.style in a React effect, which is

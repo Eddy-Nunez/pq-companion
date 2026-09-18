@@ -12,6 +12,11 @@ config :pq_companion,
   ecto_repos: [PQCompanion.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# Which native-shell adapter window operations are dispatched to. The browser
+# adapter is the development default so no wave before 8 is blocked on the
+# deferred Electron-vs-Tauri decision (see PQCompanion.Shell).
+config :pq_companion, :shell_adapter, PQCompanion.Shell.Browser
+
 # Configure the endpoint
 config :pq_companion, PQCompanionWeb.Endpoint,
   url: [host: "localhost"],

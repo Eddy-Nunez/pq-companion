@@ -36,7 +36,7 @@ defmodule PQCompanionWeb.Layouts do
 
   def window(assigns) do
     ~H"""
-    <div id="main-window" class="flex h-screen flex-col bg-(--color-background)">
+    <div id="main-window" phx-hook="PqWindow" class="flex h-screen flex-col bg-(--color-background)">
       <header
         id="titlebar"
         class="flex h-9 shrink-0 items-center border-b border-(--color-border) px-3"
