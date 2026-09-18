@@ -1,13 +1,137 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 bootstrap)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 8/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
 
-## SESSION UPDATE — 2026-09-18 (migration bootstrapped; Wave 0 blocked on toolchain)
+## SESSION UPDATE 2 — 2026-09-18 (Wave 0 to 8/34: app scaffolded, windows built)
 
 **Read this first — where it conflicts with anything below, this wins.**
+Session 1 got the toolchain working; this session built the app skeleton. The
+sections under update 1 (trees, worktree git pointers, 9p cost, Burrito strategy,
+gotchas) are **still current** — update 2 only adds to them.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 8/34**. Done: 1.1, 1.2, 1.3, 1.6,
+2.1, 2.2, 2.3, 2.4. **Partial: 2.5** (theme tokens done, component restyle not).
+Untouched: 3.x, 4.x, 5.x, 6.x, 7.x, 8.x. Waves 1 and 2 changes
+(`add-sidebar-navigation`, `add-data-model`) are still 0/27 and 0/55.
+
+Branch `feat/phoenix-migration`, tip `e742fcdf`, working tree clean, pushed.
+`mix test` → **27 tests, 0 failures**. `mix compile --warnings-as-errors` clean.
+The real server returns 200 on `/` and all 16 overlay routes, 302 on an unknown
+window.
+
+### What landed (commits `8df5fee6` .. `e742fcdf`)
+
+- **Toolchain** — mise, Erlang/OTP 27.3.4.17, Elixir 1.18.5, Mix 1.18.5, hex
+  2.5.1, rebar3, phx_new 1.8.14. Pinned in `.tool-versions` with a global
+  fallback so shims resolve outside the project.
+- **The app** — `phoenix/` generated (`--database sqlite3 --no-mailer
+  --no-gettext`), deps resolved, compiling. `select sqlite_version()` → 3.53.4
+  through the Exqlite NIF.
+- **Windows structure** — `PQCompanion.Windows` (registry: 16 overlays + main),
+  three window classes as shell + inner layout, a parametrised `OverlayLive` for
+  all 16, and `PQCompanion.Audio` (audio-owner registry). The generated
+  `PageController`/`PageHTML` was deleted — `/` is a LiveView now.
+- **Theme** — the reference's 22 `@theme` tokens ported verbatim into
+  `assets/css/app.css`, including the `--color-danger` alias.
+
+### Where the code lives
+
+| Path (under `phoenix/`) | What |
+|---|---|
+| `lib/pq_companion/windows.ex` | Window registry — id, slug, route, native props |
+| `lib/pq_companion/audio.ex` | Audio-owner `Registry` |
+| `lib/pq_companion_web/live/window_live.ex` | Main window |
+| `lib/pq_companion_web/live/overlay_live.ex` | All 16 overlays |
+| `lib/pq_companion_web/components/layouts.ex` | `window/1`, `bare/1`, `flash_group/1` |
+| `lib/pq_companion_web/components/layouts/{root,overlay}.html.heex` | The two HTML shells |
+| `lib/pq_companion_web/router.ex` | `/` and `/w/:slug` |
+| `test/pq_companion/windows_test.exs`, `test/pq_companion_web/live/*_test.exs` | The suite |
+
+### Next, in dependency order
+
+1. **2.5 remainder** — restyle `core_components.ex` off daisyUI. It still has
+   **93 occurrences** of `btn`/`alert`/`input`/`select`/`table`/`list`/`fieldset`/
+   `label`/`checkbox`/`textarea`/`badge`/`link` across 501 lines, so those
+   components render unstyled. `layouts.ex` is already clean (2.2 rewrote it).
+   **Also decide heroicons vs Lucide** in the same pass — these components use
+   `hero-*` classes via `@plugin "../vendor/heroicons"`, but wave 1 vendors the
+   reference's Lucide paths (design D3 of `add-sidebar-navigation`). Do not end up
+   with both by accident.
+2. **3.1–3.5** — the `PQ.Shell` behaviour, the browser adapter, the conformance
+   suite, and `push_event`/`handleEvent` for bounds/zoom/display-only/lock. The
+   overlay shell already emits the `pq-window` meta this depends on.
+3. **4.1–4.6** — the two Ecto repos (`QuarmRepo` structurally read-only), the
+   read-only guard test, and the on-disk footprint resolution.
+4. **5.1–5.3** — `~/.pq-companion/runtime.json` plus the stdout record.
+5. **6.1–6.3** — dev workflow docs. **Live reload should work now** —
+   `inotify-tools` was installed this session, which unblocks task 6.2.
+6. **7.1–7.4** — CI (remember the UTF-8 locale requirement recorded in 7.1).
+7. **8.1–8.2** — wave verification, then `openspec archive add-phoenix-scaffold`.
+
+### Windows-side work still outstanding (tasks 1.4 and 1.5)
+
+Erlang/OTP and Elixir **are now installed on Windows**. Still to do before 1.4/1.5
+can run:
+
+1. `mix local.hex --force`, `mix local.rebar --force`,
+   `mix archive.install hex phx_new --force` on the Windows side.
+2. **Delete `phoenix/_build` and `phoenix/deps` before running `mix` from
+   Windows** (they are symlinks to the ext4 cache and Windows sees them as 0-byte
+   reparse points), or set `MIX_BUILD_PATH`/`MIX_DEPS_PATH` to Windows paths.
+   Both are gitignored, so deleting them costs nothing.
+3. Set a UTF-8 locale (see the latin1 gotcha under update 1).
+
+Task 1.5 gained a finding this session: `file_system` shells out to `inotifywait`
+on Linux, so it carries a platform prerequisite there *and* an open question on
+Windows. A poll-based GenServer may be the better **primary** implementation for
+wave 3's log watching rather than a fallback — worth deciding when 1.5 runs.
+
+### Environment, as of now
+
+| | |
+|---|---|
+| WSL | Ubuntu 24.04, ext4 source cache, `inotify-tools` installed |
+| Elixir toolchain | mise → OTP 27.3.4.17 / Elixir 1.18.5 / Mix 1.18.5 |
+| Elixir extras | hex 2.5.1, rebar3, phx_new 1.8.14 |
+| Burrito toolchain | zig 0.15.2, 7zip 26.03, `7z` shim at `~/.local/bin/7z` |
+| Source | `/mnt/c/Users/eddyn/pq-companion-phoenix` (Windows-visible) |
+| Build cache | `~/.cache/pq-companion-phoenix/{_build,deps}` (ext4, symlinked in) |
+| Windows | Erlang/OTP + Elixir installed; hex/rebar/phx_new still to add |
+
+### Things learned the hard way this session
+
+1. **`:root` became `:window`.** The spec named the main-window layout class
+   `:root`, which collides with Phoenix's root-layout concept (`put_root_layout`).
+   `root/1` keeps its Phoenix meaning; spec updated with the rationale.
+2. **A LiveView layout receives `@inner_content`, not `slot :inner_block`.** The
+   generator's `app/1` used `render_slot(@inner_block)` and worked only because
+   `config :phoenix_live_view, layout: false` meant it was always called
+   explicitly as `<Layouts.app>`. As a real layout it raised `KeyError`.
+3. **Registry `id` and URL `slug` are different things.** Ids are the reference's
+   camelCase `overlayKey`s (kept so per-overlay preferences survive); routes are
+   kebab-case. Conflating them made every camelCase overlay silently redirect to
+   the main window — a placeholder redirecting looks a lot like one working.
+4. **HEEx HTML-escapes the `pq-window` meta attribute**, so a regex test captures
+   `&quot;` and breaks Jason. Parse it (`LazyHTML`) — which is also what a native
+   shell will do.
+5. **`lazy_html`, not `floki`.** Phoenix 1.8 generates the former; task 1.3
+   correctly dropped floki as redundant. I nearly reintroduced it in a test.
+6. **Removing daisyUI is not a one-line deletion** — the generated components are
+   built from its classes. No `@apply`, so the build survives; the components just
+   render unstyled until 2.5 finishes.
+
+---
+
+## SESSION UPDATE 1 — 2026-09-18 (migration bootstrapped; toolchain blocker) — SUPERSEDED by update 2 above
+
+> Kept for history. Update 2 at the top of this file wins wherever they conflict.
+> Its "blocked on toolchain" framing is resolved; the trees/git-pointer/9p/Burrito
+> sections below are still current and are referenced by update 2.
 
 ### Where the trees are
 
@@ -163,7 +287,7 @@ Committed and pushed as `0aa89896` (35 files, 5,592 insertions):
 
 Nothing has been written in `phoenix/` yet — it does not exist.
 
-### What's next — Phase 0 task 1.2
+### What was next at the end of session 1 (SUPERSEDED — see update 2)
 
 **Task 1.1 (toolchain) is DONE** — see the commit log and the environment table
 below. The next command is the generator:
