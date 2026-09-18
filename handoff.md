@@ -1,9 +1,90 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 20/34)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 in progress — 23/34)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
+
+## SESSION UPDATE 6 — 2026-09-18 (Wave 0 to 23/34: the app announces itself)
+
+**Read this first — where it conflicts with anything below, this wins.**
+This session landed section 5 (tasks 5.1–5.3). Updates 1–5 remain current except
+where this section says otherwise.
+
+### Where the work stands
+
+`openspec list` → **`add-phoenix-scaffold` 23/34**. Done: 1.1–1.3, 1.6, 2.1–2.5,
+3.1–3.5, 4.1–4.6, **5.1–5.3**. Untouched: 1.4, 1.5 (need Windows), 6.x, 7.x, 8.x.
+Waves 1 and 2 are still 0/27 and 0/55.
+
+Branch `feat/phoenix-migration`, working tree clean. `mix test` → **78 tests,
+0 failures** (was 71). `mix compile --warnings-as-errors` clean, `mix format
+--check-formatted` clean on the files this session touched.
+
+### What landed
+
+`PQCompanion.Runtime` plus the `Application.start/2` / `stop/1` wiring:
+
+- `configure_port!/0` runs **before** the endpoint child starts, probing the
+  preferred port and asking the OS for a free one (`port: 0`) when it is busy.
+- `announce_from/1` runs **after** `Supervisor.start_link/2` returns and reads
+  the real bound port from `Bandit.PhoenixAdapter.server_info/2` — the same
+  `ThousandIsland.listener_info/1` Bandit logs.
+- The record is `{"port", "pid", "version"}`; written atomically to
+  `~/.pq-companion/runtime.json` and printed as one JSON line on stdout.
+- `Application.stop/1` (new — the generator does not define one) calls
+  `retract/0`, so a clean shutdown leaves no stale record.
+
+**End-to-end proof, not just unit tests:** with port 4000 occupied, the dev
+server bound **46759**, `runtime.json` held `{"port":46759,…}`, the same line
+appeared on stdout, `curl` to 46759 returned 200, and `SIGTERM` removed the
+record. The three commands that reproduce it are in the task 5.1/5.2 entries.
+
+### Decisions / notes
+
+1. **One record, not the reference's two channels.** The reference prints
+   `BACKEND_PORT=N` *and* writes `~/.pq-companion/server-port`. This change
+   spends design D6's budget on `runtime.json` plus the same record on stdout;
+   the `BACKEND_PORT=` line is deliberately dropped because the shell that reads
+   it is being rewritten in wave 8. If the *existing* Electron main process is
+   ever pointed at this backend before then, it will need `BACKEND_PORT=` back.
+2. **The port probe has a narrow race** with Bandit's own bind — the reference
+   holds its listener across the fallback. Replicating that means reaching into
+   the adapter; accepted for wave 0 and recorded in `runtime.ex`. The announced
+   port is always the real one either way (it is read after binding).
+3. **Cosmetic:** Phoenix logs `Access PQCompanionWeb.Endpoint at
+   http://localhost:0` when the fallback fires, because the *configured* port is
+   0 by then. The real address is the Bandit log line and `runtime.json`. Not
+   worth chasing — the shell uses the record, not the log.
+
+### Next, in dependency order
+
+1. **6.1–6.3** — dev workflow docs; live reload is unblocked (`inotify-tools` is
+   installed), and 6.3 wants a browser pass over all 16 overlay routes.
+2. **7.1–7.4** — CI: `erlef/setup-beam` pinned to `.tool-versions`, the UTF-8
+   locale (`LANG=C.UTF-8`), the formatting gate, the game-database download step
+   in 7.3, and confirming the existing Go/TS jobs still run.
+3. **8.1–8.2** — wave verification against `docs/phoenix-migration-plan.md` §3.8
+   and the reference-tree diff, then `openspec archive add-phoenix-scaffold`.
+
+Windows-side 1.4/1.5 remain outstanding (hex/rebar/phx_new, remove the
+`_build`/`deps` symlinks before running Windows `mix`, UTF-8 locale).
+
+### Things learned the hard way this session
+
+1. **`ThousandIsland.listener_info/1` is the only source of the bound port.**
+   `Endpoint.config(:port)` is the *configured* port (0 after the fallback), not
+   the bound one; `Bandit.PhoenixAdapter.server_info/2` wraps the listener call.
+2. **`start_supervised!` is the right way to host a real Bandit server in a
+   test.** `Bandit.start_link` links to the test process, and stopping the
+   returned supervisor from `on_exit` races the test process teardown
+   (`:sys.terminate` exits `:shutdown`).
+3. **`pkill -f "mix phx.server"` also matches the shell script that runs it**
+   when the script body contains that string — it killed the harness mid-run.
+   Use a more specific pattern or a PID.
+4. **`Logger.info/2` needs `require Logger`** even in a Phoenix app module.
+
+---
 
 ## SESSION UPDATE 5 — 2026-09-18 (Wave 0 to 20/34: the two databases are open)
 

@@ -3,6 +3,8 @@ defmodule PQCompanion.Application do
   # for more information on OTP Applications
   @moduledoc false
 
+  require Logger
+
   use Application
 
   @impl true
@@ -11,6 +13,8 @@ defmodule PQCompanion.Application do
     # missing, before the supervision tree (and the HTTP listener) comes up.
     PQCompanion.Paths.ensure!()
     PQCompanion.QuarmRepo.verify!()
+    # Pick the listener port now, before the endpoint child reads it.
+    PQCompanion.Runtime.configure_port!()
 
     children =
       [
@@ -35,7 +39,30 @@ defmodule PQCompanion.Application do
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: PQCompanion.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    with {:ok, supervisor} <- Supervisor.start_link(children, opts) do
+      announce_runtime()
+      {:ok, supervisor}
+    end
+  end
+
+  # The listener is bound by the time the supervisor returns, so the record can
+  # carry the port the socket actually took.
+  defp announce_runtime do
+    if PQCompanion.Runtime.server_enabled?() do
+      case PQCompanion.Runtime.announce_from() do
+        {:ok, record} ->
+          Logger.info("runtime announced",
+            port: record["port"],
+            record: PQCompanion.Runtime.record_path()
+          )
+
+        {:error, reason} ->
+          Logger.warning("could not announce the runtime record", reason: inspect(reason))
+      end
+    end
+
+    :ok
   end
 
   # The shipped game database is required outside test; `verify!/0` has already
@@ -51,6 +78,15 @@ defmodule PQCompanion.Application do
   @impl true
   def config_change(changed, _new, removed) do
     PQCompanionWeb.Endpoint.config_change(changed, removed)
+    :ok
+  end
+
+  # A stale runtime record must not outlive the process (wave 0 task 5.2): a
+  # native shell that reads it after a clean stop would otherwise connect to a
+  # dead port.
+  @impl true
+  def stop(_state) do
+    PQCompanion.Runtime.retract()
     :ok
   end
 
