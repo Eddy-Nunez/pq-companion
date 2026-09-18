@@ -16,7 +16,7 @@ const selectStyle: React.CSSProperties = {
 
 export default function RaidCheckPage(): React.ReactElement {
   const {
-    encounters, roster, selectedId, pickEncounter, report, busy, refreshing, error, refresh, runCheck,
+    orderedEncounters, roster, selectedId, pickEncounter, report, busy, refreshing, error, refresh, runCheck,
   } = useRaidReadiness()
   const [manualRows, setManualRows] = useState<CheckRosterInput[]>([])
   const [useManual, setUseManual] = useState(false)
@@ -30,8 +30,8 @@ export default function RaidCheckPage(): React.ReactElement {
   }
 
   const selectedEncounter = useMemo(
-    () => encounters.find((e) => e.id === selectedId) ?? null,
-    [encounters, selectedId],
+    () => orderedEncounters.find((e) => e.id === selectedId) ?? null,
+    [orderedEncounters, selectedId],
   )
 
   return (
@@ -46,8 +46,8 @@ export default function RaidCheckPage(): React.ReactElement {
           value={selectedId}
           onChange={(e) => pickEncounter(e.target.value)}
         >
-          {encounters.length === 0 ? <option value="">No encounters</option> : null}
-          {encounters.map((e) => (
+          {orderedEncounters.length === 0 ? <option value="">No encounters</option> : null}
+          {orderedEncounters.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name} — {e.zone}
               {e.status !== 'active' ? ' (placeholder)' : ''}

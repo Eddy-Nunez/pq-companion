@@ -28,12 +28,17 @@ type Snapshot struct {
 }
 
 // rosterStaleAfter is how long a MsgRaid snapshot is trusted with no refresh
-// before Get treats it as gone. Zeal re-sends MsgRaid on every roster change
-// and periodically besides, so a gap this long means the pipe died without
-// a clean disconnect (or Zeal itself hung) — same failure shape documented
-// for the NPC overlay pipe. Clear on OnDisconnect handles the clean case;
-// this is the belt-and-suspenders fallback for the unclean one.
-const rosterStaleAfter = 5 * time.Minute
+// before Get treats it as gone. Zeal emits MsgRaid every main-loop tick while
+// the client is in a raid (verified live 2026-09-14: ~10/sec) — and emits
+// NOTHING when the raid disbands (is_in_raid() simply goes false; there is no
+// "raid over" message). So a gap this long with a connected pipe means the
+// raid ENDED, or the client froze — either way the roster is no longer live.
+// The window only needs to clear zoning hitches (a slow zone load pauses the
+// ticks too); if we age out mid-zone, the next MsgRaid tick re-populates the
+// roster within one tick and the fingerprint change re-broadcasts. 30s is
+// comfortably above any observed zone load and a huge improvement over
+// reporting a disbanded raid for 5 minutes (the pre-per-tick-era window).
+const rosterStaleAfter = 30 * time.Second
 
 // Roster keeps the latest live raid roster in memory. It is written from the
 // Zeal pipe dispatch in cmd/server/main.go and read by the checker API. The
@@ -43,29 +48,40 @@ type Roster struct {
 	mu   sync.RWMutex
 	snap Snapshot
 	seen bool
+	// lastStale mirrors "the roster is currently aged out" for StaleChange.
+	// Starts true (nothing populated), Set clears it, Clear and detected
+	// staleness set it.
+	lastStale bool
 }
 
 // NewRoster returns an empty roster.
 func NewRoster() *Roster {
-	return &Roster{}
+	return &Roster{lastStale: true}
 }
+
+// now is swappable so staleness tests don't sleep.
+var now = time.Now
 
 // Set replaces the latest snapshot and marks the roster as seen.
 func (r *Roster) Set(zoneID int, zone string, members []Member) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.snap = Snapshot{UpdatedAt: time.Now().Unix(), ZoneID: zoneID, Zone: zone, Members: members}
+	r.snap = Snapshot{UpdatedAt: now().Unix(), ZoneID: zoneID, Zone: zone, Members: members}
 	r.seen = true
+	r.lastStale = false
 }
 
 // Clear drops the current snapshot. Called from the pipe's OnDisconnect
 // handler so a stale roster doesn't keep reporting "in a raid" after Zeal
-// goes away — same cleanup every other pipe-only consumer does there.
+// goes away — same cleanup every other pipe-only consumer does there. Marks
+// the roster stale so the StaleChange watcher doesn't double-report the
+// same emptying (the disconnect path already broadcasts).
 func (r *Roster) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.snap = Snapshot{}
 	r.seen = false
+	r.lastStale = true
 }
 
 // Get returns the latest snapshot. seen is false until the first Set, or once
@@ -74,8 +90,25 @@ func (r *Roster) Clear() {
 func (r *Roster) Get() (Snapshot, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.seen && time.Since(time.Unix(r.snap.UpdatedAt, 0)) > rosterStaleAfter {
+	if r.seen && now().Sub(time.Unix(r.snap.UpdatedAt, 0)) > rosterStaleAfter {
 		return Snapshot{}, false
 	}
 	return r.snap, r.seen
+}
+
+// StaleChange reports — once per transition — that a previously-fresh roster
+// has aged out (raid disbanded with no wire signal, or the client froze).
+// The caller (a low-frequency watcher in main.go) pushes one raid.roster WS
+// event on true so connected clients re-fetch and drop their "in raid" state
+// immediately instead of waiting for a manual refresh. Roster start-up (never
+// populated) and Clear (disconnect already broadcasts) are not changes.
+func (r *Roster) StaleChange() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stale := !r.seen || now().Sub(time.Unix(r.snap.UpdatedAt, 0)) > rosterStaleAfter
+	if stale && !r.lastStale {
+		r.lastStale = true
+		return true
+	}
+	return false
 }
