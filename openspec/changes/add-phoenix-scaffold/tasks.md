@@ -46,7 +46,7 @@
 
 ## 7. Continuous integration
 
-- [ ] 7.1 Add an Elixir CI job using `erlef/setup-beam` pinned to `.tool-versions`; verify the job fetches dependencies, compiles and runs the test suite on a push
+- [ ] 7.1 Add an Elixir CI job using `erlef/setup-beam` pinned to `.tool-versions`; verify the job fetches dependencies, compiles and runs the test suite on a push. **Also ensure the job runs a UTF-8 VM** (`LANG=C.UTF-8`, or `ELIXIR_ERL_OPTIONS="+fnu"`): with no locale the BEAM starts in latin1 name encoding and Elixir warns it "may malfunction". EQ item and NPC names are not guaranteed ASCII, so this is a correctness risk rather than a cosmetic warning. Locally it only shows under a stripped environment (`env -i`) — normal shells here have `LANG=C.UTF-8`.
 - [ ] 7.2 Add a formatting gate and verify it fails on a deliberately misformatted file and passes once formatted
 - [ ] 7.3 Mirror the reference's game-database download step and verify data-backed tests execute when the artifact is present and skip with an explicit warning when it is not — never reported as passing
 - [ ] 7.4 Confirm the existing Go test job and TypeScript typecheck job still run; verify both appear green in the same workflow run

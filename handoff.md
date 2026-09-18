@@ -174,6 +174,17 @@ every build — restore with `git checkout -- package.json` immediately after.
 Never `npm install` from WSL into the reference tree; it replaces the Windows
 electron binaries in `node_modules`.
 
+**A latin1 BEAM corrupts non-ASCII data.** With no locale set, the VM starts in
+latin1 name encoding and Elixir warns it "may malfunction". Normal shells here
+have `LANG=C.UTF-8` and run clean — this only appears under a stripped
+environment (`env -i`), which is exactly what a CI runner looks like. Set
+`LANG=C.UTF-8` (or `ELIXIR_ERL_OPTIONS="+fnu"`) in CI. Tracked in task 7.1.
+
+**`erl_crash.dump` on a clean exit.** Invoking `erl` from a captured-output
+pipeline can produce a crash dump whose slogan is a boot-time `badarg` writing
+to `standard_error` ("the device does not exist"). It is not an application
+error — ignore the file, now gitignored.
+
 ---
 
 ## Migration reference (stable — unlikely to change)
