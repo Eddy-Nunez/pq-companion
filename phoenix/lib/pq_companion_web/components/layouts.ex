@@ -17,6 +17,9 @@ defmodule PQCompanionWeb.Layouts do
   """
   use PQCompanionWeb, :html
 
+  alias PQCompanionWeb.Components.Sidebar
+  alias PQCompanionWeb.Nav
+
   embed_templates "layouts/*"
 
   @doc """
@@ -33,8 +36,12 @@ defmodule PQCompanionWeb.Layouts do
   attr :flash, :map, default: %{}
   attr :window, :map, default: nil
   attr :inner_content, :any, default: nil
+  attr :sidebar_prefs, :map, default: nil
+  attr :active_path, :string, default: nil
 
   def window(assigns) do
+    assigns = assign(assigns, :sidebar_prefs, normalize_prefs(assigns[:sidebar_prefs]))
+
     ~H"""
     <div id="main-window" phx-hook="PqWindow" class="flex h-screen flex-col bg-(--color-background)">
       <header
@@ -46,14 +53,11 @@ defmodule PQCompanionWeb.Layouts do
         </span>
       </header>
       <div class="flex min-h-0 flex-1">
-        <nav
-          id="sidebar"
-          class="w-52 shrink-0 overflow-y-auto border-r border-(--color-border) bg-(--color-surface)"
-          aria-label="Main navigation"
-        >
-          <%!-- wave 1 (add-sidebar-navigation) renders PQWeb.Nav here --%>
-          <p class="p-3 text-xs text-(--color-muted)">navigation arrives in wave 1</p>
-        </nav>
+        <Sidebar.sidebar
+          sections={Nav.sidebar_sections(@sidebar_prefs.flags, @sidebar_prefs)}
+          collapsed={@sidebar_prefs.collapsed}
+          active_path={@active_path}
+        />
         <main id="content" class="min-w-0 flex-1 overflow-y-auto">
           {@inner_content}
         </main>
@@ -61,6 +65,24 @@ defmodule PQCompanionWeb.Layouts do
     </div>
     """
   end
+
+  # The sidebar assigns are attached by `PQCompanionWeb.ConfigHooks`; a bare or
+  # not-yet-wired route still renders the sidebar with defaults rather than
+  # crashing the layout.
+  defp normalize_prefs(nil), do: default_prefs()
+
+  defp normalize_prefs(prefs) do
+    %{
+      flags: Map.get(prefs, :flags) || %{},
+      hidden: Map.get(prefs, :hidden) || [],
+      order: Map.get(prefs, :order) || [],
+      favorites: Map.get(prefs, :favorites) || [],
+      collapsed: Map.get(prefs, :collapsed) || %{}
+    }
+  end
+
+  defp default_prefs,
+    do: %{flags: %{}, hidden: [], order: [], favorites: [], collapsed: %{}}
 
   @doc """
   Content only — no titlebar, no sidebar.

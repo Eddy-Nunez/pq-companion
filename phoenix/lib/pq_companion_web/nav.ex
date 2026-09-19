@@ -152,6 +152,10 @@ defmodule PQCompanionWeb.Nav do
   @spec items() :: [Item.t()]
   def items, do: Enum.flat_map(@sections, & &1.items)
 
+  @doc "Every item's route, in definition order."
+  @spec routes() :: [String.t()]
+  def routes, do: Enum.map(items(), & &1.route)
+
   @doc "The feature-flag keys, in order."
   @spec flag_keys() :: [String.t()]
   def flag_keys, do: @flag_keys
@@ -229,4 +233,73 @@ defmodule PQCompanionWeb.Nav do
     |> Enum.filter(&MapSet.member?(favorite_set, &1.route))
     |> order_items(order)
   end
+
+  @doc """
+  True when `item` should be highlighted for `path`.
+
+  An item marked `exact_match` highlights only on an exact match. Every other
+  item prefix-matches **at a path boundary**: `/combat` highlights for
+  `/combat/log` and `/combat/history`, but `/items` is *not* highlighted by
+  `/itemss` — the next character must be a separator. This is the reference's
+  `NavLink` default-vs-`end` behaviour, kept in one function so highlighting
+  cannot drift between the initial render and a live navigation.
+  """
+  @spec active?(Item.t(), String.t() | nil) :: boolean()
+  def active?(%Item{route: route, exact_match: true}, path), do: path == route
+
+  def active?(%Item{route: route}, path) when is_binary(path) do
+    path == route or String.starts_with?(path, route <> "/")
+  end
+
+  def active?(%Item{}, _path), do: false
+
+  @doc "The routes of the items active for `path` (usually zero or one)."
+  @spec active_routes([section()], String.t() | nil) :: [String.t()]
+  def active_routes(sections, path) do
+    sections
+    |> Enum.flat_map(& &1.items)
+    |> Enum.filter(&active?(&1, path))
+    |> Enum.map(& &1.route)
+  end
+
+  @doc """
+  The sections the sidebar renders: the flag filter, then the user's hide and
+  order preferences, then a `Favorites` group prepended when anything is starred.
+
+  `prefs` is the map from `PQCompanion.Config.Server.sidebar/1`:
+  `%{hidden:, order:, favorites:}`. This mirrors the reference's `Sidebar`
+  `useMemo`: a favorite is a shortcut, not a move, so it also stays in its own
+  section; a favorite that is hidden or flag-gated does not appear at all.
+  """
+  @spec sidebar_sections(%{String.t() => boolean()}, map()) :: [section()]
+  def sidebar_sections(flags, prefs) do
+    hidden = MapSet.new(Map.get(prefs, :hidden, []) || [])
+    order = Map.get(prefs, :order, []) || []
+    favorites = Map.get(prefs, :favorites, []) || []
+
+    visible = visible_sections(flags)
+
+    base =
+      visible
+      |> Enum.map(fn section ->
+        %{
+          section
+          | items: section.items |> order_items(order) |> Enum.reject(&hidden?(&1, hidden))
+        }
+      end)
+      |> Enum.reject(&(&1.items == []))
+
+    favs =
+      visible
+      |> favorite_items(favorites, order)
+      |> Enum.reject(&hidden?(&1, hidden))
+
+    if favs == [] do
+      base
+    else
+      [%{id: "favorites", label: "Favorites", items: favs} | base]
+    end
+  end
+
+  defp hidden?(item, hidden), do: MapSet.member?(hidden, item.route)
 end

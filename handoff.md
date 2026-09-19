@@ -1,17 +1,17 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 1 in progress — 6/27)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 1 in progress — 14/27)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
 
-## SESSION UPDATE 11 — 2026-09-18 (Wave 1 in progress — 6/27)
+## SESSION UPDATE 11 — 2026-09-18 (Wave 1 in progress — 14/27)
 
 **Newest. Where it conflicts with anything below, this wins.**
 
 ### Done
 
-`openspec list` → `add-sidebar-navigation` **6/27** (tasks 1.1–1.5, 2.5).
+`openspec list` → `add-sidebar-navigation` **14/27** (tasks 1.1–1.5, 2.1–2.5, 3.1–3.3, 5.1).
 
 - `PQCompanionWeb.Nav` + `PQCompanionWeb.Nav.Item`
   (`phoenix/lib/pq_companion_web/nav.ex`) port the reference's 4 sections / 34
@@ -32,6 +32,25 @@
 
 Suite **117 tests, 0 failures**; `compile --warnings-as-errors` and
 `format --check-formatted` clean.
+
+Later in the same session the sidebar itself landed:
+
+- `PQCompanion.Config.Server` — the single owning GenServer for `config.yaml`:
+  serialised writes, atomic save, `config:updated` broadcast. In the supervision
+  tree with an injectable path, so tests never touch the real settings file.
+- `Nav.active?/2` / `active_routes/2` (exact-match vs **boundary** prefix match)
+  and `Nav.sidebar_sections/2` (flag filter + hide/order + the Favorites group),
+  plus `Nav.routes/0`.
+- `PQCompanionWeb.Components.Sidebar` renders sections/items from `Nav`;
+  `PQCompanionWeb.ConfigHooks` is the `on_mount` that loads prefs, subscribes,
+  records `:active_path` from `handle_params`, and handles collapse events.
+- `Layouts.window/1` mounts the sidebar, and `PlaceholderLive` is mounted for
+  **every** nav route so the links resolve and live navigation is exercisable —
+  waves 4–10 replace each placeholder with the real page. (This is added scope
+  the task list did not enumerate; it is required for tasks 3.1/4.x to be
+  testable at all.)
+
+Suite **143 tests, 0 failures**.
 
 ### Decisions taken this session
 
@@ -54,11 +73,11 @@ Suite **117 tests, 0 failures**; `compile --warnings-as-errors` and
 
 ### Next
 
-- `PQCompanion.Config.Server` — the owning GenServer plus the `config:updated`
-  PubSub broadcast and the supervision-tree entry, with a test-scoped path.
-- Tasks 2.1–2.4 (sidebar component, mount in `:root`, collapse, favorites), then
-  Section 3 (highlighting), Section 4 (sticky controls), Section 6 (settings
-  editor) and Section 7 (verification).
+- Section 4 — the sticky controls (character switcher, log status, back/forward).
+- Tasks 5.2–5.5 — wire hide/order, favorites + move controls, and collapse into
+  the sidebar and the settings editor; then **5.5**, resolved as a structural
+  guarantee rather than a Go-parser call (Go is not on PATH and the Elixir CI job
+  does not install it, so the literal check cannot run anywhere).
 - **Task 5.5 has no clean mechanism yet:** "load the written file with the
   reference application's parser" means the Go parser, but `backend/` is frozen
   so no Go code can be added. Decide between a temporary `go run` harness or

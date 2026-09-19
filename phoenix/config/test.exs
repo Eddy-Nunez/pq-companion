@@ -17,6 +17,12 @@ config :pq_companion, PQCompanion.UserRepo,
 # without it, and data-backed tests skip with an explicit warning (task 4.3).
 config :pq_companion, :quarm_db_required, false
 
+# The settings owner must never read or write the real `~/.pq-companion/`
+# config.yaml during a test run. Individual tests start their own server with a
+# temp path; this is the path the application-supervised one uses so it too is
+# isolated.
+config :pq_companion, :config_path, Path.expand("../tmp/pq_companion_test_config.yaml", __DIR__)
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :pq_companion, PQCompanionWeb.Endpoint,

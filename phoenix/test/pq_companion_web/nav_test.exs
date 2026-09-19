@@ -260,4 +260,80 @@ defmodule PQCompanionWeb.NavTest do
                ["/raids", "/items"]
     end
   end
+
+  describe "task 3.2 / 3.3 — active-item highlighting" do
+    test "an exact-match item highlights only on an exact route" do
+      item = %Item{
+        route: "/raids",
+        label: "Raid Composition",
+        icon: "shield-check",
+        exact_match: true
+      }
+
+      assert Nav.active?(item, "/raids")
+      refute Nav.active?(item, "/raids/editor")
+      refute Nav.active?(item, "/raidsx")
+    end
+
+    test "a prefix item highlights a child route, at a path boundary" do
+      item = %Item{route: "/combat", label: "Combat Log", icon: "scroll-text"}
+      assert Nav.active?(item, "/combat")
+      assert Nav.active?(item, "/combat/log")
+      assert Nav.active?(item, "/combat/history")
+    end
+
+    test "a near-miss prefix is not a match" do
+      item = %Item{route: "/combat", label: "Combat Log", icon: "scroll-text"}
+      refute Nav.active?(item, "/combatx")
+      refute Nav.active?(item, "/com")
+      refute Nav.active?(item, "/other")
+    end
+
+    test "a nil path highlights nothing" do
+      refute Nav.active?(hd(Nav.items()), nil)
+    end
+
+    test "every item in the definition prefix-matches (the reference sets `end` on none)" do
+      visible = Nav.visible_sections(Nav.flags(@all_flags))
+      assert Nav.active_routes(visible, "/raids/editor") == ["/raids"]
+      assert Nav.active_routes(visible, "/combat/log") == ["/combat"]
+    end
+  end
+
+  describe "task 2.4 — sidebar_sections/2" do
+    test "prepends a Favorites group only when something is favorited" do
+      flags = Nav.flags(@all_flags)
+
+      assert Nav.sidebar_sections(flags, %{}) |> Enum.map(& &1.id) ==
+               ["database", "characters", "raids", "parsing"]
+
+      assert Nav.sidebar_sections(flags, %{favorites: ["/items"]}) |> Enum.map(& &1.id) ==
+               ["favorites", "database", "characters", "raids", "parsing"]
+    end
+
+    test "hides items and drops a section emptied by prefs" do
+      flags = Nav.flags(@all_flags)
+      sections = Nav.sidebar_sections(flags, %{hidden: ["/raids"]})
+      refute "raids" in Enum.map(sections, & &1.id)
+    end
+
+    test "applies the order preference within a section" do
+      flags = Nav.flags(@all_flags)
+
+      database =
+        flags
+        |> Nav.sidebar_sections(%{order: ["/npcs", "/items"]})
+        |> Enum.find(&(&1.id == "database"))
+
+      assert database.items |> Enum.map(& &1.route) |> Enum.take(2) == ["/npcs", "/items"]
+    end
+
+    test "a hidden favorite is not in the Favorites group" do
+      flags = Nav.flags(@all_flags)
+      sections = Nav.sidebar_sections(flags, %{favorites: ["/items"], hidden: ["/items"]})
+
+      refute "favorites" in Enum.map(sections, & &1.id)
+      refute "/items" in Enum.map(Enum.flat_map(sections, & &1.items), & &1.route)
+    end
+  end
 end

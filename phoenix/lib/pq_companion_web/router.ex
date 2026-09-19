@@ -14,12 +14,24 @@ defmodule PQCompanionWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Every route behind a navigation item. Wave 1 mounts a placeholder for each so
+  # the sidebar's links resolve and live navigation (highlighting, back/forward)
+  # is exercisable; waves 4-10 replace them with the real pages. Derived from the
+  # one canonical definition, so a nav item cannot exist without a route.
+  @nav_routes PQCompanionWeb.Nav.routes()
+
   # Main window: opaque shell + titlebar/sidebar/content inner layout.
   scope "/", PQCompanionWeb do
     pipe_through :browser
 
-    live_session :main, root_layout: {PQCompanionWeb.Layouts, :root} do
+    live_session :main,
+      root_layout: {PQCompanionWeb.Layouts, :root},
+      on_mount: [{PQCompanionWeb.ConfigHooks, :sidebar}] do
       live "/", WindowLive, :home
+
+      for route <- @nav_routes do
+        live route, PlaceholderLive, :placeholder
+      end
     end
   end
 

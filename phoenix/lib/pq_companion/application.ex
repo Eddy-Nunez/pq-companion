@@ -25,6 +25,9 @@ defmodule PQCompanion.Application do
         [
           PQCompanion.Audio,
           PQCompanion.WindowState,
+          # The single owner of config.yaml (wave 1 task 5.1). The path is
+          # injectable so tests never read or write the real user's settings.
+          {PQCompanion.Config.Server, path: Application.get_env(:pq_companion, :config_path)},
           PQCompanion.Shell.Browser,
           {Ecto.Migrator,
            repos: Application.fetch_env!(:pq_companion, :ecto_repos), skip: skip_migrations?()},
