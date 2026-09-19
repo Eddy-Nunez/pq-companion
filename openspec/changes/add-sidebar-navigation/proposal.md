@@ -67,9 +67,11 @@ None.
     are the seed for this change's parity test
 - **Reference behavior that must be preserved exactly:** three flag-gated items
   (`pop_flags_enabled`, `faction_tracker_enabled`, `raids_enabled`); sections with
-  no visible items disappear entirely; `/raids` uses exact-match highlighting
-  because it owns `/raids/editor`; `/combat` must *not*, because `/combat/log`
-  and `/combat/history` are not separate sidebar rows.
+  no visible items disappear entirely; **no item uses exact-match highlighting** —
+  reference commit `fbb09919` dropped the `/raids/editor` sidebar row and the
+  `end: true` on `/raids` in the same edit, so `/raids/editor` keeps `/raids` lit
+  exactly as `/combat/log` keeps `/combat` lit. The exact-match capability is
+  retained and tested with a synthetic item, but no current item sets it.
 - **User-data impact:** the reference stores hide/order/favorites in
   `config.yaml` and collapse state in browser-local storage. Collapse moving into
   `config.yaml` adds keys; it does not rename or remove any existing key, so the

@@ -93,8 +93,13 @@ by a path separator.
 
 #### Scenario: Parent route with its own child tab
 
-- **WHEN** a child route that has its own sidebar entry is active
+- **WHEN** an item is marked for exact-match highlighting and a child route that
+  has its own sidebar entry is active
 - **THEN** the parent item is not highlighted
+
+(No item in the current definition is marked for exact-match — reference commit
+`fbb09919` removed the one that was — so this scenario is exercised by the test
+suite with a synthetic item rather than by a live route.)
 
 #### Scenario: Parent route whose children are not tabs
 

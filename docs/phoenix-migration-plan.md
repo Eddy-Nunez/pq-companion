@@ -552,8 +552,12 @@ pass — the same hook will later serve trigger categories and wishlist slots.
    `PQCompanionWeb.Nav`.
 2. Toggling each of the 3 flags off removes its item; emptying a section
    removes the section.
-3. Navigating `/combat/log` → `/combat/history` keeps Combat Log lit;
-   `/raids/editor` does **not** keep `/raids` lit.
+3. Navigating `/combat/log` → `/combat/history` keeps Combat Log lit, and
+   `/raids/editor` **likewise** keeps `/raids` lit — both are child routes that
+   are *not* separate sidebar rows, so both prefix-match. No item is exact-match:
+   reference commit `fbb09919` removed the `/raids/editor` row and the `end: true`
+   on `/raids` together, so the exact-match capability is retained but currently
+   unused.
 4. Hide / order / favorites / collapse all persist across a restart.
 5. The Settings → Navigation editor and the sidebar render from the same
    module (assert with a test that iterates `Nav.sections/0`).

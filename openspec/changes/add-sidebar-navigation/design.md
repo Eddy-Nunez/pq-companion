@@ -104,6 +104,14 @@ makes the fourth consistent.
 **Trade-off:** a round-trip per toggle. Mitigated by keeping the toggle
 optimistic in the LiveView assign and persisting asynchronously.
 
+**Sequencing (owner decision, 2026-09-18):** `PQCompanion.Config` and
+`PQCompanion.Config.Server` are specified by Wave 2 (`add-data-model`), not
+Wave 0 — but stalling Wave 1 on them would either defer this change's
+preferences or create a second settings writer. So this change **creates** that
+module and server now,
+scoped to the sidebar keys and the three flags, and Wave 2 **extends** its
+schema to the full field set. One writer throughout.
+
 ### D5. Move controls first, drag-and-drop later
 
 **Decision:** favorites reordering ships with explicit move-up/move-down controls

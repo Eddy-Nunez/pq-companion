@@ -1,67 +1,69 @@
-# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 0 archived — next: Wave 1)
+# Handoff — PQ Companion → Elixir/Phoenix migration (2026-09-18, Wave 1 in progress — 6/27)
 
 > **This is the MIGRATION handoff.** The reference app's handoff is a different
 > file in a different tree — `handoff.md` in `/mnt/c/Users/eddyn/pq-companion`
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
 
-## SESSION UPDATE 11 — 2026-09-18 (Wave 1 started — 5/27)
+## SESSION UPDATE 11 — 2026-09-18 (Wave 1 in progress — 6/27)
 
 **Newest. Where it conflicts with anything below, this wins.**
 
 ### Done
 
-`openspec list` → `add-sidebar-navigation` **5/27** (tasks 1.1–1.5).
+`openspec list` → `add-sidebar-navigation` **6/27** (tasks 1.1–1.5, 2.5).
 
 - `PQCompanionWeb.Nav` + `PQCompanionWeb.Nav.Item`
   (`phoenix/lib/pq_companion_web/nav.ex`) port the reference's 4 sections / 34
   items verbatim from `frontend/src/lib/sidebarNav.tsx`, with the pure
   transforms `visible_sections/1` (flag filter, then drop emptied sections),
-  `order_items/2`, `favorite_items/3`, and the `flags/1` builder. `nav_test.exs`
-  adds 21 tests — definition shape, flag off/on/absent/emptied, ordering
-  (partial / empty / unknown / duplicate / cross-section), favorites (including
-  a gated favorite not being returned), and the 34-row parity inventory that is
-  the anti-rot guard. Suite **99 tests, 0 failures**;
-  `compile --warnings-as-errors` and `format --check-formatted` clean.
-- Item structs are compile-time data; note the Elixir gotcha recorded in the
-  code: `%__MODULE__{}` **cannot** be used in a module attribute in the module
-  that defines the struct, so the item struct lives in a companion module
-  (`Nav.Item`), exactly as the reference keeps `NavItem` + `NAV_SECTIONS`
-  together.
+  `order_items/2`, `favorite_items/3` and the `flags/1` builder. `nav_test.exs`
+  adds 21 tests, including the 34-row parity inventory that is the anti-rot
+  guard.
+- `PQCompanionWeb.Components.NavIcons` vendors the 32 Lucide bodies verbatim
+  from `lucide-react` **1.16.0** (the reference's pinned version), extracted from
+  the npm tarball in `/tmp` — the reference tree was never touched. Note `wand-2`
+  is a re-export of `wand-sparkles`; the generator follows aliases.
+- `PQCompanion.Config` — the settings reader/writer (wave 1 option (a)). Reads
+  with `yaml_elixir`, writes with **`ymlr`**, exposing only the sidebar keys
+  (hidden / order / favorites / collapse + the three flags) while preserving
+  every other key and top-level key. Atomic save mirrors the Go `WriteFile`:
+  temp file in the same directory, `chmod 0644`, rename. 12 tests.
 
-### Namespace discrepancy — RESOLVED
+Suite **117 tests, 0 failures**; `compile --warnings-as-errors` and
+`format --check-formatted` clean.
 
-All active change artifacts (`add-sidebar-navigation`, `add-data-model`) now use
-the real **`PQCompanion.*` / `PQCompanionWeb.*`** names. The plan keeps `PQ.*` as
-documented shorthand (convention note added at its §2.2), and `AGENTS.md` gained
-a "Module namespace" rule. Code was never ambiguous; the specs were.
+### Decisions taken this session
 
-### Two open questions for the owner
-
-1. **`/raids` exact-match is stale prose.** The reference sets `end` on **no**
-   item: commit `fbb09919` (*"drop duplicate Raid Editor entry from left nav"*)
-   removed the `/raids/editor` sidebar row **and** the `end: true` on `/raids` in
-   the same edit, because the editor is now a tab inside Raid Composition. So
-   `/raids/editor` keeps `/raids` lit, exactly like `/combat/log` keeps
-   `/combat` lit. **Plan §4.5 criterion 3, the proposal's "preserved exactly"
-   line, and the spec scenario "Parent route with its own child tab" are wrong**
-   and need amending. Code is already faithful (`exact_match: false` on all 34
-   items); only the artifacts lag. Task 3.2 carries the same warning.
-2. **Settings sequencing.** Task 5.1 says "add the sidebar preference fields to
-   the settings schema", but **`PQCompanion.Config` + `PQCompanion.Config.Server`
-   are Wave 2 (`add-data-model`) deliverables**, and `add-data-model`'s task list
-   contains none of the sidebar fields. Wave 0 deferred the config round-trip to
-   Wave 2 (§3.8 criterion 4, amended this session). So Wave 1 Section 5 depends
-   on unbuilt Wave 2 work. Options: **(a)** Wave 1 creates the single settings
-   writer scoped to the sidebar keys and Wave 2 extends its schema; (b) move
-   5.1/5.5 into `add-data-model`; (c) land Wave 2's config slice first.
-   Recommendation: **(a)**.
+1. **Namespace — RESOLVED.** All active change artifacts use the real
+   `PQCompanion.*` / `PQCompanionWeb.*` names; the plan keeps `PQ.*` as
+   documented shorthand (note at §2.2) and `AGENTS.md` gained a rule.
+2. **`/raids` exact-match — CORRECTED (owner-approved).** The reference sets
+   `end` on no item (`fbb09919` removed the `/raids/editor` row and `end: true`
+   together). Plan §4.5 criterion 3, the proposal line and the spec scenario were
+   amended; the capability is retained and tested synthetically.
+3. **Settings sequencing — option (a) (owner-approved).** Wave 1 creates the
+   single settings writer scoped to the sidebar keys; Wave 2 extends its schema.
+   Recorded in design D4 and tasks 5.1.
+4. **YAML encoder — `ymlr` (new dep).** `yaml_elixir` is read-only and
+   `fast_yaml` is a NIF (a Windows build step the migration avoids); `ymlr` is
+   pure Elixir, MIT, zero deps. **Caveat:** output is value-faithful, not
+   byte-identical to Go's (the `---` marker is stripped and key order is not
+   Go's struct order), which is relevant to a Wave 2 spec scenario titled
+   "byte-identically". Recorded in the module doc; easily swapped.
 
 ### Next
 
-Tasks 2.x (sidebar rendering) are unimplemented and depend on nothing above.
-Sections 3 (highlighting) and 4 (sticky controls) likewise. Section 5 is the one
-blocked on the answer to question 2.
+- `PQCompanion.Config.Server` — the owning GenServer plus the `config:updated`
+  PubSub broadcast and the supervision-tree entry, with a test-scoped path.
+- Tasks 2.1–2.4 (sidebar component, mount in `:root`, collapse, favorites), then
+  Section 3 (highlighting), Section 4 (sticky controls), Section 6 (settings
+  editor) and Section 7 (verification).
+- **Task 5.5 has no clean mechanism yet:** "load the written file with the
+  reference application's parser" means the Go parser, but `backend/` is frozen
+  so no Go code can be added. Decide between a temporary `go run` harness or
+  asserting the structural guarantee (every pre-existing key/value preserved)
+  instead — it is the last task with an unresolved implementation.
 
 ---
 

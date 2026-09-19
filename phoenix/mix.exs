@@ -67,6 +67,13 @@ defmodule PQCompanion.MixProject do
       # the fallback is a poll-based GenServer. Only wave 3 depends on this.
       {:file_system, "~> 1.1"},
 
+      # `config.yaml` (wave 1 task 5.1). `yaml_elixir` reads; it cannot write, so
+      # `ymlr` (pure Elixir, MIT, no deps — deliberately not `fast_yaml`, which
+      # is a NIF and would add a Windows build step) writes. Both are runtime
+      # deps: the settings file is read and written in dev, test and a release.
+      {:yaml_elixir, "~> 2.12"},
+      {:ymlr, "~> 5.0"},
+
       # Validating config load options (settings changeset work, wave 2).
       {:nimble_options, "~> 1.1"},
 
