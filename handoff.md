@@ -5,6 +5,66 @@
 > (raidcomp / Playwright era). Do not merge the two. This one is specific to
 > `feat/phoenix-migration` and the `~/pq-companion-phoenix` worktree.
 
+## SESSION UPDATE 11 — 2026-09-18 (Wave 1 started — 5/27)
+
+**Newest. Where it conflicts with anything below, this wins.**
+
+### Done
+
+`openspec list` → `add-sidebar-navigation` **5/27** (tasks 1.1–1.5).
+
+- `PQCompanionWeb.Nav` + `PQCompanionWeb.Nav.Item`
+  (`phoenix/lib/pq_companion_web/nav.ex`) port the reference's 4 sections / 34
+  items verbatim from `frontend/src/lib/sidebarNav.tsx`, with the pure
+  transforms `visible_sections/1` (flag filter, then drop emptied sections),
+  `order_items/2`, `favorite_items/3`, and the `flags/1` builder. `nav_test.exs`
+  adds 21 tests — definition shape, flag off/on/absent/emptied, ordering
+  (partial / empty / unknown / duplicate / cross-section), favorites (including
+  a gated favorite not being returned), and the 34-row parity inventory that is
+  the anti-rot guard. Suite **99 tests, 0 failures**;
+  `compile --warnings-as-errors` and `format --check-formatted` clean.
+- Item structs are compile-time data; note the Elixir gotcha recorded in the
+  code: `%__MODULE__{}` **cannot** be used in a module attribute in the module
+  that defines the struct, so the item struct lives in a companion module
+  (`Nav.Item`), exactly as the reference keeps `NavItem` + `NAV_SECTIONS`
+  together.
+
+### Namespace discrepancy — RESOLVED
+
+All active change artifacts (`add-sidebar-navigation`, `add-data-model`) now use
+the real **`PQCompanion.*` / `PQCompanionWeb.*`** names. The plan keeps `PQ.*` as
+documented shorthand (convention note added at its §2.2), and `AGENTS.md` gained
+a "Module namespace" rule. Code was never ambiguous; the specs were.
+
+### Two open questions for the owner
+
+1. **`/raids` exact-match is stale prose.** The reference sets `end` on **no**
+   item: commit `fbb09919` (*"drop duplicate Raid Editor entry from left nav"*)
+   removed the `/raids/editor` sidebar row **and** the `end: true` on `/raids` in
+   the same edit, because the editor is now a tab inside Raid Composition. So
+   `/raids/editor` keeps `/raids` lit, exactly like `/combat/log` keeps
+   `/combat` lit. **Plan §4.5 criterion 3, the proposal's "preserved exactly"
+   line, and the spec scenario "Parent route with its own child tab" are wrong**
+   and need amending. Code is already faithful (`exact_match: false` on all 34
+   items); only the artifacts lag. Task 3.2 carries the same warning.
+2. **Settings sequencing.** Task 5.1 says "add the sidebar preference fields to
+   the settings schema", but **`PQCompanion.Config` + `PQCompanion.Config.Server`
+   are Wave 2 (`add-data-model`) deliverables**, and `add-data-model`'s task list
+   contains none of the sidebar fields. Wave 0 deferred the config round-trip to
+   Wave 2 (§3.8 criterion 4, amended this session). So Wave 1 Section 5 depends
+   on unbuilt Wave 2 work. Options: **(a)** Wave 1 creates the single settings
+   writer scoped to the sidebar keys and Wave 2 extends its schema; (b) move
+   5.1/5.5 into `add-data-model`; (c) land Wave 2's config slice first.
+   Recommendation: **(a)**.
+
+### Next
+
+Tasks 2.x (sidebar rendering) are unimplemented and depend on nothing above.
+Sections 3 (highlighting) and 4 (sticky controls) likewise. Section 5 is the one
+blocked on the answer to question 2.
+
+---
+
 ## SESSION UPDATE 10 — 2026-09-18 (Wave 0 COMPLETE — 34/34; CI fully green)
 
 **Read this first — where it conflicts with anything below, this wins.**

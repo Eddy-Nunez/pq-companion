@@ -40,8 +40,8 @@ migration where the data model can be got wrong cheaply (`docs/phoenix-migration
   "Tradeskill 75", which is a real bug class that server-side lookup removes.
 - Port the pure game-math functions the schema layer sits on, using the
   reference's table-driven tests as the contract.
-- Introduce `PQ.Config` as an `Ecto.Schema` with changesets over `config.yaml`,
-  owned by a single `PQ.Config.Server` that performs atomic saves and broadcasts
+- Introduce `PQCompanion.Config` as an `Ecto.Schema` with changesets over `config.yaml`,
+  owned by a single `PQCompanion.Config.Server` that performs atomic saves and broadcasts
   changes to subscribers.
 
 Not in this change: the features that read this model (Waves 4–10), and the
@@ -65,8 +65,8 @@ adoption of *feature* data beyond schema-level parity.
 ## Impact
 
 - **Affected specs:** `data-store` (ADDED requirements), `settings` (new)
-- **Affected code:** new tree `phoenix/` — `PQ.Game.*` schemas,
-  `PQ.Character.*`, `PQ.Trigger.*`, `PQ.Combat.*`, `PQ.Config.*`, `PQ.Game.Enums`;
+- **Affected code:** new tree `phoenix/` — `PQCompanion.Game.*` schemas,
+  `PQCompanion.Character.*`, `PQCompanion.Trigger.*`, `PQCompanion.Combat.*`, `PQCompanion.Config.*`, `PQCompanion.Game.Enums`;
   `priv/repo/migrations/`; `lib/mix/tasks/pq.db.adopt.ex`
 - **Ported from (frozen reference, read-only):**
   - `backend/internal/db/*.go` — 11,187 LOC production, 3,719 LOC tests; game

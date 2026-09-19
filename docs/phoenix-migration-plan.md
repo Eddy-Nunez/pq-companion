@@ -190,6 +190,12 @@ PQ.Audio         # TTS (piper/kokoro as Ports), sound assets
 PQ.Shell         # the swappable native-shell adapter  ← §2.4
 ```
 
+> **Namespace convention.** The `PQ.*` names below are **shorthand**. The
+> generated app's real namespaces are **`PQCompanion.*`** and
+> **`PQCompanionWeb.*`** (e.g. `PQCompanion.Config`, `PQCompanionWeb.Nav`). Code
+> and every OpenSpec change artifact use the real names; this plan keeps the
+> short alias for readability. Never let both spellings appear in code.
+
 The **critical dependency** is `PQ.Log`. Nothing in the parsing/overlay/tracker
 half of the app works without it, so it lands first (Wave 1).
 
@@ -543,7 +549,7 @@ pass — the same hook will later serve trigger categories and wishlist slots.
 ### 4.5 Phase 1 acceptance criteria
 
 1. All 34 nav items render, in the same 4 sections and order, from
-   `PQWeb.Nav`.
+   `PQCompanionWeb.Nav`.
 2. Toggling each of the 3 flags off removes its item; emptying a section
    removes the section.
 3. Navigating `/combat/log` → `/combat/history` keeps Combat Log lit;

@@ -195,6 +195,16 @@ Working rules:
 7. `quarm.db` is **not** in this tree (`*.db` is gitignored). Download it from the
    `data-latest` release into `backend/data/` before any data-backed test.
 
+### Module namespace — `PQCompanion.*`, not `PQ.*`
+
+The migration plan (and its §2.2 module list) writes modules as `PQ.Game`,
+`PQ.Config`, `PQWeb.Nav`. Those are **shorthand**. The generated app's real
+namespaces are **`PQCompanion.*`** and **`PQCompanionWeb.*`**, and every module
+in `phoenix/` uses them. Code — and every OpenSpec change artifact, which is the
+executable contract — uses the real names: `PQCompanion.Config`,
+`PQCompanionWeb.Nav`. **Never let both spellings appear in code.** When the
+plan's shorthand and a spec disagree about a module name, the spec wins.
+
 ### Duplicated logic — the short version
 
 Full policy: **Part IX** of the migration plan. What matters while working:

@@ -13,7 +13,7 @@ user's hide/order/favorites/collapse preferences with it.
 
 ## What Changes
 
-- Port the canonical navigation definition to `PQWeb.Nav`, with the same four
+- Port the canonical navigation definition to `PQCompanionWeb.Nav`, with the same four
   sections and the same items, section rules and flag gating.
 - Render the sidebar from that definition, with active-item highlighting that
   preserves the reference's exact-vs-prefix semantics.
@@ -46,10 +46,10 @@ None.
 ## Impact
 
 - **Affected specs:** `navigation`
-- **Affected code:** new tree `phoenix/`; new modules `PQWeb.Nav`,
-  `PQWeb.Components.Sidebar`, `PQWeb.Components.NavIcons`,
-  `PQWeb.SidebarControlsLive`, `PQWeb.Settings.NavSettings`; extends
-  `PQ.Config` with the sidebar preference fields
+- **Affected code:** new tree `phoenix/`; new modules `PQCompanionWeb.Nav`,
+  `PQCompanionWeb.Components.Sidebar`, `PQCompanionWeb.Components.NavIcons`,
+  `PQCompanionWeb.SidebarControlsLive`, `PQCompanionWeb.Settings.NavSettings`; extends
+  `PQCompanion.Config` with the sidebar preference fields
 - **Ported from (frozen reference, read-only):**
   - `frontend/src/lib/sidebarNav.tsx` — 152 LOC, 0 test LOC; the canonical
     definition, `visibleNavSections`, `favoriteItems`, `orderItems`

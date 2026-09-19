@@ -25,10 +25,10 @@
 
 ## 4. Game-code catalog consolidation
 
-- [ ] 4.1 Create the single `PQ.Game.Enums` module backed by one data source, covering the codes the reference exposes (reference: `backend/internal/db/enums/`)
+- [ ] 4.1 Create the single `PQCompanion.Game.Enums` module backed by one data source, covering the codes the reference exposes (reference: `backend/internal/db/enums/`)
 - [ ] 4.2 Port the reference's audit test as the guard that no second definition of the catalog exists; verify it fails when a duplicate map is introduced (reference: `backend/internal/db/enums/audit_test.go`)
 - [ ] 4.3 Verify every label the reference could produce is reproduced, including the deterministic placeholder for unknown codes; verify with a test generated from the reference's catalog rather than a hand-written list
-- [ ] 4.4 Verify the frontend's duplicated catalog is accounted for: assert each mapping in `frontend/src/lib/enumsCache.ts` is present in `PQ.Game.Enums` and record any deliberate divergence (reference: `docs/enum-audit.md`)
+- [ ] 4.4 Verify the frontend's duplicated catalog is accounted for: assert each mapping in `frontend/src/lib/enumsCache.ts` is present in `PQCompanion.Game.Enums` and record any deliberate divergence (reference: `docs/enum-audit.md`)
 
 ## 5. Ported game math
 
@@ -60,7 +60,7 @@
 
 ## 8. Settings schema and defaults
 
-- [ ] 8.1 Define `PQ.Config` as an embedded schema covering the reference's 13 settings structs, using the reference's key names and nesting (reference: `backend/internal/config/config.go`, 1,494 LOC)
+- [ ] 8.1 Define `PQCompanion.Config` as an embedded schema covering the reference's 13 settings structs, using the reference's key names and nesting (reference: `backend/internal/config/config.go`, 1,494 LOC)
 - [ ] 8.2 Port the reference's defaults; verify the reference's defaults test cases all pass (reference: `backend/internal/config/config_test.go`, 482 LOC)
 - [ ] 8.3 Add changeset validation with field-level errors; verify invalid values are rejected and persisted settings are unchanged
 - [ ] 8.4 Verify unknown-key preservation: a settings file containing an undefined key loads successfully and the key survives a save
@@ -68,7 +68,7 @@
 
 ## 9. Settings server
 
-- [ ] 9.1 Implement `PQ.Config.Server` as the single writer with atomic temp-then-rename saves (design D8); verify concurrent update tests show the file always parses and equals one of the accepted update sequences
+- [ ] 9.1 Implement `PQCompanion.Config.Server` as the single writer with atomic temp-then-rename saves (design D8); verify concurrent update tests show the file always parses and equals one of the accepted update sequences
 - [ ] 9.2 Verify no-reader-sees-partial: run a reader concurrently with continuous saves and assert it never observes an unparseable file
 - [ ] 9.3 Verify no temporary artifact remains after a successful save, and that an interrupted save leaves the previous settings intact
 - [ ] 9.4 Implement change broadcast with origin identification (design D9); verify a test asserts another window is notified, a later-opened window sees current values, and the originating window can distinguish its own change

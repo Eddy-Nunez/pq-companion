@@ -78,7 +78,7 @@ are none — the reference generates these links internally at runtime only.
 
 ### D3. Vendor the reference's icon paths instead of switching icon sets
 
-**Decision:** port the reference's icon set into a `PQWeb.Components.NavIcons`
+**Decision:** port the reference's icon set into a `PQCompanionWeb.Components.NavIcons`
 function component, one function per icon, using the same SVG paths.
 
 **Why:** swapping to a different icon set (e.g. the `heroicons` package) means the
@@ -126,7 +126,7 @@ through templates.
 
 ### D7. The definition is compile-time data in a module attribute
 
-**Decision:** sections and items live in a module attribute in `PQWeb.Nav`, with
+**Decision:** sections and items live in a module attribute in `PQCompanionWeb.Nav`, with
 pure functions for the flag filter, ordering and favorites.
 
 **Why:** the definition is static, so there is no reason to store or fetch it, and
@@ -155,7 +155,7 @@ functions mirror the reference's `visibleNavSections` / `favoriteItems` /
 
 ## Migration Plan
 
-1. Land `PQWeb.Nav` plus its unit tests; no UI yet. Both consumers can be pointed
+1. Land `PQCompanionWeb.Nav` plus its unit tests; no UI yet. Both consumers can be pointed
    at it independently.
 2. Add the sidebar to the `:root` layout and the settings editor to the settings
    page.

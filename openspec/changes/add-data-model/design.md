@@ -135,7 +135,7 @@ presented as absent data — which is the actual failure mode worth preventing
 
 ### D7. One enum catalog, generated from a data file, guarded by a test
 
-**Decision:** a single `PQ.Game.Enums` module backed by one data source, with the
+**Decision:** a single `PQCompanion.Game.Enums` module backed by one data source, with the
 reference's audit test ported as the guard that no second definition appears.
 
 **Why:** the duplication is already documented as a problem
@@ -146,8 +146,8 @@ different shape.
 
 ### D8. Settings as an embedded schema with one owning process
 
-**Decision:** `PQ.Config` is an `embedded_schema` with changesets; a
-`PQ.Config.Server` GenServer owns the current value and serialises writes.
+**Decision:** `PQCompanion.Config` is an `embedded_schema` with changesets; a
+`PQCompanion.Config.Server` GenServer owns the current value and serialises writes.
 
 **Why:** embedded schema is the Ecto-idiomatic representation for validated data
 that is not a database row, and changesets give field-level validation for free
@@ -210,7 +210,7 @@ than inventing a new concern.
    an adopted one.
 4. Ship `mix pq.db.adopt`; run it against a captured real `user.db` and verify row
    counts are unchanged and a backup was taken.
-5. Add `PQ.Config` and `PQ.Config.Server` with defaults ported from the reference's
+5. Add `PQCompanion.Config` and `PQCompanion.Config.Server` with defaults ported from the reference's
    test file; verify round-trip and reference readability.
 6. Wire the boot-time compatibility check and the change broadcast.
 
