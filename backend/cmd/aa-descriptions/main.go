@@ -75,47 +75,64 @@ func main() {
 	// stringIDByID overrides the matched description for AAs whose entry in
 	// eqstr_en.txt is misaligned (the line after the name is a different
 	// AA's name or description) but whose real text is still findable
-	// in-file. Detected by inspection: "Advanced Innate Strength" is the one
-	// remaining case in the current TAKP strings file — a block of AA
-	// name/description pairs around it (Planar Power, Planar Durability, the
-	// six "Advanced Innate <Stat>" AAs) got shuffled by one slot, so its real
-	// description sits 4 lines after its name instead of 1.
+	// in-file. Detected by inspection: a block of six AA name/description
+	// pairs (Advanced Innate Strength/Stamina/Agility/Dexterity/
+	// Intelligence/Wisdom) sits interleaved with two unrelated AAs — Planar
+	// Power (eqmacid 142) and Planar Durability (eqmacid 143) — whose own
+	// name/description pairs are *also* present but out of their natural
+	// order. The net effect: Advanced Innate Strength's real description
+	// sits 4 lines after its name (Planar Power's full pair is spliced in
+	// between), and Planar Durability's real description sits 11 lines
+	// after its own name — immediately after Advanced Innate Wisdom's name,
+	// which makes it look at a glance like Wisdom's description instead.
+	// (This caused a real bug: without help, automatic matching attributes
+	// Planar Durability's real text to Advanced Innate Wisdom instead, since
+	// "Advanced Innate Wisdom" appears exactly once in the file and its
+	// literal next line is Planar Durability's description, not its own.
+	// Advanced Innate Wisdom's own real text is a stray duplicate sitting
+	// elsewhere, right after Innate Enlightenment's description.)
 	stringIDByID := map[int]int{
 		129: 5550, // Advanced Innate Strength
+		134: 5563, // Advanced Innate Wisdom
+		143: 5560, // Planar Durability
 	}
 	stringByID := make(map[int]string, len(entries))
 	for _, e := range entries {
 		stringByID[e.id] = e.text
 	}
 
-	// textOverrideByEQMacID hard-codes the description for AAs where the
-	// automatic name→next-line match silently picked up unrelated text that
-	// still passed looksLikeDescription (long, sentence-shaped) — so there
-	// was no missing-name warning to catch it, only a wrong result. All
-	// three entries below were cross-verified against pqdi.cc (Project Quarm
-	// Database Interface, sourced directly from Quarm's own database) after
-	// a user reported the Ingenuity case:
+	// textOverrideByEQMacID hard-codes the description for AAs whose correct
+	// text does not exist anywhere in the strings file (so stringIDByID has
+	// no valid target to point at). Detected by inspection: "Ingenuity"
+	// (eqmacid 210, Warrior/Monk/Rogue crit-on-proc AA) has only one "next
+	// line" candidate in eqstr_en.txt — an unrelated "Horse Models" client
+	// toggle message that happens to sit right after an unrelated UI
+	// filter-category string that is coincidentally also the literal text
+	// "Ingenuity" (an item-search filter label, not the AA name entry). That
+	// false match passed looksLikeDescription and got picked up as the AA's
+	// description (reported by a user; the real description isn't present
+	// in this strings file at all — cross-verified against pqdi.cc, Project
+	// Quarm Database Interface — so it's hard-coded here instead of pointed
+	// at a string id).
 	//
-	//   - 210 Ingenuity (Warrior/Monk/Rogue): matched an unrelated "Horse
-	//     Models" client-toggle message that happened to sit right after a
-	//     UI filter-category string that is coincidentally also the literal
-	//     text "Ingenuity" (an item-search filter label, not the AA name).
-	//   - 134 Advanced Innate Wisdom (all classes): matched a stray
-	//     duplicate of the generic "raises your innate Wisdom by two points
-	//     per rank" text that sits, unrelated, right after Innate
-	//     Enlightenment's description. The real text is the "planes demand
-	//     hardiness" HP-boost description that belongs to this AA on Quarm
-	//     despite the "Innate Wisdom" name.
-	//   - 143 "Planar Durability" in altadv_vars (Cleric/Ranger/Druid, shows
-	//     as "Natural Durability" on pqdi.cc — the dump's name field itself
-	//     looks stale/wrong but was left alone here since only the
-	//     description is this generator's job): matched the Strength-raise
-	//     text belonging to eqmacid 129, one slot off due to the same
-	//     shuffled block noted above.
+	// Note on pqdi.cc as a cross-check: it is NOT infallible. While
+	// investigating this Ingenuity report, pqdi.cc's own listing for
+	// "Planar Durability" showed the same wrong Strength-boost text this
+	// generator was mistakenly producing for eqmacid 134 (Advanced Innate
+	// Wisdom) — pqdi.cc appears to source from a similarly-misaligned
+	// strings dump and inherited a related mistake. Advanced Innate Wisdom
+	// and Planar Durability are two genuinely distinct AAs (confirmed via
+	// Allakhazam: https://everquest.allakhazam.com/wiki/EQ:Planar_Durability
+	// vs https://everquest.allakhazam.com/wiki/EQ:Natural_Durability, and
+	// via altadv_vars itself, which has six related-but-distinct rows —
+	// eqmacid 1 Innate Strength, 6 Innate Wisdom, 28 Natural Durability,
+	// 129 Advanced Innate Strength, 134 Advanced Innate Wisdom, 143 Planar
+	// Durability). Advanced Innate Wisdom needs no override at all — see
+	// stringIDByID's comment; Planar Durability's real text is recovered via
+	// stringIDByID (143 → 5560) instead of a hard-coded override, since it
+	// does exist in-file once you know where to look.
 	textOverrideByEQMacID := map[int]string{
 		210: "Years of experimentation have lead to the discovery of how to gain additional performance (in the form of critical spell hits) from weapons and other items. You may train in this ability at or after levels 61, 63, and 65.",
-		134: "The planes demand a certain hardiness of those who adventure within. Each rank of this ability adds an additional 1.5% to your maximum hit points. You gain the ability to train an additional rank at levels 61, 63, and 65.",
-		143: "This ability increases your maximum hitpoints by 2, 5, and 10 percent. (The percentages are based off of your base hitpoints, which include stamina and stamina effects.)",
 	}
 
 	descriptions := make(map[int]string, len(aas))
