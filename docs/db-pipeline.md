@@ -248,12 +248,22 @@ The generator:
    between the DB and the strings file (e.g. DB "Lifeburn" vs strings
    "Life Burn", DB "Fletching Mastery" vs strings
    "Fletching/Bowyer Mastery").
-4. Applies a small hard-override map for AAs whose entry in the strings
-   file is misaligned (the line after the name is a different AA's name or
-   description). Currently: "Advanced Innate Strength" (eqmacid 129) and
-   "Advanced Innate Wisdom" (eqmacid 134). If a future strings file changes
-   these alignments, update `stringIDByID` in
-   `backend/cmd/aa-descriptions/main.go`.
+4. Applies a small hard-override map (`stringIDByID`) for AAs whose entry in
+   the strings file is misaligned but whose real description text still
+   exists elsewhere in the file (the line after the name is a different
+   AA's name or description). Currently: "Advanced Innate Strength"
+   (eqmacid 129) and "Advanced Innate Wisdom" (eqmacid 134).
+5. Applies a second hard-override map (`textOverrideByEQMacID`) with
+   literal, hand-written description text for AAs whose real description
+   isn't recoverable from the strings file at all — the "next line" match
+   is an unrelated string that happens to pass the description heuristic.
+   Currently: "Ingenuity" (eqmacid 210) was picking up an unrelated "Horse
+   Models" client-toggle message (reported by a user as showing horse text
+   instead of its real crit-on-proc description).
+
+If a future strings file changes an alignment or adds the missing text for
+an override AA, update the corresponding map in
+`backend/cmd/aa-descriptions/main.go`.
 
 The generator logs how many AA descriptions resolved and lists any names
 that didn't match. Current coverage is **213/213** AAs against the TAKPv22

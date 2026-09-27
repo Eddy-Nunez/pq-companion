@@ -87,6 +87,22 @@ func main() {
 		stringByID[e.id] = e.text
 	}
 
+	// textOverrideByEQMacID hard-codes the description for AAs whose correct
+	// text does not exist anywhere in the strings file (so stringIDByID has
+	// no valid target to point at). Detected by inspection: "Ingenuity"
+	// (eqmacid 210, Warrior/Monk/Rogue crit-on-proc AA) has only one "next
+	// line" candidate in eqstr_en.txt — an unrelated "Horse Models" client
+	// toggle message that happens to sit right after an unrelated UI
+	// filter-category string that is coincidentally also the literal text
+	// "Ingenuity" (an item-search filter label, not the AA name entry). That
+	// false match passed looksLikeDescription and got picked up as the AA's
+	// description (reported by a user; the real description isn't present
+	// in this strings file at all, so it's hard-coded here instead of
+	// pointed at a string id).
+	textOverrideByEQMacID := map[int]string{
+		210: "This passive ability grants you a chance to critically hit with the direct damage spells triggered by your weapon procs and clicky items. The ability levels increase your chance to score a critical by 3, 6, and 9 percent.",
+	}
+
 	descriptions := make(map[int]string, len(aas))
 	missing := make([]string, 0)
 	seen := make(map[string]bool)
@@ -102,8 +118,16 @@ func main() {
 		}
 		seen[aa.name] = true
 
-		// Hard override first — these are known misalignments in the
-		// strings file's data layout.
+		// Hard-coded text override first — these are AAs whose real
+		// description isn't recoverable from the strings file at all.
+		if t, ok := textOverrideByEQMacID[aa.eqmacid]; ok {
+			descriptions[aa.eqmacid] = t
+			continue
+		}
+
+		// Hard override next — these are known misalignments in the
+		// strings file's data layout where the real text IS in the file,
+		// just at a non-adjacent id.
 		if sid, ok := stringIDByID[aa.eqmacid]; ok {
 			if t, ok := stringByID[sid]; ok {
 				descriptions[aa.eqmacid] = t
