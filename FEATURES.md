@@ -2055,6 +2055,49 @@ name-based path when a field is nil, so older Zeal is unaffected.
   running each tier's command progressively fills in the full picture.
   Manual toggles always take precedence over anything auto-detected.
   Promoted out of Developer > Flags to a permanent nav item in v0.22.0.
+  As of v0.23.1, the page's second view is a tiered Flow chart (replacing
+  an auto-laid-out dependency graph): one band per tier, one card per
+  zone in Grimrose's (SoS) verified reading order, steps listed
+  top-to-bottom like the Checklist, with arrows showing what a zone
+  unlocks. The same pass corrected the PoK/PoTac/PoNb prerequisite chain
+  against the seer script and the community WFH_Magelo bot, fixing
+  several steps that had the wrong gating condition or no qglobal wired
+  at all.
+
+## Unreleased — Trigger Tester
+
+- **Trigger Tester** — a Tester tab on the Triggers page (after Triggers
+  / History / Packs): paste log lines, pick a character, and Run. A
+  per-line report shows which triggers matched or why not (excluded, on
+  cooldown, wrong character), the rendered alert text, timer info, and
+  Discord webhook previews — previews only, nothing is ever posted. An
+  optional "Fire alerts" checkbox additionally starts the real timer and
+  previews the overlay/audio, and a "Real-time" mode paces playback by
+  the pasted lines' own log timestamps over the existing WebSocket hub
+  instead of returning the whole report at once. The trigger editor also
+  gained an inline "Test against sample line" box, right after the
+  exclude/extra patterns, so an unsaved draft's pattern, captures, and
+  timer can be validated before Save. Test runs never touch real trigger
+  history, refire cooldowns, or webhook delivery.
+
+## Unreleased — Pinned/Priority Respawn Timers
+
+- **Pinned/priority respawn timers** — flag a respawn timer as a
+  camp/farm priority so it sorts first, survives past the normal 60-
+  second pop grace window, and stands out with distinct styling —
+  addressing the "which respawn is my camp mob" problem when farming a
+  named amid trash kills. A pin carries over to the mob's next kill at
+  the same spot: matched by Zeal-pipe position (~200 units) regardless
+  of name when connected, falling back to same-name matching otherwise,
+  so you don't have to re-pin every cycle. Both the popout window and
+  the dashboard card gained a "pinned only" filter (persisted
+  per-viewer, synced across windows) and an "unpin all" button shown
+  only while something is pinned. Available via `#pipe` commands too
+  (`respawn pin` / `respawn unpin` / `respawn clearpins`) for Zeal
+  users. Note: pins and timers don't survive an app restart, and
+  handoff is anchored to the player's position rather than the mob's,
+  so a pin can mis-handoff if you're not near the camp when it pops —
+  see LIMITATIONS.md.
 
 ## Phase 11 — Project Website
 _Planned_
