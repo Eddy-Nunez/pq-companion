@@ -252,18 +252,31 @@ The generator:
    the strings file is misaligned but whose real description text still
    exists elsewhere in the file (the line after the name is a different
    AA's name or description). Currently: "Advanced Innate Strength"
-   (eqmacid 129) and "Advanced Innate Wisdom" (eqmacid 134).
+   (eqmacid 129).
 5. Applies a second hard-override map (`textOverrideByEQMacID`) with
-   literal, hand-written description text for AAs whose real description
-   isn't recoverable from the strings file at all — the "next line" match
-   is an unrelated string that happens to pass the description heuristic.
-   Currently: "Ingenuity" (eqmacid 210) was picking up an unrelated "Horse
-   Models" client-toggle message (reported by a user as showing horse text
-   instead of its real crit-on-proc description).
+   literal, hand-written description text for AAs where the "next line"
+   match picked up unrelated text that still passed the description
+   heuristic (so there's no missing-name warning — just a silently wrong
+   result). These are cross-verified against pqdi.cc (Project Quarm
+   Database Interface, sourced from Quarm's own database) since the local
+   strings file has no correct text to fall back on. Currently:
+   - "Ingenuity" (eqmacid 210) — was picking up an unrelated "Horse Models"
+     client-toggle message (reported by a user).
+   - "Advanced Innate Wisdom" (eqmacid 134) — was picking up a stray
+     duplicate of the generic "raises innate Wisdom" text; the real
+     effect on Quarm is a max-HP boost, found while auditing for more
+     instances of the Ingenuity bug.
+   - "Planar Durability" in `altadv_vars` (eqmacid 143, displays as
+     "Natural Durability" on pqdi.cc) — was picking up the Strength-raise
+     text belonging to eqmacid 129, one slot off in the same shuffled
+     block that affects 129 and 134.
 
 If a future strings file changes an alignment or adds the missing text for
 an override AA, update the corresponding map in
-`backend/cmd/aa-descriptions/main.go`.
+`backend/cmd/aa-descriptions/main.go`. When cross-verifying against
+pqdi.cc, be aware it's a third-party fan site (unaffiliated with the
+project) whose text can itself lag a live client patch — treat it as a
+strong second source, not infallible.
 
 The generator logs how many AA descriptions resolved and lists any names
 that didn't match. Current coverage is **213/213** AAs against the TAKPv22

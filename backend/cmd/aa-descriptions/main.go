@@ -74,33 +74,48 @@ func main() {
 
 	// stringIDByID overrides the matched description for AAs whose entry in
 	// eqstr_en.txt is misaligned (the line after the name is a different
-	// AA's name or description). Detected by inspection: only "Advanced
-	// Innate Strength" and "Advanced Innate Wisdom" suffer this in the
-	// current TAKP strings file. Both real descriptions exist in the file —
-	// they're just sitting at non-adjacent IDs.
+	// AA's name or description) but whose real text is still findable
+	// in-file. Detected by inspection: "Advanced Innate Strength" is the one
+	// remaining case in the current TAKP strings file — a block of AA
+	// name/description pairs around it (Planar Power, Planar Durability, the
+	// six "Advanced Innate <Stat>" AAs) got shuffled by one slot, so its real
+	// description sits 4 lines after its name instead of 1.
 	stringIDByID := map[int]int{
 		129: 5550, // Advanced Innate Strength
-		134: 5563, // Advanced Innate Wisdom
 	}
 	stringByID := make(map[int]string, len(entries))
 	for _, e := range entries {
 		stringByID[e.id] = e.text
 	}
 
-	// textOverrideByEQMacID hard-codes the description for AAs whose correct
-	// text does not exist anywhere in the strings file (so stringIDByID has
-	// no valid target to point at). Detected by inspection: "Ingenuity"
-	// (eqmacid 210, Warrior/Monk/Rogue crit-on-proc AA) has only one "next
-	// line" candidate in eqstr_en.txt — an unrelated "Horse Models" client
-	// toggle message that happens to sit right after an unrelated UI
-	// filter-category string that is coincidentally also the literal text
-	// "Ingenuity" (an item-search filter label, not the AA name entry). That
-	// false match passed looksLikeDescription and got picked up as the AA's
-	// description (reported by a user; the real description isn't present
-	// in this strings file at all, so it's hard-coded here instead of
-	// pointed at a string id).
+	// textOverrideByEQMacID hard-codes the description for AAs where the
+	// automatic name→next-line match silently picked up unrelated text that
+	// still passed looksLikeDescription (long, sentence-shaped) — so there
+	// was no missing-name warning to catch it, only a wrong result. All
+	// three entries below were cross-verified against pqdi.cc (Project Quarm
+	// Database Interface, sourced directly from Quarm's own database) after
+	// a user reported the Ingenuity case:
+	//
+	//   - 210 Ingenuity (Warrior/Monk/Rogue): matched an unrelated "Horse
+	//     Models" client-toggle message that happened to sit right after a
+	//     UI filter-category string that is coincidentally also the literal
+	//     text "Ingenuity" (an item-search filter label, not the AA name).
+	//   - 134 Advanced Innate Wisdom (all classes): matched a stray
+	//     duplicate of the generic "raises your innate Wisdom by two points
+	//     per rank" text that sits, unrelated, right after Innate
+	//     Enlightenment's description. The real text is the "planes demand
+	//     hardiness" HP-boost description that belongs to this AA on Quarm
+	//     despite the "Innate Wisdom" name.
+	//   - 143 "Planar Durability" in altadv_vars (Cleric/Ranger/Druid, shows
+	//     as "Natural Durability" on pqdi.cc — the dump's name field itself
+	//     looks stale/wrong but was left alone here since only the
+	//     description is this generator's job): matched the Strength-raise
+	//     text belonging to eqmacid 129, one slot off due to the same
+	//     shuffled block noted above.
 	textOverrideByEQMacID := map[int]string{
-		210: "This passive ability grants you a chance to critically hit with the direct damage spells triggered by your weapon procs and clicky items. The ability levels increase your chance to score a critical by 3, 6, and 9 percent.",
+		210: "Years of experimentation have lead to the discovery of how to gain additional performance (in the form of critical spell hits) from weapons and other items. You may train in this ability at or after levels 61, 63, and 65.",
+		134: "The planes demand a certain hardiness of those who adventure within. Each rank of this ability adds an additional 1.5% to your maximum hit points. You gain the ability to train an additional rank at levels 61, 63, and 65.",
+		143: "This ability increases your maximum hitpoints by 2, 5, and 10 percent. (The percentages are based off of your base hitpoints, which include stamina and stamina effects.)",
 	}
 
 	descriptions := make(map[int]string, len(aas))
