@@ -9,6 +9,22 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.23.1 — 2026-09-27
+
+Adds a Trigger Tester tab, pinned/priority respawn timers, and a redesigned PoP Flags Flow chart, alongside a fix for a DPS meter bug that could show near-zero readings in group content.
+
+### Highlights
+- **Trigger Tester tab** — paste log lines into a new Tester tab (Triggers page) and Run: a per-line report shows which triggers matched or why not (excluded, on cooldown, wrong character), the rendered alert text, timer info, and Discord webhook previews (previews only — nothing is actually posted). An optional "Fire alerts" checkbox starts the real timer and previews the overlay/audio, and "Real-time" playback paces lines by their own timestamp gaps. The trigger editor also gained an inline "Test against sample line" box so an unsaved draft's pattern, captures, and timer can be validated before Save.
+- **Pinned/priority respawn timers** — flag a respawn timer as a camp/farm priority so it sorts first, survives past the normal 60-second pop grace window, and stands out visually — useful for keeping track of a named you're farming amid trash kills. A pin carries over to the mob's next kill at the same spot (matched by Zeal-pipe position, or by name without Zeal) so you don't have to re-pin every cycle. Both the popout window and dashboard card gained a "pinned only" filter and an "unpin all" button.
+- **PoP Flags Flow chart replaces the dependency Graph view** — the old auto-laid-out node graph (~60 nodes) is gone in favor of a tiered chart modeled on Grimrose's (SoS) hand-verified PoP flagging flowchart: one band per tier, one card per zone, steps listed top-to-bottom like the Checklist, with arrows showing what a zone unlocks. Alongside the redesign, the PoK/PoTac/PoNb prerequisite chain was corrected against verified sources (the seer script and the community WFH_Magelo bot) — several steps had the wrong gating condition or no qglobal wired at all, which could let `#popflags`/Seer syncs tick things out of order.
+
+### Fixes
+- **DPS/HPS meter could read near-zero on real damage in group content** — two independent bugs, both latent since the features that introduced them: a fight with no further real damage could be kept alive indefinitely by heals or misses re-arming its timer, letting a new pull inherit a stale fight's start time; and the "Last 20 mobs" pooled view divided every combatant's damage by the combined span of all 20 fights rather than just the ones they were actually in. Also fixed the DPS/HPS "Me" filter and self-highlight, which compared against a literal "You" the backend no longer sends.
+- **Damage shields no longer attribute hate to their wearer** — EQMacEmu routes DS damage with zero hate, but nothing recognized it as DS, so a reflection could be miscounted as a proc or resolve a pending nuke against the wrong mob.
+- **A same-named mob's slow timer survives a groupmate's kill** — an earlier fix (v0.23.0) only covered timers your own trigger or client tagged with a spawn id; the default auto-tracking pipeline now tags too, and an untrusted kill no longer removes a same-named timer by name alone — it's flagged "?" instead until confirmed.
+- **Combat History's Combined View now covers a full raid night** — it previously combined only the currently loaded page of fights, silently dropping any outside it.
+- Corrected several wrong AA descriptions (Ingenuity, Advanced Innate Wisdom, Planar Durability) caused by a string-matching heuristic silently matching the wrong text; the generator now flags ambiguous or duplicate matches so future regenerations catch this automatically.
+
 ## v0.23.0 — 2026-09-22
 
 PoP Flags gets a `#popflags`/`#timelockout` auto-sync and an accuracy pass ahead of the October 1st launch, the Planes of Power era becomes permanent, and the Gear Upgrade Finder defaults to showing PoP gear.
