@@ -137,6 +137,7 @@ func main() {
 
 	descriptions := make(map[int]string, len(aas))
 	missing := make([]string, 0)
+	ambiguous := make([]string, 0)
 	seen := make(map[string]bool)
 
 	for _, aa := range aas {
@@ -168,17 +169,25 @@ func main() {
 		}
 
 		idxs := byText[aa.name]
-		desc := pickDescription(idxs, entries)
+		desc, candidates := pickDescription(idxs, entries)
 		// Fall back to a normalized lookup for names that differ only by
 		// punctuation/whitespace/extra qualifiers — e.g. DB has "Ayonaes
 		// Tutelage" but strings file has "Ayonae's Tutelage", "Lifeburn" vs
 		// "Life Burn", "Fletching Mastery" vs "Fletching/Bowyer Mastery".
 		if desc == "" {
-			desc = pickDescription(byNormText[normalizeName(aa.name)], entries)
+			desc, candidates = pickDescription(byNormText[normalizeName(aa.name)], entries)
 		}
 		if desc == "" {
 			missing = append(missing, aa.name)
 			continue
+		}
+		// More than one line in the strings file reads as a plausible
+		// description for this name — pickDescription silently took the
+		// longest, but an unrelated collision (like Ingenuity's item-filter
+		// label vs. its AA name) can win that tiebreak. Flag it for manual
+		// review rather than trusting it silently, same as a missing match.
+		if candidates > 1 {
+			ambiguous = append(ambiguous, aa.name)
 		}
 		descriptions[aa.eqmacid] = desc
 	}
@@ -194,6 +203,59 @@ func main() {
 		}
 	}
 
+	// Cross-check: flag any description text shared by two or more
+	// *differently-named* AAs. Legitimate sharing only happens between
+	// legacy/current eqmacid rows of the SAME name (handled above via
+	// `seen`/lookupByName and excluded here); any other collision means one
+	// of the two AAs picked up text that actually belongs to the other —
+	// exactly the bug that hit "Planar Durability" (which silently matched
+	// "Advanced Innate Strength"'s real description). This check requires
+	// the strings file to actually contain each AA's own text somewhere, so
+	// it can't catch a case like Ingenuity, where the wrong match doesn't
+	// collide with any other real AA's text.
+	//
+	// knownSharedDescriptions allowlists pairs already verified to be a
+	// genuine data duplication (both AAs are adjacent to their own name in
+	// the strings file — not a misalignment) rather than a match bug, so
+	// they don't get re-flagged and re-investigated on every run:
+	//   - "Fury of Magic" / "Fury of Magic Mastery": confirmed via
+	//     Allakhazam that live EQ reuses the exact same flavor text for
+	//     both — Mastery is later ranks of the same ability line, not a
+	//     separately-worded AA.
+	//   - "Bestial Frenzy" / "Harmonious Attack": both sit correctly
+	//     adjacent to their own name in eqstr_en.txt (no shuffle), each
+	//     with byte-identical text — the TAKP client genuinely used one
+	//     generic "chance of double attack" sentence for both AAs at this
+	//     (frozen, PoP-era) client version. Live retail rewords each
+	//     differently in later expansions, but that's not what Quarm ships.
+	knownSharedDescriptions := map[string]bool{
+		"This ability further increases your chance to score a critical hit with your direct damage spells.":                                    true,
+		"This ability grants you a chance of performing a double attack in any given combat round.  You may train in this ability once each level after reaching level 61.": true,
+	}
+	namesByDesc := make(map[string]map[string]bool, len(descriptions))
+	for _, aa := range aas {
+		d, ok := descriptions[aa.eqmacid]
+		if !ok {
+			continue
+		}
+		if namesByDesc[d] == nil {
+			namesByDesc[d] = make(map[string]bool)
+		}
+		namesByDesc[d][aa.name] = true
+	}
+	sharedDesc := make(map[string][]string)
+	for d, names := range namesByDesc {
+		if len(names) < 2 || knownSharedDescriptions[d] {
+			continue
+		}
+		list := make([]string, 0, len(names))
+		for n := range names {
+			list = append(list, n)
+		}
+		sort.Strings(list)
+		sharedDesc[d] = list
+	}
+
 	if err := writeJSON(*outPath, descriptions); err != nil {
 		log.Fatalf("write json: %v", err)
 	}
@@ -204,6 +266,24 @@ func main() {
 		log.Printf("no description match for %d AA name(s):", len(missing))
 		for _, n := range missing {
 			fmt.Fprintf(os.Stderr, "  - %s\n", n)
+		}
+	}
+	if len(ambiguous) > 0 {
+		sort.Strings(ambiguous)
+		log.Printf("ambiguous match (multiple candidate lines in the strings file) for %d AA name(s) — verify these by hand:", len(ambiguous))
+		for _, n := range ambiguous {
+			fmt.Fprintf(os.Stderr, "  - %s\n", n)
+		}
+	}
+	if len(sharedDesc) > 0 {
+		descs := make([]string, 0, len(sharedDesc))
+		for d := range sharedDesc {
+			descs = append(descs, d)
+		}
+		sort.Strings(descs)
+		log.Printf("%d description(s) are shared by differently-named AAs — one of each group almost certainly has the wrong text:", len(sharedDesc))
+		for _, d := range descs {
+			fmt.Fprintf(os.Stderr, "  - %s\n    %q\n", strings.Join(sharedDesc[d], " / "), d)
 		}
 	}
 }
@@ -285,9 +365,12 @@ func readAAs(path string) ([]aaRow, error) {
 // pickDescription chooses the best description from candidate name-line
 // indexes. The next line after the name is the description; we prefer the
 // longest one because non-AA collisions tend to be short tooltips while AA
-// description text is paragraph-length.
-func pickDescription(idxs []int, entries []stringsEntry) string {
+// description text is paragraph-length. The second return value is how many
+// candidates passed looksLikeDescription — more than one means the pick was
+// a tiebreak, not a unique match, so the caller should flag it for review.
+func pickDescription(idxs []int, entries []stringsEntry) (string, int) {
 	best := ""
+	candidates := 0
 	for _, i := range idxs {
 		if i+1 >= len(entries) {
 			continue
@@ -298,11 +381,12 @@ func pickDescription(idxs []int, entries []stringsEntry) string {
 		if !looksLikeDescription(next) {
 			continue
 		}
+		candidates++
 		if len(next) > len(best) {
 			best = next
 		}
 	}
-	return best
+	return best, candidates
 }
 
 // normalizeName lower-cases and strips apostrophes, slashes, and any

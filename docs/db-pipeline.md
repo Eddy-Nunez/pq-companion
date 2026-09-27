@@ -293,6 +293,40 @@ The generator logs how many AA descriptions resolved and lists any names
 that didn't match. Current coverage is **213/213** AAs against the TAKPv22
 strings file.
 
+### Built-in sanity checks
+
+Beyond the missing-name log, the generator runs two checks after resolving
+every AA, both logged to stderr — run it and read the output after any
+regeneration, not just when something's reported broken:
+
+- **Ambiguous match**: an AA name matched more than one "looks like a
+  description" candidate line in the strings file, so the pick (longest
+  wins) was a tiebreak rather than a unique match. None currently fire
+  against the TAKPv22 strings file.
+- **Shared description**: two or more *differently-named* AAs ended up
+  with byte-identical description text. Legitimate name-duplicate rows
+  (legacy + current eqmacid for the same AA) are excluded automatically.
+  Any other collision means one of the two AAs picked up text that
+  actually belongs to the other — this is exactly the bug that hit
+  "Planar Durability" (it silently matched "Advanced Innate Strength"'s
+  real description). Known-legitimate duplicates (confirmed by checking
+  that both AAs sit correctly adjacent to their own name in the strings
+  file, and cross-referencing Allakhazam) are allowlisted in
+  `knownSharedDescriptions` so they don't get re-flagged every run:
+  - "Fury of Magic" / "Fury of Magic Mastery" — Mastery is later ranks of
+    the same ability line and genuinely reuses the same flavor text on
+    live EQ too.
+  - "Bestial Frenzy" / "Harmonious Attack" — different AAs (Beastlord vs.
+    Bard) that happen to share one generic "chance of double attack"
+    sentence in this TAKP client version; live retail rewords each
+    differently in later expansions, but that's not what this strings
+    file has.
+
+Neither check can catch a case like Ingenuity's, where the wrong match
+doesn't collide with any other real AA's text and there's nothing to
+diff against — that class of bug still needs a report or manual
+spot-check to surface.
+
 ### When to regenerate
 
 - A new TAKP client patch ships a different `eqstr_en.txt` (existing
