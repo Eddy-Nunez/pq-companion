@@ -167,21 +167,39 @@ func stripNPCDecoration(name string) string {
 	return name
 }
 
-// GetRaidTargetsByZone returns every distinct raid-target NPC (raid_target =
-// 1, plus RaidTargetOverrides) with at least one spawn point in the zone (or
-// forced in via RaidTargetOverrides), ordered by name. Same-named variants
-// collapse to one row keyed by their lowest npc_types id, mirroring
-// GetNPCIDByName's convention so the id links to the same detail page a
-// lockout row's resolver would land on. Used by the Zones tab's Lockouts
-// sub-tab to know which bosses in a zone to check a character's lockout
-// status against.
+// GetRaidTargetsByZone returns every distinct raid/lockout-capable NPC — a
+// row with raid_target = 1, OR one with npc_types.loot_lockout > 0 (a real
+// loot lockout duration the server itself assigned, so a nonzero value is
+// authoritative even when raid_target wasn't also set — confirmed 2026-09-28:
+// EQMacEmu's Sep 2026 PoP patch added loot_lockout to 83 new PoP raid/trial
+// bosses without touching their raid_target column at all) — with at least
+// one spawn point in the zone, plus RaidTargetOverrides and any
+// npc_id-implies-zone script-spawned match (see below). Ordered by name.
+// Same-named variants collapse to one row keyed by their lowest npc_types id,
+// mirroring GetNPCIDByName's convention so the id links to the same detail
+// page a lockout row's resolver would land on. Used by the Zones tab's
+// Lockouts sub-tab to know which bosses in a zone to check a character's
+// lockout status against.
 func (db *DB) GetRaidTargetsByZone(shortName string) ([]RaidTargetInZone, error) {
+	out := []RaidTargetInZone{}
+	seenID := map[int]bool{}
+	seenName := map[string]bool{}
+	add := func(id int, rawName string) {
+		name := strings.TrimSpace(strings.ReplaceAll(stripNPCDecoration(rawName), "_", " "))
+		if seenName[name] {
+			return
+		}
+		out = append(out, RaidTargetInZone{NPCID: id, Name: name})
+		seenID[id] = true
+		seenName[name] = true
+	}
+
 	rows, err := db.Query(`
 		SELECT MIN(n.id), n.name
 		FROM spawn2 s
 		JOIN spawnentry se ON se.spawngroupID = s.spawngroupID
 		JOIN npc_types n ON n.id = se.npcID
-		WHERE s.zone = ? AND n.raid_target = 1
+		WHERE s.zone = ? AND (n.raid_target = 1 OR n.loot_lockout > 0)
 		  -- A '#' name prefix does NOT reliably mean "decoy/utility row" for
 		  -- raid encounters — Lord Inquisitor Seru's only row is
 		  -- "#Lord_Inquisitor_Seru" and it's the real, lootable boss. What
@@ -202,36 +220,73 @@ func (db *DB) GetRaidTargetsByZone(shortName string) ([]RaidTargetInZone, error)
 	if err != nil {
 		return nil, fmt.Errorf("get raid targets by zone %q: %w", shortName, err)
 	}
-	defer rows.Close()
-
-	out := []RaidTargetInZone{}
-	seen := map[int]bool{}
 	for rows.Next() {
-		var t RaidTargetInZone
-		if err := rows.Scan(&t.NPCID, &t.Name); err != nil {
+		var id int
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan raid target in zone: %w", err)
 		}
-		t.Name = strings.TrimSpace(strings.ReplaceAll(stripNPCDecoration(t.Name), "_", " "))
-		out = append(out, t)
-		seen[t.NPCID] = true
+		add(id, name)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		return nil, err
 	}
+	rows.Close()
+
+	// Script-spawned lockout bosses with NO spawn2 row anywhere (so the query
+	// above can never see them) — the Planes of Power raid encounters are
+	// overwhelmingly this shape: guild-instance content spawned entirely from
+	// quest Lua, never placed via spawn2. Quarm's npc_types ids are assigned
+	// zone-by-zone (id / 1000 == that zone's zoneidnumber — verified against
+	// zone.zoneidnumber for every zone, not just PoP: e.g. Saryrn 207001 in
+	// potorment=207, Fennin Ro 217440 in pofire=217), so a real loot_lockout
+	// on such a row can be attributed to its zone without a spawn2 join at
+	// all. This also incidentally recovers a handful of pre-existing classic
+	// gaps sharing the exact same shape as ssratemple/akheva/griegsend below
+	// (e.g. pofire's Fennin Ro itself, solrotower's Protector of Dresolik).
+	scriptRows, err := db.Query(`
+		SELECT MIN(n.id), n.name
+		FROM npc_types n
+		JOIN zone z ON z.zoneidnumber = n.id / 1000
+		WHERE z.short_name = ?
+		  AND n.loot_lockout > 0
+		  AND n.loottable_id != 0
+		  AND n.race != 127
+		  AND NOT EXISTS (
+		    SELECT 1 FROM spawnentry se2
+		    JOIN spawn2 s2 ON s2.spawngroupID = se2.spawngroupID
+		    WHERE se2.npcID = n.id)
+		GROUP BY n.name
+		ORDER BY n.name`, shortName)
+	if err != nil {
+		return nil, fmt.Errorf("get script-spawned raid targets by zone %q: %w", shortName, err)
+	}
+	for scriptRows.Next() {
+		var id int
+		var name string
+		if err := scriptRows.Scan(&id, &name); err != nil {
+			scriptRows.Close()
+			return nil, fmt.Errorf("scan script-spawned raid target in zone: %w", err)
+		}
+		add(id, name)
+	}
+	if err := scriptRows.Err(); err != nil {
+		scriptRows.Close()
+		return nil, err
+	}
+	scriptRows.Close()
 
 	for _, id := range RaidTargetOverrides[shortName] {
-		if seen[id] {
+		if seenID[id] {
 			continue
 		}
 		var name string
 		if err := db.QueryRow(`SELECT name FROM npc_types WHERE id = ?`, id).Scan(&name); err != nil {
 			continue
 		}
-		out = append(out, RaidTargetInZone{
-			NPCID: id,
-			Name:  strings.TrimSpace(strings.ReplaceAll(stripNPCDecoration(name), "_", " ")),
-		})
-		seen[id] = true
+		add(id, name)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
