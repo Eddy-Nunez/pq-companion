@@ -806,6 +806,13 @@ func TestNPCTracker_TargetDescriptorsResolveVariants(t *testing.T) {
 		// Non-raid pair with four spawn clusters each.
 		{"va xakra inner cluster", 158, 0, 0, descAt("Va Xakra", 60, 5, 224, true, 140, 419), []int{158006}},
 		{"va xakra outer cluster", 158, 0, 0, descAt("Va Xakra", 60, 5, 224, true, 1172, 336), []int{158086}},
+		// Plane of Fear: raid row vs low-HP sibling differ by level.
+		{"cazic thule raid version by level", 72, 0, 0,
+			descAt("Cazic Thule", 70, 5, 95, false, 0, 0), []int{72003}},
+		{"cazic thule 32k sibling by level", 72, 0, 0,
+			descAt("Cazic Thule", 55, 5, 95, false, 0, 0), []int{72500}},
+		{"a dracoliche raid version by level", 72, 0, 0,
+			descAt("a dracoliche", 58, 11, 122, false, 0, 0), []int{72090}},
 		// A descriptor set no row matches must not lose the NPC.
 		{"mismatch keeps full set", 162, 0, 0,
 			descAt("A Shissar Revenant", 52, 12, 217, false, 0, 0), []int{162197, 162490}},

@@ -328,28 +328,42 @@ a future data source fix this?" column against the new capabilities.
 
 - **Limitation:** When two distinct NPCs share a name, the app cannot tell which
   one you're fighting. Concrete cases:
-  - The duplicate-named boss in **Vex Thal**.
+  - The duplicate-named bosses in **Vex Thal** (Kaas Thox Xi Aten Ha Ra, Thall
+    Va Xakra, Va Xakra).
   - The **Shissar Revenant** in **Ssraeshza Temple**.
 - **Root cause:** Logs never emit a spawn ID or `npc_types.id`; they only carry
   the display name. `quarm.db` may hold *multiple* `npc_types` rows with the
-  same `name`, and nothing in the log/Zeal feed disambiguates which row is the
-  live spawn.
+  same `name`, and nothing in the log disambiguates which row is the live
+  spawn.
 - **Sources checked:** Log (name only), DB (multiple rows, no live binding),
-  Zeal (`TargetName` is the same display label; `target_id` since 1.4.6).
-- **Could a future data source fix this?** **Partially, since Zeal 1.4.6
-  (2026-09-08).** The pipe now emits `target_id` — the zone server's live
-  spawn id for your current target. It is **not** `npc_types.id`: it does not
-  by itself name a DB row, a loot table, or a level, so the *initial* pick
-  among same-name `npc_types` candidates still relies on the existing
-  heuristic (position vs `spawn2`, placeholder prefix, `raid_target` / HP
-  strength sort). What it buys is **sticky resolution**: the NPC overlay
-  resolves the variant once, pins it to that `target_id` for the life of the
-  spawn (flushed on zone change — spawn ids are recycled on a zone reset), and
-  reuses it instead of re-rolling the disambiguation every time you re-target.
-  That kills the Vex Thal / Plane of Fear "coin-flip on re-pull" where moving
-  (or the mob being dragged) flipped which candidate the overlay showed.
-  Telling two *live* same-named targets apart within a session is now possible;
-  binding either one to the correct DB row is not.
+  Zeal (`TargetName`; `target_id` since 1.4.6; target descriptors from the
+  release after 1.4.7).
+- **Could a future data source fix this?** **Mostly yes, with Zeal target
+  descriptors** (CoastalRedwood/Zeal PR #239, accepted, due in the release
+  after 1.4.7). The pipe's `player` message now carries the target's live
+  level, class, race and entity type, plus its position while it is within
+  250 units of you (Project Quarm server policy — it's withheld beyond that).
+  The overlay narrows same-name candidates to the rows matching the live
+  level/class/race, then by which row's spawn point the *target itself* is
+  nearest. That resolves:
+  - **Shissar Revenant** (necro vs SK — class differs, spawn points are shared);
+  - **Cazic Thule / A Dracoliche / Dread / Fright / Terror** in Plane of Fear
+    (raid row vs sibling — level differs);
+  - **Kaas Thox, Thall Va Xakra, Va Xakra** (rows identical except spawn
+    position) whenever the boss is within 250 units and still nearer one
+    spawn point than the other by 200+ units.
+
+  `target_id` (1.4.6+) keeps the result **sticky** per live spawn (flushed on
+  zone change — spawn ids are recycled), and an ambiguous result upgrades
+  itself as soon as the target comes within 250 units; a resolved one never
+  reverts.
+- **What remains:** a Vex Thal boss first targeted from 250+ units away, or
+  dragged to roughly the midpoint between its two possible spawn points, stays
+  ambiguous and the overlay shows both loot tables, as before. Rows identical in
+  level/class/race *and* spawn point (true RNG pairs) are indistinguishable by
+  design. **Without the new Zeal** (1.4.7 and earlier, or no Zeal), every
+  behaviour falls back to the pre-descriptor heuristics: player position vs
+  `spawn2`, never for raid targets, plus the strength sort.
 
 ### 3.2 Cannot determine level / class of duplicate-named NPCs
 
@@ -359,37 +373,37 @@ a future data source fix this?" column against the new capabilities.
 - **Root cause:** Same as 3.1 — no way to bind the live target to a specific DB
   row. Level/class are only visible if the user `/con`s and the parser maps it,
   and even then ambiguity remains across same-named rows.
-- **Sources checked:** Log, DB, Zeal (`target_id` since 1.4.6).
-- **Could a future data source fix this?** **No.** Zeal 1.4.6's `target_id`
-  (see §3.1) tells two *live* same-named targets apart but does not bind either
-  to a `npc_types` row, so it can't say which row's level/class/resists to
-  show. Still needs a `/con` (or a future Zeal field carrying the actual NPC
-  id, not just the spawn id).
+- **Sources checked:** Log, DB, Zeal (`target_id` since 1.4.6; target
+  descriptors from the release after 1.4.7).
+- **Could a future data source fix this?** **Yes, with Zeal target
+  descriptors** (see §3.1). The live level and class come straight from the
+  client, so the overlay shows the spawn's actual level (e.g. "52" rather than
+  "50-54", with the DB range on hover) and resolves the row whenever level or
+  class differ. Older Zeal: unchanged, the DB range is shown.
 
 ### 3.3 Loot tables for duplicate-named bosses are ambiguous
 
-- **Limitation:** The duplicate-named Vex Thal boss can't have its loot table
-  shown accurately, because we can't determine *which* `npc_types` entry the
-  live boss corresponds to — and the candidates have different loot tables.
+- **Limitation:** Same-name bosses with different loot tables (Vex Thal) can't
+  have the right loot table shown unless the live boss is bound to one
+  `npc_types` row.
 - **Root cause:** Loot tables are keyed off `npc_types.id` (via
-  `loottable`/`loottable_entries`), but we can't resolve the live spawn to one
-  ID. See 3.1.
-- **Sources checked:** DB (loot tables exist per ID), Log/Zeal (no ID binding;
-  Zeal 1.4.6's `target_id` is a *spawn* id, not `npc_types.id`).
-- **Could a future data source fix this?** **No.** Loot is keyed off
-  `npc_types.id` and `target_id` doesn't resolve to one (see §3.1) — a future
-  Zeal field exposing the target's actual NPC id would.
+  `loottable`/`loottable_entries`). See 3.1.
+- **Sources checked:** DB (loot tables exist per ID), Log/Zeal (see §3.1).
+- **Could a future data source fix this?** **Mostly yes, with Zeal target
+  descriptors** — the loot table follows the resolved row, so once §3.1
+  resolves the boss, only its own loot table is shown instead of every
+  candidate's. The §3.1 "what remains" cases still show all candidates' loot.
 
 ### 3.4 NPC database stats are templates, not live state
 
-- **Limitation:** NPC level, HP, class, and resists in the overlay come from the
-  static template, not the actual live spawn (which may be buffed, scaled, or a
-  different variant).
+- **Limitation:** NPC HP, resists and other stats in the overlay come from the
+  static template, not the actual live spawn (which may be buffed or scaled).
 - **Root cause:** Only `quarm.db` template data is available; Zeal exposes
-  `TargetName` and `TargetHPPerc` (a percentage bar) but no absolute live stats.
-- **Sources checked:** DB (template), Zeal (name + HP%).
-- **Could a future data source fix this?** **Partially.** Zeal gives a live HP%
-  bar, but absolute live stats remain template-derived.
+  `TargetName`, `TargetHPPerc` (a percentage bar) and, with target descriptors,
+  the live level/class/race — but no absolute live HP, resists or other stats.
+- **Sources checked:** DB (template), Zeal (name, HP%, level/class/race).
+- **Could a future data source fix this?** **Partially.** Live HP% and (with
+  target descriptors) live level; everything else remains template-derived.
 
 ### 3.5 Duplicate-named bosses have no "active version" flag
 
@@ -397,25 +411,40 @@ a future data source fix this?" column against the new capabilities.
   same name that are all assigned to spawn in the same zone — a real raid
   version plus low-HP siblings. Concrete cases (Plane of Fear): **Cazic Thule**
   (450k-HP raid row + 32k rows) and **A Dracoliche** (175k-HP raid row + 32k
-  rows), present in both `fearplane` and `fear_instanced`. The overlay can't
-  *prove* which one the live spawn is.
+  rows), present in both `fearplane` and `fear_instanced`.
 - **Root cause:** Same as 3.1 (no live spawn/NPC ID), compounded by the fact
   that the data itself flags more than one same-name row as spawnable in the
   zone — `raid_target` is set on several of them, so there is no single
   authoritative "this is the live version" column.
-- **Mitigation in app:** The overlay now headlines the strongest candidate
-  (`raid_target` first, then highest `hp`, then lowest `id`), which reliably
-  matches the raid boss being fought, and collapses the remaining same-name
-  rows under a "N other DB version(s)" disclosure instead of stacking them.
-  This is a heuristic, not a resolution — if a group fought a low-HP variant the
-  headline would still show the raid row.
+- **Mitigation in app:** Without target descriptors, the overlay headlines the
+  strongest candidate (`raid_target` first, then highest `hp`, then lowest
+  `id`) and collapses the rest under an "N other DB version(s)" disclosure — a
+  heuristic, not a resolution.
 - **Sources checked:** DB (`npc_types` name/hp/raid_target, `spawn2`/`spawnentry`
-  per zone), Log (name only), Zeal (`TargetName` + HP%; `target_id` since 1.4.6).
-- **Could a future data source fix this?** **No.** Zeal 1.4.6's `target_id`
-  makes the heuristic *pick* sticky (see §3.1) so the headline stops flipping
-  between the raid row and a 32k sibling on re-target, but it still cannot
-  *prove* which row the live spawn is — that needs the actual NPC id, not the
-  spawn id. Re-check on each Zeal release.
+  per zone), Log (name only), Zeal (`TargetName` + HP%; `target_id` since 1.4.6;
+  target descriptors from the release after 1.4.7).
+- **Could a future data source fix this?** **Yes for these cases, with Zeal
+  target descriptors** — the raid rows and their siblings differ in level
+  (Cazic Thule 70 vs 55, A Dracoliche 58 vs 53), so the live level picks the
+  row outright (see §3.1). Siblings that match each other on
+  level/class/race still need position, as in §3.1.
+
+### 3.6 Target distance and range colouring are approximate
+
+- **Limitation:** The NPC overlay's distance readout (Zeal target descriptors)
+  reads "n/a" past 250 units, and its green/yellow/red range colouring and the
+  "can reach you" markers on an NPC's spells are a guide, not a guarantee.
+- **Root cause:** Zeal withholds the target's position beyond 250 units
+  (Project Quarm server policy). The server's own range check also counts
+  model size, and range-extending focus effects (SPA 129, e.g. Extended Range,
+  Druzzil's Range, up to +25%) only apply to some spells. The app doesn't model
+  either, so the user enters their effective cast/ranged range in Settings. A
+  targeted AE's reach is shown as reach to its primary victim; bystanders
+  near that victim can be hit from farther away.
+- **Sources checked:** Zeal (`target_loc`, ≤250 only), DB (`spells_new.range`,
+  `aoerange`; `items.range`).
+- **Could a future data source fix this?** Not the 250-unit cap (it's policy).
+  Size and focus could be modelled from the DB and the character's gear later.
 
 ---
 

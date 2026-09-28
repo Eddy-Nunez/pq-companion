@@ -621,9 +621,18 @@ for the full design writeups; this is a pointer, not a duplicate):
    `target_level`/`target_class` (commit 2, droppable) to the named pipe's
    target block, so PQ Companion can disambiguate same-name NPCs backed by
    different `npc_types` rows (Kaas Thox in Vex Thal, A Shissar Revenant in
-   Ssraeshza — see `LIMITATIONS.md` 3.1/3.2/3.3/3.5, still unresolved on the
-   PQC side pending a Zeal release). Full detail:
+   Ssraeshza — see `LIMITATIONS.md` 3.1/3.2/3.3/3.5). Full detail:
    `[[project_zeal_pr_target_descriptors]]` (Claude memory).
+   **2026-09-28: PR #239 (both commits) approved by CoastalRedwood + Secrets**
+   on one condition: `target_loc` is only exported within 250 units of the
+   player (added as a third commit, `9a38d91`). The **PQC consumer is
+   implemented ahead of the Zeal release** and inert until then:
+   `zealpipe.Player.TargetDescriptors()`, descriptor + target-position variant
+   filtering and ambiguous-entry refinement in `overlay/npc.go`
+   (`SetPipeTargetSnapshot`), live level on both NPC overlays, the
+   `overlay:npc_target_distance` feed with its range-coloured chip, and spell
+   reach on caster summaries. All of it is gated on whether the field is
+   present, not on the Zeal version.
 2. **`#popflags` export** (new feature) — adds `/outputfile popflags`,
    capturing PoP-progression server command output to a file the way
    Inventory/Quarmy/Spellbook already export, feeding
