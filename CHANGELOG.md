@@ -9,6 +9,19 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.25.0 — 2026-09-28
+
+Refreshes the game database ahead of Planes of Power's launch, fixes the Bazaar Trader Tracker over-counting charged items, and closes two `#popflags` gaps found before they could bite anyone.
+
+### Highlights
+- **Quarm database refreshed for the latest PoP server patch** — picks up 83 new Planes of Power raid/trial lockout timers (66 hours for most bosses, longer for the elemental gods, shorter for Halls of Honor trials), standardized trash respawns, and several loot table changes across Bastion of Thunder and the Plane of Storms.
+- **Zones → Lockouts tab now shows Planes of Power raid bosses** — the new lockout data didn't carry the same flag the tab used to decide "this is a raid boss," so none of the newly-tracked PoP encounters would have shown up; fixed, and it picked up a few pre-existing classic-era gaps (Fennin Ro, Emperor Ssraeshza) along the way.
+- **Item sources restored for Bastion of Thunder and Plane of Storms key items** — the server moved these items' drops out of the database and into quest scripts, so the Ring/Symbol of Torden, the gem/sphere key components, and the three Esoteric Medallions now show a "scripted" source instead of appearing to have none.
+
+### Fixes
+- **Bazaar Trader Tracker no longer over-counts sold clicky items** — selling one Scepter of the Forlorn with charges left on it was read as several separate sales at several times the real total, because the item's remaining charge count was being read as a quantity. Fixed for both new captures and existing session history.
+- Closed two gaps in the `#popflags` progression sync found during a full recheck against the server's command output — a couple of common status lines weren't recognized, which could have split one reading into two.
+
 ## v0.24.0 — 2026-09-28
 
 The NPC overlay is ready for Zeal's upcoming target-info update: real level, correct duplicate-named NPCs, and live distance to your target.
