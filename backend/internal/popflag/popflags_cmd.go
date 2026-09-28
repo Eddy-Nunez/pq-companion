@@ -7,19 +7,34 @@ import (
 
 // This file parses the player-facing '#popflags' command added in
 // EQMacEmu/EQMacEmu PR #382 (zone/gm_commands/popflags.cpp, commit cec9e73a,
-// 2026-09-06 — unchanged since). '#popflags [overview|1-5]' prints a
-// deterministic report built directly from the character's PoP qglobals, the
-// same underlying state the Seer Mal Nae`Shi "guided meditation" (seer.go)
-// reconstructs from narrative text. Unlike the Seer reading (one big burst
-// that covers every qglobal at once), a '#popflags' report only covers the
-// section the player ran — 'overview' gives coarse per-tier status, while
-// '#popflags 1'..'5' give one tier's full detail. Repeated syncs across
-// different sections progressively fill in the character's stored snapshot
-// (see Store.ApplyPopFlagsReport).
+// 2026-09-06 — re-checked against the live upstream source 2026-09-28, still
+// the only commit touching this file). '#popflags [overview|1|2|3|4|5|time]'
+// prints a deterministic report built directly from the character's PoP
+// qglobals, the same underlying state the Seer Mal Nae`Shi "guided
+// meditation" (seer.go) reconstructs from narrative text. Unlike the Seer
+// reading (one big burst that covers every qglobal at once), a '#popflags'
+// report only covers the section the player ran — 'overview' gives coarse
+// per-tier status, '#popflags 1'..'4' (also 'tier1'..'tier4'/'t1'..'t4') give
+// one tier's full detail, and '#popflags 5' (also 'tier5'/'t5'/'time'/
+// 'potime') prints the "=== Plane of Time ===" section specifically — its
+// own header, distinct from the numbered "=== Tier N Progression ===" ones,
+// handled as PopFlagsTime below. Repeated syncs across different sections
+// progressively fill in the character's stored snapshot (see
+// Store.ApplyPopFlagsReport).
 //
 // Every literal string below is copied verbatim from popflags.cpp so a wording
 // change upstream fails loudly (the line simply stops matching) rather than
-// silently mis-parsing.
+// silently mis-parsing. The 2026-09-28 re-check (prompted by the concurrent
+// quarm.db data regen) found and fixed two real gaps that had gone
+// unexercised because PoP hadn't launched yet: the "Tier N: In progress"
+// overview lines (the single most common per-tier state) weren't recognized
+// at all, and PopFlagsPrintTime's "Complete the elemental progression..."
+// hint — printed whenever Time access is still Locked, i.e. almost always —
+// was missing from popFlagsNoticeLines. Both would have caused the live
+// Consumer to flush mid-block and split one '#popflags' reading into two. A
+// third entry, "Use #timelockout <1-6> to list a phase's encounters.", was
+// removed — it doesn't correspond to any line popflags.cpp actually prints
+// (that command lives entirely in internal/lockout, a separate feature).
 
 // PopFlagsSection identifies which '#popflags' report a block came from.
 type PopFlagsSection string
@@ -251,9 +266,21 @@ var popFlagsLiteralLines = map[string]popFlagsBoolEffect{
 	"Halls of Honor trials: None completed": exactEffect("hohtrials", "000"),
 	"Tower wing flags: None completed":      exactEffect("sol_room", "00000"),
 
-	// Overview per-tier status. "In progress" is intentionally absent — the
-	// server's own tri-state can't be resolved to any specific qglobal floor
-	// or absence, so it contributes nothing.
+	// Overview per-tier status. The "In progress" state (PopFlagsProgressStatus
+	// when started but not complete — the single most common state for a
+	// player mid-progression) contributes no qglobal state of its own, since
+	// the server's own tri-state can't be resolved to any specific floor or
+	// absence — but it MUST still be recognized, or MatchPopFlagsLine would
+	// reject it and the live Consumer would flush the overview block early,
+	// splitting one reading into two. (Tier 5's line can never actually be
+	// "In progress" — PopFlagsProgressStatus(has, has) with identical
+	// started/complete args is always Complete or Not started — so there's no
+	// "Tier 5 - Plane of Time: In progress" entry to add.)
+	"Tier 1: In progress": noEffect,
+	"Tier 2: In progress": noEffect,
+	"Tier 3: In progress": noEffect,
+	"Tier 4: In progress": noEffect,
+
 	"Tier 1: Complete": func(r PopFlagsReport) {
 		r.setAtLeast("mavuin", 3)
 		r.setAtLeast("fuirstel", 5)
@@ -492,7 +519,14 @@ var popFlagsNoticeLines = map[string]bool{
 	"Pending checklist memories exist, but their prerequisite steps are incomplete.":      true,
 	"Complete the unfinished progression shown above, then return to Seer Mal Nae`Shi.":   true,
 	"If one of these is missing, hail Maelin and ask about new lore and new information.": true,
-	"Use #timelockout <1-6> to list a phase's encounters.":                                true,
+	// PopFlagsPrintTime's hint, printed whenever Plane of Time access is still
+	// Locked — i.e. for nearly every player who checks '#popflags time' before
+	// finishing Tier 4. Missing until 2026-09-28's full re-check against the
+	// actual source: the block header ("=== Plane of Time ===") plus the
+	// access line would have matched, but this hint line would have ended the
+	// buffer early, splitting the block before the trailing seer notice/tier-
+	// complete lines could be captured.
+	"Complete the elemental progression, combine the four elemental essences, and return to Grand Librarian Maelin.": true,
 }
 
 // MatchPopFlagsLine reports whether a single log line is part of a '#popflags'
