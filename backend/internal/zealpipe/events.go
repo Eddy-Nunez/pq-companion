@@ -3,6 +3,7 @@ package zealpipe
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -78,6 +79,85 @@ type Player struct {
 	SpawnID    *int     `json:"spawn_id,omitempty"`
 	TargetID   *int     `json:"target_id,omitempty"`
 	PetID      *int     `json:"pet_id,omitempty"`
+
+	// Target descriptors (CoastalRedwood/Zeal PR #239). Absent on older Zeal
+	// builds and whenever there is no target. TargetLoc is additionally
+	// omitted whenever the target is 250+ units from the player — a Project
+	// Quarm server policy, so it can't be used to locate spawns zone-wide.
+	TargetName  *string   `json:"target_name,omitempty"`
+	TargetType  *int      `json:"target_type,omitempty"` // 0 PC, 1 NPC, 2 NPC corpse, 3 PC corpse
+	TargetLevel *int      `json:"target_level,omitempty"`
+	TargetClass *int      `json:"target_class,omitempty"` // EQ class id, same numbering as npc_types.class
+	TargetRace  *int      `json:"target_race,omitempty"`  // EQ race id, same numbering as npc_types.race
+	TargetLoc   *Location `json:"target_loc,omitempty"`
+}
+
+// Target entity types reported in Player.TargetType (Zeal EntityTypes).
+const (
+	TargetTypePC        = 0
+	TargetTypeNPC       = 1
+	TargetTypeNPCCorpse = 2
+	TargetTypePCCorpse  = 3
+)
+
+// TargetDescriptors is the current target's identity as reported by Zeal —
+// what the client itself knows about the spawn, as opposed to what the log
+// lets us infer. Built by Player.TargetDescriptors.
+type TargetDescriptors struct {
+	Name  string
+	Type  int
+	Level int
+	Class int
+	Race  int
+
+	// LocKnown is false when Zeal withheld target_loc (target 250+ units
+	// away). GameX/GameY follow the spawn2 convention (see Location.GameX).
+	LocKnown bool
+	GameX    float64
+	GameY    float64
+	Z        float64
+}
+
+// TargetDescriptors returns the target descriptors carried by this snapshot,
+// or nil when this Zeal build doesn't report them (or there is no target).
+// Level, class and race are the minimum set — a snapshot missing any of them
+// is treated as not carrying descriptors at all.
+func (p Player) TargetDescriptors() *TargetDescriptors {
+	if p.TargetLevel == nil || p.TargetClass == nil || p.TargetRace == nil {
+		return nil
+	}
+	d := &TargetDescriptors{
+		Level: *p.TargetLevel,
+		Class: *p.TargetClass,
+		Race:  *p.TargetRace,
+		Type:  TargetTypeNPC,
+	}
+	if p.TargetName != nil {
+		d.Name = *p.TargetName
+	}
+	if p.TargetType != nil {
+		d.Type = *p.TargetType
+	}
+	if p.TargetLoc != nil {
+		d.LocKnown = true
+		d.GameX = p.TargetLoc.GameX()
+		d.GameY = p.TargetLoc.GameY()
+		d.Z = p.TargetLoc.Z
+	}
+	return d
+}
+
+// DistanceToTarget returns the 3D distance from the player to the target, or
+// ok=false when Zeal didn't report the target's position. Both positions
+// share Zeal's axis order, so no transposition is needed for a distance.
+func (p Player) DistanceToTarget() (float64, bool) {
+	if p.TargetLoc == nil {
+		return 0, false
+	}
+	dx := p.TargetLoc.X - p.Location.X
+	dy := p.TargetLoc.Y - p.Location.Y
+	dz := p.TargetLoc.Z - p.Location.Z
+	return math.Sqrt(dx*dx + dy*dy + dz*dz), true
 }
 
 // flexInt accepts a JSON number or a numeric string. Zeal emits roster

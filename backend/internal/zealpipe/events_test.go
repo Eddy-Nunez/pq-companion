@@ -122,6 +122,54 @@ func TestDecodePlayerPre146NoIDs(t *testing.T) {
 	}
 }
 
+func TestDecodePlayerTargetDescriptors(t *testing.T) {
+	// Zeal PR #239 shape. target_loc is in Zeal's (y, x, z) order like
+	// location: the JSON "x" is the game's Y.
+	full := `{"zone":158,"location":{"x":300,"y":141,"z":130},"heading":0,"autoattack":false,` +
+		`"spawn_id":1,"target_id":77,"target_name":"Kaas Thox Xi Aten Ha Ra","target_type":1,` +
+		`"target_level":66,"target_class":9,"target_race":145,"target_loc":{"x":318,"y":141,"z":130}}`
+	noLoc := `{"zone":158,"location":{"x":-300,"y":141,"z":130},"heading":0,"autoattack":false,` +
+		`"target_id":77,"target_name":"a gnoll","target_type":2,"target_level":12,"target_class":1,"target_race":39}`
+	stock147 := `{"zone":158,"location":{"x":1,"y":2,"z":3},"heading":0,"autoattack":false,"target_id":77}`
+
+	tests := []struct {
+		name     string
+		payload  string
+		wantDesc bool
+		want     TargetDescriptors
+		wantDist float64
+		distOK   bool
+	}{
+		{"full", full, true, TargetDescriptors{
+			Name: "Kaas Thox Xi Aten Ha Ra", Type: TargetTypeNPC, Level: 66, Class: 9, Race: 145,
+			LocKnown: true, GameX: 141, GameY: 318, Z: 130,
+		}, 18, true},
+		{"loc withheld beyond 250", noLoc, true, TargetDescriptors{
+			Name: "a gnoll", Type: TargetTypeNPCCorpse, Level: 12, Class: 1, Race: 39,
+		}, 0, false},
+		{"stock v1.4.7", stock147, false, TargetDescriptors{}, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := DecodePlayer(tt.payload)
+			if err != nil {
+				t.Fatalf("decode player: %v", err)
+			}
+			d := p.TargetDescriptors()
+			if (d != nil) != tt.wantDesc {
+				t.Fatalf("TargetDescriptors() = %+v, want present=%v", d, tt.wantDesc)
+			}
+			if d != nil && *d != tt.want {
+				t.Errorf("TargetDescriptors() = %+v, want %+v", *d, tt.want)
+			}
+			dist, ok := p.DistanceToTarget()
+			if ok != tt.distOK || dist != tt.wantDist {
+				t.Errorf("DistanceToTarget() = %v, %v; want %v, %v", dist, ok, tt.wantDist, tt.distOK)
+			}
+		})
+	}
+}
+
 func TestDecodeRaidRosterLiveCapture(t *testing.T) {
 	// Live capture 2026-09-14 (Zeal v1.4.6, real raid in Kael Drakkel):
 	// class arrives as the display NAME ("Necromancer"), level as a STRING
