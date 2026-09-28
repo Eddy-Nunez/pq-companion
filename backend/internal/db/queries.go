@@ -169,6 +169,39 @@ func (db *DB) ItemIcons(ids []int) (map[int]int, error) {
 	return out, rows.Err()
 }
 
+// StackableItems returns the subset of the given IDs whose items row has
+// stackable = 1. Anything not in the returned set (including IDs missing from
+// the items table entirely) should be treated as non-stackable — on Project
+// Quarm, stackable = 0 or 3 both mean "one item per inventory slot", and for
+// clicky/charged items (stackable = 3) the export's Count column is the
+// charge count, not a quantity. See trader.NormalizeUnits.
+func (db *DB) StackableItems(ids []int) (map[int]bool, error) {
+	out := make(map[int]bool, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := strings.Repeat("?,", len(ids))
+	placeholders = placeholders[:len(placeholders)-1]
+	q := fmt.Sprintf("SELECT id FROM items WHERE stackable = 1 AND id IN (%s)", placeholders)
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query stackable items: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan stackable item: %w", err)
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // ItemTypesByNames returns a map of item name → effective itemtype for the
 // given names (case-insensitive exact match), applying the same
 // itemTypeOverrides correction as GetItem. Names with no matching row are

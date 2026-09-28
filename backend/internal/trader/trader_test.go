@@ -351,3 +351,68 @@ func TestFingerprintStableAcrossOrder(t *testing.T) {
 		t.Errorf("fingerprint should change when a count changes")
 	}
 }
+
+// A non-stackable charged clicky (e.g. a Scepter of the Forlorn, item id
+// 6913, stackable=3/maxcharges=10 on Project Quarm) reports its CURRENT
+// CHARGE COUNT in the Count column, not a quantity — a trader's satchel can
+// only ever hold one per slot. NormalizeUnits must collapse that to 1 so
+// selling one scepter reads as one sale, not ten (the reported bug).
+func TestNormalizeUnitsCollapsesChargedItemCount(t *testing.T) {
+	const scepterID = 6913 // non-stackable, 10 charges remaining
+	const arrowID = 1001   // genuinely stackable
+
+	prev := &Snapshot{
+		Character: "Feane",
+		TakenAt:   time.Unix(1000, 0),
+		Satchel: []SatchelItem{
+			{ItemID: scepterID, Name: "Scepter of the Forlorn", Count: 10},
+			{ItemID: arrowID, Name: "Arrow", Count: 20},
+		},
+	}
+	next := &Snapshot{
+		Character: "Feane",
+		TakenAt:   time.Unix(2000, 0),
+		Satchel: []SatchelItem{
+			{ItemID: arrowID, Name: "Arrow", Count: 17}, // 3 sold
+		},
+		OnPersonCopper: 1499, // scepter's listed price
+	}
+	stackable := map[int]bool{arrowID: true} // scepter absent = non-stackable
+
+	NormalizeUnits([]*Snapshot{prev, next}, stackable)
+
+	if prev.Satchel[0].Count != 1 {
+		t.Errorf("scepter count after normalize = %d, want 1", prev.Satchel[0].Count)
+	}
+	if prev.Satchel[1].Count != 20 {
+		t.Errorf("stackable arrow count should be untouched, got %d", prev.Satchel[1].Count)
+	}
+
+	listing := &BZRListing{Items: []PricedItem{
+		{Name: "Scepter of the Forlorn", Price: 1499},
+		{Name: "Arrow", Price: 10},
+	}}
+	sess := InferSales(prev, next, listing)
+
+	var scepterSale, arrowSale *SoldItem
+	for i := range sess.Sold {
+		switch sess.Sold[i].ItemID {
+		case scepterID:
+			scepterSale = &sess.Sold[i]
+		case arrowID:
+			arrowSale = &sess.Sold[i]
+		}
+	}
+	if scepterSale == nil {
+		t.Fatal("expected the scepter to appear as sold")
+	}
+	if scepterSale.Qty != 1 {
+		t.Errorf("scepter Qty = %d, want 1 (was reading as charge count)", scepterSale.Qty)
+	}
+	if scepterSale.LineTotal != 1499 {
+		t.Errorf("scepter LineTotal = %d, want 1499 (not 14990)", scepterSale.LineTotal)
+	}
+	if arrowSale == nil || arrowSale.Qty != 3 {
+		t.Errorf("stackable arrow sale = %+v, want qty=3", arrowSale)
+	}
+}

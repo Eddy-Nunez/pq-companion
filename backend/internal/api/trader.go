@@ -123,6 +123,7 @@ func (h *traderHandler) listings(w http.ResponseWriter, r *http.Request) {
 	stock := map[string]int{}
 	itemIDByName := map[string]int{}
 	if latest, ok, err := h.store.LatestSnapshot(char); err == nil && ok {
+		h.normalizeSnapshots([]*trader.Snapshot{latest})
 		for _, it := range latest.Satchel {
 			if !it.OnBar() {
 				continue // bank storage doesn't list on the bazaar bar
@@ -165,6 +166,7 @@ func (h *traderHandler) sessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.normalizeSnapshots(snaps)
 
 	var listing *trader.BZRListing
 	if path := trader.FindBZRFile(h.cfgMgr.Get().EQPath, char); path != "" {
@@ -222,6 +224,7 @@ func (h *traderHandler) snapshots(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.normalizeSnapshots(snaps)
 	out := make([]traderSnapshotInfo, 0, len(snaps))
 	for _, s := range snaps {
 		info := traderSnapshotInfo{
@@ -334,4 +337,32 @@ func (h *traderHandler) attachIcons(ids []int, set func(id, icon int)) {
 	for id, icon := range h.lookupIcons(ids) {
 		set(id, icon)
 	}
+}
+
+// normalizeSnapshots rewrites each snapshot's satchel counts in place so a
+// non-stackable item (a charged clicky like a Scepter of the Forlorn) always
+// reads as 1 unit per slot instead of its charge count — see
+// trader.NormalizeUnits. If the item DB is unavailable or the lookup fails,
+// this is a no-op and counts fall back to the raw export values.
+func (h *traderHandler) normalizeSnapshots(snaps []*trader.Snapshot) {
+	if h.db == nil {
+		return
+	}
+	var ids []int
+	for _, s := range snaps {
+		if s == nil {
+			continue
+		}
+		for _, it := range s.Satchel {
+			ids = append(ids, it.ItemID)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	stackable, err := h.db.StackableItems(ids)
+	if err != nil {
+		return
+	}
+	trader.NormalizeUnits(snaps, stackable)
 }

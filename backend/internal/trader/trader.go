@@ -118,6 +118,36 @@ func (s *Snapshot) Fingerprint() string {
 	return strings.Join(parts, "|")
 }
 
+// NormalizeUnits rewrites each satchel slot's Count to 1 for items the
+// stackable lookup does not report as stackable (stackable is nil-safe: an
+// item missing from it is treated as non-stackable, the safe default).
+//
+// On Project Quarm the export's Count column is overloaded: for a genuinely
+// stackable item (arrows, spell components, the new stacked PoP research
+// items) it is a quantity, but for a non-stackable one — including a clicky
+// with limited charges, e.g. a Scepter of the Forlorn — it is the item's
+// CURRENT CHARGE COUNT. A trader satchel can only ever hold one such item per
+// slot, so selling one 10-charge scepter should read as one sale, not ten.
+// Without this, InferSales diffs the charge count like a quantity and
+// multiplies both the inferred Qty and the estimated revenue by the charges
+// remaining when the "before" snapshot was taken.
+//
+// Call this on freshly loaded snapshots before diffing or summarizing them —
+// it does not touch what's persisted in user.db, so a fixed unit count
+// applies retroactively to history without a migration.
+func NormalizeUnits(snaps []*Snapshot, stackable map[int]bool) {
+	for _, s := range snaps {
+		if s == nil {
+			continue
+		}
+		for i := range s.Satchel {
+			if !stackable[s.Satchel[i].ItemID] {
+				s.Satchel[i].Count = 1
+			}
+		}
+	}
+}
+
 // satchelByItem aggregates satchel counts by item ID (an item may occupy
 // several slots/bags). The returned name map keeps a display name per item ID.
 func (s *Snapshot) satchelByItem() (counts map[int]int, names map[int]string) {
