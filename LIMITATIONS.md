@@ -73,6 +73,10 @@ a future data source fix this?" column against the new capabilities.
   gnoll" line. Combat holding distinct per-instance rows keyed by `target_id`
   is a possible future step; true multi-same-name AoE splitting still needs a
   per-hit id the log will never have.
+- **Zeal target descriptors (PQC v0.24.0, needs the Zeal release after
+  1.4.7):** the pipe's live target level/class/race/position resolve *which DB
+  row* your target is (§3.1), but like `target_id` they describe only your
+  current target, so they don't change per-hit DPS/threat attribution either.
 - **Spell-timer update (2026-09-14):** the same `target_id` now separates
   same-named *detrimental timer* rows (e.g. two "a gnoll"s both slowed by
   the built-in Slows pack) in the one case it actually can: the caster's
@@ -523,7 +527,10 @@ These are inherent to log-file parsing and affect multiple features:
   authoritative live target detection (see 1.3), and since Zeal 1.4.6 the pipe
   also carries `target_id` (the spawn id), making the live target
   collision-proof for same-name mobs — used by the NPC overlay's sticky
-  variant resolution (§3.1).
+  variant resolution (§3.1). The Zeal release after 1.4.7 adds the target's
+  live level/class/race/type and (within 250 units) position, which the NPC
+  overlay uses to bind the target to its actual DB row and to show distance
+  (§3.1–3.6).
 
 ### 6.2 No backfill for events before the app started
 
