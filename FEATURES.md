@@ -2099,6 +2099,38 @@ name-based path when a field is nil, so older Zeal is unaffected.
   so a pin can mis-handoff if you're not near the camp when it pops —
   see LIMITATIONS.md.
 
+## Unreleased — Zeal Target Descriptors (NPC overlay)
+
+- **Duplicate-named NPC resolution from live target data** — consumes the
+  target descriptors added to Zeal's named pipe by CoastalRedwood/Zeal
+  #239 (`target_name`/`type`/`level`/`class`/`race`, plus `target_loc`
+  only while the target is within 250 units — Project Quarm policy).
+  Same-name `npc_types` candidates are first narrowed to rows whose
+  race/class match and whose level range covers the live level (falling
+  back to the full set if none match), then by which row's spawn point the
+  *target itself* is nearest — now also for raid bosses, at a looser
+  200-unit tie tolerance so a boss dragged to the midpoint stays honestly
+  ambiguous. Resolves Shissar Revenant (class), Plane of Fear's Cazic
+  Thule / A Dracoliche / Dread / Fright / Terror (level), and Vex Thal's
+  Kaas Thox / Thall Va Xakra / Va Xakra (position). The resolution sticks
+  to the spawn id; an ambiguous one upgrades as soon as the target comes
+  within 250 units and never reverts.
+- **Live NPC level** on both NPC overlay surfaces (DB range on hover),
+  also feeding the PBAoE XP estimate.
+- **Distance-to-target chip** — fed by a throttled
+  `overlay:npc_target_distance` WebSocket event (+ `GET
+  /api/overlay/npc/distance`), coloured green/yellow/red against a
+  configurable cast range (default 200) with an optional ranged-attack
+  range (Settings → Overlays); reads n/a beyond 250 units. New
+  "Distance" NPC overlay section toggle.
+- **Enemy spell reach markers** — caster-summary highlights and signature
+  spells carry a `reach` (PB AE radius, else cast range); a red marker
+  shows when the player is within it.
+- Everything is gated on whether the pipe fields are present, not the Zeal
+  version: on Zeal 1.4.7 and earlier the overlay behaves exactly as before
+  and the distance chip is hidden. See LIMITATIONS.md §3.1–3.6 for what
+  remains ambiguous and the accuracy caveats.
+
 ## Phase 11 — Project Website
 _Planned_
 
