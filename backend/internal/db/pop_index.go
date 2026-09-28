@@ -192,6 +192,23 @@ func (db *DB) buildPoPGated() (map[int]bool, error) {
 		rows.Close()
 	}
 
+	// Scripted loot sources (quest Lua, not the DB — see scripted_loot.go).
+	// An item a script grants directly is obtainable wherever the granting
+	// NPC lives, resolved the same id/1000 way as the spawn2-less fallback
+	// above (every entry in scriptedLootByNPC is a PoP-only NPC as of this
+	// writing, so this reinforces rather than changes their classification,
+	// but it's what actually makes these items resolvable at all now that
+	// their DB loot rows are gone — see the 2026-09-27 quarm.db regen).
+	for npcID, entries := range scriptedLootByNPC {
+		zoneShort, _ := db.scriptedLootZone(npcID)
+		if zoneShort == "" {
+			continue
+		}
+		for _, e := range entries {
+			classify(e.itemID, zoneShort)
+		}
+	}
+
 	// Quest-reward sources (from the embedded quest scripts, not the DB). An
 	// item rewarded by a quest is obtainable wherever that quest's NPC lives.
 	loadQuestSources()

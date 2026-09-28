@@ -96,6 +96,11 @@ export interface ItemSourceNPC {
   zone_short_name: string
   drop_rate?: number
   min_looter_level?: number
+  // scripted is true when the source comes from scriptedLootByNPC (Go) — a
+  // quest Lua script grants the item directly, with no lootdrop DB row at
+  // all, so drop_rate here is the script's own chance rather than a
+  // DB-derived rate.
+  scripted?: boolean
 }
 
 export interface ItemForageZone {

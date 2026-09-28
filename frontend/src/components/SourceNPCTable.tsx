@@ -101,6 +101,19 @@ export function SourceNPCTable({
               >
                 {formatNPCName(npc.name)}
               </button>
+              {npc.scripted && (
+                <span
+                  className="ml-1.5 shrink-0 rounded px-1 py-0.5 text-[9px] uppercase tracking-wider"
+                  title="Granted directly by a quest script, not a database loot table — the drop rate/count shown is the script's own, not DB-derived."
+                  style={{
+                    backgroundColor: 'var(--color-surface-2)',
+                    color: 'var(--color-muted)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                >
+                  scripted
+                </span>
+              )}
             </td>
             <td className="truncate px-1.5 py-1">
               {npc.zone_name && (

@@ -591,6 +591,9 @@ func (db *DB) GetItemSources(itemID int) (*ItemSources, error) {
 	if err != nil {
 		return nil, err
 	}
+	if scripted, err := db.scriptedItemSourceNPCs(itemID); err == nil {
+		drops = append(drops, scripted...)
+	}
 
 	merchantRows, err := db.Query(`
 		SELECT n.id, n.name,
@@ -1592,7 +1595,13 @@ func (db *DB) GetNPCLoot(npcID int) (*NPCLootTable, error) {
 		}
 	}
 
-	if ltID == 0 && len(zoneDrops) == 0 {
+	if scripted, err := db.loadScriptedLootDrop(npcID); err != nil {
+		return nil, err
+	} else if scripted != nil {
+		drops = append(drops, *scripted)
+	}
+
+	if ltID == 0 && len(zoneDrops) == 0 && len(drops) == 0 {
 		return nil, nil
 	}
 

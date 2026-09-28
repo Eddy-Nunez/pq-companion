@@ -396,6 +396,12 @@ type ItemSourceNPC struct {
 	// off this NPC (lootdrop_entries.min_looter_level), 0 = no restriction.
 	// Drop sources only — merchant listings never set this.
 	MinLooterLevel int `json:"min_looter_level,omitempty"`
+	// Scripted is true when this row comes from scriptedLootByNPC — a quest
+	// Lua script grants the item directly (NPC:AddItem), with no
+	// loottable_entries/lootdrop_entries row backing it at all, so DropRate
+	// here is the script's own chance rather than a DB-derived rate. See
+	// internal/db/scripted_loot.go.
+	Scripted bool `json:"scripted,omitempty"`
 }
 
 // ItemForageZone is a zone where an item can be obtained via the Forage skill.
