@@ -137,22 +137,22 @@ func TestCasterSpellRowNamedSpell(t *testing.T) {
 		{
 			name: "AI recast_delay wins over spell recast_time, rounded to seconds",
 			row:  casterSpellRow{spellID: 1, name: "Word of Command", targetType: 4, aoeRange: 35, recastDelayMS: 30000, recastTimeMS: 12000, resistType: 1, resistDiff: -100},
-			want: NamedSpell{SpellID: 1, SpellName: "Word of Command", RecastSecs: 30, AEType: "PBAE", AERange: 35, ResistType: "MR", ResistDiff: -100},
+			want: NamedSpell{SpellID: 1, SpellName: "Word of Command", RecastSecs: 30, AEType: "PBAE", AERange: 35, ResistType: "MR", ResistDiff: -100, Reach: 35},
 		},
 		{
 			name: "falls back to spell recast_time when AI delay unset",
 			row:  casterSpellRow{spellID: 2, name: "Fling", targetType: 4, aoeRange: 200, recastDelayMS: -1, recastTimeMS: 45000},
-			want: NamedSpell{SpellID: 2, SpellName: "Fling", RecastSecs: 45, AEType: "PBAE", AERange: 200},
+			want: NamedSpell{SpellID: 2, SpellName: "Fling", RecastSecs: 45, AEType: "PBAE", AERange: 200, Reach: 200},
 		},
 		{
 			name: "targeted AE classifies as TAE",
-			row:  casterSpellRow{spellID: 3, name: "Silence of the Shadows", targetType: 8, aoeRange: 80, recastDelayMS: 30000},
-			want: NamedSpell{SpellID: 3, SpellName: "Silence of the Shadows", RecastSecs: 30, AEType: "TAE", AERange: 80},
+			row:  casterSpellRow{spellID: 3, name: "Silence of the Shadows", targetType: 8, aoeRange: 80, spellRange: 200, recastDelayMS: 30000},
+			want: NamedSpell{SpellID: 3, SpellName: "Silence of the Shadows", RecastSecs: 30, AEType: "TAE", AERange: 80, Reach: 200},
 		},
 		{
 			name: "single-target with no recast/resist stays bare",
-			row:  casterSpellRow{spellID: 4, name: "Reckoning", targetType: 5},
-			want: NamedSpell{SpellID: 4, SpellName: "Reckoning"},
+			row:  casterSpellRow{spellID: 4, name: "Reckoning", targetType: 5, spellRange: 200},
+			want: NamedSpell{SpellID: 4, SpellName: "Reckoning", Reach: 200},
 		},
 		{
 			name: "zero resist_diff suppresses the resist token",
@@ -246,4 +246,31 @@ func TestSummarizeNPCCaster_ThreadBosses(t *testing.T) {
 		t.Fatalf("summarize 1: %v", err)
 	}
 	_ = none // may or may not be nil depending on npc 1; just assert no error path
+}
+
+// A highlight's Reach is the farthest any of its spells can land on a player:
+// a PB AE's radius, otherwise the cast range.
+func TestBuildHighlightsReachIsMax(t *testing.T) {
+	silence := func(tt, rng, aoe int) casterSpellRow {
+		r := casterSpellRow{targetType: tt, spellRange: rng, aoeRange: aoe}
+		for i := range r.effects {
+			r.effects[i] = 254
+		}
+		r.effects[0] = 96
+		return r
+	}
+	rows := []casterSpellRow{
+		silence(5, 20, 0),   // Silence of Marr: touch range
+		silence(4, 300, 60), // PB silence: radius 60, cast range irrelevant
+		silence(5, 200, 0),  // Deafening Silence
+	}
+	for _, h := range buildHighlights(rows) {
+		if h.Tag == "silence" {
+			if h.Reach != 200 {
+				t.Errorf("silence Reach = %d, want 200", h.Reach)
+			}
+			return
+		}
+	}
+	t.Fatal("no silence highlight")
 }

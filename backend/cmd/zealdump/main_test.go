@@ -41,6 +41,7 @@ func TestFormatPlayerFullDescriptors(t *testing.T) {
 		"class=9",
 		"race=145",
 		"loc=(318.0,141.0,-80.5)",
+		"dist≈355",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("formatPlayer() = %q, missing %q", got, want)
@@ -103,5 +104,21 @@ func TestCoverageReportTracksConditions(t *testing.T) {
 	}
 	if !strings.Contains(rep, "a gnoll pup") {
 		t.Error("report should list distinct target names seen")
+	}
+}
+
+// A patched Zeal withholds target_loc beyond 250 units. That's expected and
+// must not be reported as a missing key.
+func TestFormatPlayerLocWithheldIsNotMissing(t *testing.T) {
+	p := decode(t, `{"zone":152,"location":{"x":0.0,"y":0.0,"z":0.0},
+		"heading":0.0,"autoattack":false,"spawn_id":812,
+		"target_id":1234,"target_name":"a gnoll","target_type":1,
+		"target_level":12,"target_class":1,"target_race":39}`)
+	got := formatPlayer(p)
+	if strings.Contains(got, "MISSING") {
+		t.Errorf("formatPlayer() = %q, withheld loc reported as missing", got)
+	}
+	if !strings.Contains(got, "loc=withheld") {
+		t.Errorf("formatPlayer() = %q, want loc=withheld", got)
 	}
 }

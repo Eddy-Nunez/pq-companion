@@ -34,6 +34,10 @@ type CasterHighlight struct {
 	Tag      string `json:"tag"`
 	Label    string `json:"label"`
 	Severity string `json:"severity"`
+	// Reach is the longest reach (see casterSpellRow.reach) among the NPC's
+	// spells behind this callout, so the overlay can flag when the player is
+	// standing where one could land. 0 = unknown / self-only.
+	Reach int `json:"reach,omitempty"`
 }
 
 // NamedSpell is a spell referenced by id + name. Chance/Kind are populated only
@@ -54,6 +58,7 @@ type NamedSpell struct {
 	AERange    int    `json:"ae_range,omitempty"`    // AE radius (game units)
 	ResistType string `json:"resist_type,omitempty"` // "MR"|"FR"|"CR"|"PR"|"DR"
 	ResistDiff int    `json:"resist_diff,omitempty"` // resist adjust; neg = easier
+	Reach      int    `json:"reach,omitempty"`       // see casterSpellRow.reach
 }
 
 // ClassListSummary is an inherited parent list collapsed to a count.
@@ -80,13 +85,14 @@ type casterSpellRow struct {
 	name          string
 	targetType    int
 	aoeRange      int
+	spellRange    int // spells_new.range: max caster→target distance
 	category      int
 	baseValue1    int
 	effects       [12]int
-	recastDelayMS int // npc_spells_entries.recast_delay; -1 = use spell default
-	recastTimeMS  int // spells_new.recast_time
-	resistType    int // spells_new.resisttype (1=magic..5=disease)
-	resistDiff    int // spells_new.ResistDiff; negative = easier to land
+	recastDelayMS int  // npc_spells_entries.recast_delay; -1 = use spell default
+	recastTimeMS  int  // spells_new.recast_time
+	resistType    int  // spells_new.resisttype (1=magic..5=disease)
+	resistDiff    int  // spells_new.ResistDiff; negative = easier to land
 	ownList       bool // belongs to the NPC's own list (not an inherited parent)
 	sourceID      int
 	sourceName    string
@@ -100,6 +106,18 @@ func (r casterSpellRow) hasEffect(spa int) bool {
 		}
 	}
 	return false
+}
+
+// reach is how far from the casting NPC this spell can land on a player, in
+// game units: the radius for a caster-centred (PB) AE, the cast range for
+// everything else. For a targeted AE that is the reach to its primary
+// victim; bystanders near that victim can be hit from farther away. It
+// ignores model size, which the server also factors in, so it's a guide.
+func (r casterSpellRow) reach() int {
+	if r.hasTargetType(2, 4, 40) {
+		return r.aoeRange
+	}
+	return r.spellRange
 }
 
 func (r casterSpellRow) hasTargetType(tts ...int) bool {
@@ -120,7 +138,7 @@ var resistAbbrevs = map[int]string{1: "MR", 2: "FR", 3: "CR", 4: "PR", 5: "DR"}
 // signature casts: effective recast (seconds), AE type + radius, and resist
 // adjust. Fields stay zero/empty when the spell lacks that attribute.
 func (r casterSpellRow) namedSpell() NamedSpell {
-	ns := NamedSpell{SpellID: r.spellID, SpellName: r.name}
+	ns := NamedSpell{SpellID: r.spellID, SpellName: r.name, Reach: r.reach()}
 
 	// Effective recast: the NPC AI list's own recast_delay takes precedence
 	// (that's the mob's re-use cadence); fall back to the spell's recast_time.
@@ -264,7 +282,7 @@ func (db *DB) SummarizeNPCCaster(npcID int) (*NPCCasterSummary, error) {
 func (db *DB) fetchCasterSpellRows(listID int, listName string, ownList bool) ([]casterSpellRow, error) {
 	rows, err := db.Query(`
 		SELECT e.spellid, COALESCE(s.name, ''),
-		       COALESCE(s.targettype, 0), COALESCE(s.aoerange, 0),
+		       COALESCE(s.targettype, 0), COALESCE(s.aoerange, 0), COALESCE(s."range", 0),
 		       COALESCE(s.spell_category, 0), COALESCE(s.effect_base_value1, 0),
 		       COALESCE(s.effectid1, 254), COALESCE(s.effectid2, 254),
 		       COALESCE(s.effectid3, 254), COALESCE(s.effectid4, 254),
@@ -288,7 +306,7 @@ func (db *DB) fetchCasterSpellRows(listID int, listName string, ownList bool) ([
 		var r casterSpellRow
 		if err := rows.Scan(
 			&r.spellID, &r.name,
-			&r.targetType, &r.aoeRange, &r.category, &r.baseValue1,
+			&r.targetType, &r.aoeRange, &r.spellRange, &r.category, &r.baseValue1,
 			&r.effects[0], &r.effects[1], &r.effects[2], &r.effects[3],
 			&r.effects[4], &r.effects[5], &r.effects[6], &r.effects[7],
 			&r.effects[8], &r.effects[9], &r.effects[10], &r.effects[11],
@@ -356,11 +374,18 @@ var highlightRules = []highlightRule{
 func buildHighlights(rows []casterSpellRow) []CasterHighlight {
 	var out []CasterHighlight
 	for _, rule := range highlightRules {
+		matched := false
+		h := CasterHighlight{Tag: rule.tag, Label: rule.label, Severity: rule.severity}
 		for _, r := range rows {
 			if rule.match(r) {
-				out = append(out, CasterHighlight{Tag: rule.tag, Label: rule.label, Severity: rule.severity})
-				break
+				matched = true
+				if reach := r.reach(); reach > h.Reach {
+					h.Reach = reach
+				}
 			}
+		}
+		if matched {
+			out = append(out, h)
 		}
 	}
 	return out

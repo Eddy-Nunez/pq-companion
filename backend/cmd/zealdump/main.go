@@ -26,6 +26,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/signal"
 	"sort"
@@ -184,9 +185,18 @@ func formatPlayer(p map[string]any) string {
 			parts = append(parts, fmt.Sprintf("type=%v", v))
 		case "target_loc":
 			parts = append(parts, "loc="+formatLoc(v))
+			if d, ok := distance(p["location"], v); ok {
+				// Rounded to 5 so walking around doesn't print a line per tick.
+				parts = append(parts, fmt.Sprintf("dist≈%.0f", math.Round(d/5)*5))
+			}
 		default:
 			parts = append(parts, strings.TrimPrefix(k, "target_")+"="+fmt.Sprintf("%v", compact(v)))
 		}
+	}
+	if _, hasLoc := p["target_loc"]; !hasLoc && hasDescriptors(p) {
+		// Expected, not a fault: Zeal withholds the position of a target 250+
+		// units away (Project Quarm server policy).
+		parts = append(parts, "loc=withheld (target 250+ away)")
 	}
 	missing := missingKeys(p)
 	if len(missing) > 0 {
@@ -251,12 +261,38 @@ func formatLoc(v any) string {
 	return fmt.Sprintf("(%.1f,%.1f,%.1f) [game /loc %.1f,%.1f]", x, y, z, y, x)
 }
 
+// hasDescriptors reports whether a payload carries the target-descriptor
+// change (keyed on target_level, which is always sent alongside a target).
+func hasDescriptors(p map[string]any) bool {
+	_, ok := p["target_level"]
+	return ok
+}
+
+// distance is the 3D distance between two Zeal {x,y,z} objects. Both share
+// Zeal's axis order, so no transposition is needed.
+func distance(a, b any) (float64, bool) {
+	am, ok1 := a.(map[string]any)
+	bm, ok2 := b.(map[string]any)
+	if !ok1 || !ok2 {
+		return 0, false
+	}
+	var sum float64
+	for _, k := range []string{"x", "y", "z"} {
+		av, _ := toFloat(am[k])
+		bv, _ := toFloat(bm[k])
+		sum += (av - bv) * (av - bv)
+	}
+	return math.Sqrt(sum), true
+}
+
 // missingKeys lists target descriptors absent from a payload that does have a
 // target_id — i.e. the Zeal build predates the target-descriptor change.
+// target_loc alone being absent is not a fault on a build that has the
+// change: it's withheld for targets 250+ units away.
 func missingKeys(p map[string]any) []string {
 	var missing []string
 	for _, k := range targetKeys {
-		if k == "target_id" {
+		if k == "target_id" || (k == "target_loc" && hasDescriptors(p)) {
 			continue
 		}
 		if _, ok := p[k]; !ok {
@@ -286,10 +322,11 @@ func toFloat(v any) (float64, bool) {
 // coverage tracks which of the manual test conditions have actually been hit,
 // so the operator gets a checklist at exit instead of having to remember.
 type coverage struct {
-	noTarget   bool
-	spawnTypes map[int]bool
-	keys       map[string]bool
-	names      map[string]bool
+	noTarget    bool
+	locWithheld bool
+	spawnTypes  map[int]bool
+	keys        map[string]bool
+	names       map[string]bool
 }
 
 func newCoverage() *coverage {
@@ -313,6 +350,9 @@ func (c *coverage) observe(p map[string]any) {
 	if n, ok := toInt(p["target_type"]); ok {
 		c.spawnTypes[n] = true
 	}
+	if _, hasLoc := p["target_loc"]; !hasLoc && hasDescriptors(p) {
+		c.locWithheld = true
+	}
 	if s, ok := p["target_name"].(string); ok && s != "" {
 		c.names[s] = true
 	}
@@ -325,6 +365,7 @@ func (c *coverage) report() string {
 	for _, k := range targetKeys {
 		b.WriteString(check(c.keys[k]) + " saw " + k + "\n")
 	}
+	b.WriteString(check(c.locWithheld) + " saw target_loc withheld (target 250+ units away)\n")
 	for _, t := range []int{0, 1, 2, 3} {
 		b.WriteString(check(c.spawnTypes[t]) + fmt.Sprintf(" saw target_type=%d (%s)\n", t, spawnTypeNames[t]))
 	}
