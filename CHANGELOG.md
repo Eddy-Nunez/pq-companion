@@ -9,6 +9,18 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.24.0 — 2026-09-28
+
+The NPC overlay is ready for Zeal's upcoming target-info update: real level, correct duplicate-named NPCs, and live distance to your target.
+
+### Highlights
+- **Duplicate-named NPCs identified correctly (needs the next Zeal release)**: once Zeal ships the target-info change we contributed (CoastalRedwood/Zeal #239), the NPC overlay reads your target's live level, class, race and position from the client instead of guessing from its name. Ssraeshza's Shissar Revenant resolves to the right class. Plane of Fear's Cazic Thule and A Dracoliche resolve to the raid version or the low-HP sibling. Vex Thal's Kaas Thox Xi Aten Ha Ra, Thall Va Xakra and Va Xakra show only their own loot table when the boss is within 250 units of you and near its spawn point, instead of every candidate's. A boss first targeted from farther away resolves as soon as it comes within 250.
+- **Real NPC level on the overlay**: shows the spawn's actual level (e.g. 52 instead of 50-54, with the database range on hover). The PBAoE XP estimate uses it too.
+- **Distance to target**: a new chip on both NPC overlays shows how far away your target is, green within your cast range, yellow at the edge, red beyond. It reads n/a past 250 units, the limit Zeal reports to. Set your cast range (default 200) and an optional ranged-attack range under Settings → Overlays. Range-extending focus effects and AAs aren't applied automatically, so enter your effective range.
+- **Which enemy spells can reach you**: the NPC's Silence, AE, mez, etc. highlights and signature spells get a red marker when you're standing within that spell's reach.
+
+With Zeal 1.4.7 or earlier, the overlay works exactly as before and the distance chip stays hidden.
+
 ## v0.23.1 — 2026-09-27
 
 Adds a Trigger Tester tab, pinned/priority respawn timers, and a redesigned PoP Flags Flow chart, alongside a fix for a DPS meter bug that could show near-zero readings in group content.
