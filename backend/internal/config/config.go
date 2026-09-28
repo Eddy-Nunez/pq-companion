@@ -572,6 +572,22 @@ type Preferences struct {
 	// run. Same rationale as the Faction and Spells markers above.
 	NPCBehaviorSectionMigrationDone bool `yaml:"npc_behavior_section_migration_done,omitempty" json:"npc_behavior_section_migration_done"`
 
+	// NPCDistanceSectionMigrationDone marks that the one-time migration which
+	// turns the (later-added) Distance readout on for pre-existing configs has
+	// run. Same rationale as the markers above.
+	NPCDistanceSectionMigrationDone bool `yaml:"npc_distance_section_migration_done,omitempty" json:"npc_distance_section_migration_done"`
+
+	// NPCOverlayCastRange is the spell range (game units) the NPC overlay's
+	// distance readout is coloured against: green within it, yellow in its
+	// last 10%, red beyond. The player enters their effective range — focus
+	// effects and AAs that extend range aren't applied automatically. <= 0
+	// is normalised to 200, the range of most nukes and debuffs.
+	NPCOverlayCastRange int `yaml:"npc_overlay_cast_range" json:"npc_overlay_cast_range"`
+
+	// NPCOverlayRangedRange is an optional second range (e.g. a bow's) shown
+	// alongside the cast range on the distance readout. 0 = off.
+	NPCOverlayRangedRange int `yaml:"npc_overlay_ranged_range" json:"npc_overlay_ranged_range"`
+
 	// OverlayLockedModes maps each popout overlay (by its canonical name:
 	// "dps", "hps", "buffTimer", "detrimTimer", "npc", "rollTracker",
 	// "respawnTimer") to how it behaves while locked:
@@ -838,6 +854,9 @@ type NPCOverlaySections struct {
 	SpellsProcs     bool `yaml:"spells_procs" json:"spells_procs"`
 	SpellsSignature bool `yaml:"spells_signature" json:"spells_signature"`
 	SpellsClass     bool `yaml:"spells_class" json:"spells_class"`
+	// Distance is the player→target distance readout and the caster spells'
+	// in-reach markers. Needs a Zeal build that reports target descriptors.
+	Distance bool `yaml:"distance" json:"distance"`
 }
 
 // CHChainSettings configures the Complete-Heal-chain overlay matcher, which
@@ -1043,6 +1062,7 @@ func DefaultNPCOverlaySections() NPCOverlaySections {
 		SpellsProcs:      true,
 		SpellsSignature:  true,
 		SpellsClass:      true,
+		Distance:         true,
 	}
 }
 
@@ -1075,6 +1095,7 @@ func defaults() Config {
 			ZoomFactor:                  1.0,
 			NPCOverlayDashboardSections: DefaultNPCOverlaySections(),
 			NPCOverlayPopoutSections:    DefaultNPCOverlaySections(),
+			NPCOverlayCastRange:         200,
 			WishlistWatch: WishlistWatchSettings{
 				Template:     DefaultWishlistWatchTemplate,
 				CooldownSecs: DefaultWishlistWatchCooldownSecs,
@@ -1318,6 +1339,21 @@ func applyDefaults(cfg *Config) bool {
 		cfg.Preferences.NPCOverlayDashboardSections.Behavior = true
 		cfg.Preferences.NPCOverlayPopoutSections.Behavior = true
 		cfg.Preferences.NPCBehaviorSectionMigrationDone = true
+		changed = true
+	}
+	// Same one-time pattern for the later-added Distance readout.
+	if !cfg.Preferences.NPCDistanceSectionMigrationDone {
+		cfg.Preferences.NPCOverlayDashboardSections.Distance = true
+		cfg.Preferences.NPCOverlayPopoutSections.Distance = true
+		cfg.Preferences.NPCDistanceSectionMigrationDone = true
+		changed = true
+	}
+	if cfg.Preferences.NPCOverlayCastRange <= 0 {
+		cfg.Preferences.NPCOverlayCastRange = 200
+		changed = true
+	}
+	if cfg.Preferences.NPCOverlayRangedRange < 0 {
+		cfg.Preferences.NPCOverlayRangedRange = 0
 		changed = true
 	}
 	// Respawn-alert TTS spelling: a config saved with the exact legacy default

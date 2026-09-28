@@ -10,6 +10,7 @@ import KokoroTtsSettings from '../components/settings/KokoroTtsSettings'
 import DiscordVoiceOverlaySettings from '../components/settings/DiscordVoiceOverlaySettings'
 import DiscordWebhookSettings from '../components/settings/DiscordWebhookSettings'
 import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
+import DecimalInput from '../components/DecimalInput'
 import { getConfig, updateConfig, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
 import { renderChangelogBody } from '../components/WhatsNewModal'
 import type { Config, DPSClassColors, NPCOverlaySections, TimerAlertPref } from '../types/config'
@@ -2377,6 +2378,18 @@ export default function SettingsPage(): React.ReactElement {
               },
             })
           }
+          castRange={config.preferences.npc_overlay_cast_range || 200}
+          rangedRange={config.preferences.npc_overlay_ranged_range || 0}
+          onChangeRanges={(cast, ranged) =>
+            setConfig({
+              ...config,
+              preferences: {
+                ...config.preferences,
+                npc_overlay_cast_range: cast,
+                npc_overlay_ranged_range: ranged,
+              },
+            })
+          }
         />
         )}
 
@@ -4320,6 +4333,11 @@ const NPC_SECTION_ROWS: ReadonlyArray<{
   { key: 'attributes', label: 'Attributes', hint: 'STR / STA / DEX / AGI / INT / WIS / CHA' },
   { key: 'special_abilities', label: 'Special Abilities', hint: 'Summon, rampage, immunities, etc.' },
   { key: 'faction', label: 'Faction', hint: 'Primary faction and the hits taken on a kill' },
+  {
+    key: 'distance',
+    label: 'Distance',
+    hint: 'Distance to target, colored against your range, and which of its spells can reach you (needs a Zeal build that reports target info)',
+  },
 ]
 
 // NPC_SPELL_SUBROWS are the per-group sub-toggles nested under the "Spells &
@@ -4339,11 +4357,17 @@ function NPCOverlaySectionsCard({
   popout,
   onChangeDashboard,
   onChangePopout,
+  castRange,
+  rangedRange,
+  onChangeRanges,
 }: {
   dashboard: NPCOverlaySections
   popout: NPCOverlaySections
   onChangeDashboard: (next: NPCOverlaySections) => void
   onChangePopout: (next: NPCOverlaySections) => void
+  castRange: number
+  rangedRange: number
+  onChangeRanges: (cast: number, ranged: number) => void
 }): React.ReactElement {
   return (
     <section
@@ -4371,6 +4395,52 @@ function NPCOverlaySectionsCard({
           value={popout}
           onChange={onChangePopout}
         />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-end gap-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
+            Cast range
+          </span>
+          <DecimalInput
+            value={castRange}
+            onValue={(v) => onChangeRanges(Math.round(v), rangedRange)}
+            min={1}
+            max={2000}
+            fallback={200}
+            className="w-20 rounded px-2 py-1 text-sm"
+            style={{
+              backgroundColor: 'var(--color-surface-2)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-foreground)',
+            }}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
+            Ranged attack range (0 = off)
+          </span>
+          <DecimalInput
+            value={rangedRange}
+            onValue={(v) => onChangeRanges(castRange, Math.round(v))}
+            min={0}
+            max={2000}
+            fallback={0}
+            className="w-20 rounded px-2 py-1 text-sm"
+            style={{
+              backgroundColor: 'var(--color-surface-2)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-foreground)',
+            }}
+          />
+        </label>
+        <p className="min-w-[16rem] flex-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+          The distance readout is green within your cast range, yellow in its
+          last 10%, and red beyond it. Most nukes and debuffs reach 200. Enter
+          your effective range yourself: range-extending focus effects (up to
+          +25%) and AAs aren&rsquo;t applied automatically. Zeal only reports a
+          target&rsquo;s position within 250 units, so past that it reads n/a.
+        </p>
       </div>
     </section>
   )

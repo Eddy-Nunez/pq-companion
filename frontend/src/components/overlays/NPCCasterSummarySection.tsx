@@ -2,6 +2,7 @@ import React from 'react'
 import type { NPCCasterSummary } from '../../types/overlay'
 import type { NamedSpell } from '../../types/npc'
 import type { NPCOverlaySections } from '../../types/config'
+import { inReach } from './NPCDistanceChip'
 
 // Theme tokens the section needs. The dashboard panel passes CSS-variable
 // colours; the floating overlay window passes rgba literals (it can't rely on
@@ -50,6 +51,9 @@ function spellHoverDetail(s: NamedSpell): string | undefined {
   if (s.recast_secs) {
     lines.push(`Recast: ${s.recast_secs}s`)
   }
+  if (s.reach) {
+    lines.push(`Reach: ${s.reach}`)
+  }
   return lines.length > 0 ? lines.join('\n') : undefined
 }
 
@@ -85,6 +89,25 @@ function SpellName({
   )
 }
 
+// InReachDot marks a spell that can land on the player at their current
+// distance from the target.
+function InReachDot(): React.ReactElement {
+  return (
+    <span
+      aria-label="within reach"
+      style={{
+        display: 'inline-block',
+        width: 6,
+        height: 6,
+        borderRadius: '50%',
+        backgroundColor: DANGER_TEXT,
+        marginRight: 3,
+        verticalAlign: 'middle',
+      }}
+    />
+  )
+}
+
 // NPCCasterSummarySection renders the distilled caster-AI readout: curated
 // highlight chips, procs, named signature spells, and inherited class lists
 // collapsed to a count. Inherited lists are never enumerated — that's the whole
@@ -98,6 +121,7 @@ export default function NPCCasterSummarySection({
   theme,
   showHeading = true,
   onSpellClick,
+  distance,
 }: {
   summary: NPCCasterSummary
   sections: NPCOverlaySections
@@ -109,6 +133,9 @@ export default function NPCCasterSummarySection({
   // spell explorer). Omitted in contexts with no navigation target, where the
   // names stay plain text.
   onSpellClick?: (id: number) => void
+  // distance is the live player→target distance (Zeal target descriptors).
+  // When known, spells that can reach the player at that distance are marked.
+  distance?: number | null
 }): React.ReactElement | null {
   if (!sections.spells) return null
 
@@ -117,6 +144,7 @@ export default function NPCCasterSummarySection({
   const signature = sections.spells_signature ? summary.signature ?? [] : []
   const overflow = sections.spells_signature ? summary.signature_overflow ?? 0 : 0
   const classLists = sections.spells_class ? summary.class_lists ?? [] : []
+  const dist = sections.distance ? distance : null
 
   if (
     highlights.length === 0 &&
@@ -148,21 +176,35 @@ export default function NPCCasterSummarySection({
 
       {highlights.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: signature.length || procs.length || classLists.length ? 4 : 0 }}>
-          {highlights.map((h) => (
-            <span
-              key={h.tag}
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                borderRadius: 3,
-                padding: '1px 6px',
-                backgroundColor: h.severity === 'danger' ? DANGER_BG : theme.chipBg,
-                color: h.severity === 'danger' ? DANGER_TEXT : theme.chipText,
-              }}
-            >
-              {h.label}
-            </span>
-          ))}
+          {highlights.map((h) => {
+            const reachable =
+              h.severity === 'danger' && inReach(h.reach, dist)
+            return (
+              <span
+                key={h.tag}
+                title={
+                  h.reach
+                    ? `Reach: ${h.reach}` +
+                      (reachable
+                        ? `\nYou are within reach (${dist}). Approximate: ignores model size.`
+                        : '')
+                    : undefined
+                }
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  borderRadius: 3,
+                  padding: '1px 6px',
+                  backgroundColor: h.severity === 'danger' ? DANGER_BG : theme.chipBg,
+                  color: h.severity === 'danger' ? DANGER_TEXT : theme.chipText,
+                  boxShadow: reachable ? `inset 0 0 0 1px ${DANGER_TEXT}` : undefined,
+                }}
+              >
+                {reachable && <InReachDot />}
+                {h.label}
+              </span>
+            )
+          })}
         </div>
       )}
 
@@ -193,6 +235,7 @@ export default function NPCCasterSummarySection({
             {signature.map((s, i) => (
               <React.Fragment key={s.spell_id || i}>
                 {i > 0 && ', '}
+                {inReach(s.reach, dist) && <InReachDot />}
                 <SpellName id={s.spell_id} name={s.spell_name} onClick={onSpellClick} detail={spellHoverDetail(s)} />
               </React.Fragment>
             ))}

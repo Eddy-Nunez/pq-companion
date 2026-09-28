@@ -15,6 +15,9 @@ export interface NPCOverlaySections {
   spells_procs: boolean
   spells_signature: boolean
   spells_class: boolean
+  // distance is the player→target distance readout and the caster spells'
+  // in-reach markers (needs a Zeal build that reports target descriptors).
+  distance: boolean
 }
 
 export const DEFAULT_NPC_OVERLAY_SECTIONS: NPCOverlaySections = {
@@ -29,6 +32,7 @@ export const DEFAULT_NPC_OVERLAY_SECTIONS: NPCOverlaySections = {
   spells_procs: true,
   spells_signature: true,
   spells_class: true,
+  distance: true,
 }
 
 /**
@@ -215,6 +219,11 @@ export interface Preferences {
   raid_threat_player_mods?: Record<string, number>
   npc_overlay_dashboard_sections: NPCOverlaySections
   npc_overlay_popout_sections: NPCOverlaySections
+  // npc_overlay_cast_range: the spell range the NPC overlay's distance readout
+  // is coloured against (backend normalises <= 0 to 200).
+  // npc_overlay_ranged_range: optional second range (e.g. a bow's); 0 = off.
+  npc_overlay_cast_range: number
+  npc_overlay_ranged_range: number
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing
   // keys default to "interactive". See lib/overlays.ts.
   overlay_locked_modes?: Partial<Record<OverlayName, LockedMode>>

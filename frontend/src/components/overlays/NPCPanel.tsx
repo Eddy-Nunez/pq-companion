@@ -7,9 +7,17 @@ import { useWishlistItemIds } from '../../hooks/useWishlistItemIds'
 import { useTargetTimers } from '../../hooks/useTargetTimers'
 import { useTargetPlayer } from '../../hooks/useTargetPlayer'
 import { useActiveCharacterLevel } from '../../hooks/useActiveCharacterLevel'
+import { useNPCTargetDistance, type NPCTargetDistance } from '../../hooks/useNPCTargetDistance'
 import { WSEvent } from '../../lib/wsEvents'
 import { getOverlayNPCTarget, getLogStatus, getNPCLoot, getNPCFaction, getItem } from '../../services/api'
-import { className, bodyTypeName, npcRunSpeedPct, npcLevelLabel, pbaoeReduction } from '../../lib/npcHelpers'
+import {
+  className,
+  bodyTypeName,
+  npcRunSpeedPct,
+  npcLevelLabel,
+  npcLiveLevelLabel,
+  pbaoeReduction,
+} from '../../lib/npcHelpers'
 import { cleanLootDropLabel, effectiveDropPct, rarityColor } from '../../lib/lootHelpers'
 import OverlayWindow from '../OverlayWindow'
 import TargetPinButton from '../TargetPinButton'
@@ -18,6 +26,7 @@ import ItemDetailModal from '../ItemDetailModal'
 import { ItemIcon } from '../Icon'
 import { ResistChip } from '../ResistChip'
 import NPCCasterSummarySection from './NPCCasterSummarySection'
+import NPCDistanceChip from './NPCDistanceChip'
 import TargetTimerList from './TargetTimerList'
 import TargetPlayerCard from './TargetPlayerCard'
 import type { TargetState, SpecialAbility, TargetVariant, NPCCasterSummary } from '../../types/overlay'
@@ -423,6 +432,8 @@ function OtherVariants({
   onItemClick,
   wishlistItemIds,
   charLevel,
+  liveLevel,
+  distance,
 }: {
   variants: TargetVariant[]
   sections: NPCOverlaySections
@@ -430,6 +441,8 @@ function OtherVariants({
   onItemClick: (id: number) => void
   wishlistItemIds: Set<number>
   charLevel: number | null
+  liveLevel?: number
+  distance?: number | null
 }): React.ReactElement {
   const [open, setOpen] = useState(true)
   return (
@@ -460,6 +473,8 @@ function OtherVariants({
             onItemClick={onItemClick}
             wishlistItemIds={wishlistItemIds}
             charLevel={charLevel}
+            liveLevel={liveLevel}
+            distance={distance}
           />
         ))}
     </div>
@@ -480,6 +495,8 @@ function NPCDetails({
   onItemClick,
   wishlistItemIds,
   charLevel,
+  liveLevel,
+  distance,
 }: {
   npc: NPC
   abilities: SpecialAbility[]
@@ -490,10 +507,21 @@ function NPCDetails({
   onItemClick: (id: number) => void
   wishlistItemIds: Set<number>
   charLevel: number | null
+  // liveLevel: the live spawn's actual level (Zeal target descriptors).
+  liveLevel?: number
+  // distance: live player→target distance, for the caster in-reach markers.
+  distance?: number | null
 }): React.ReactElement {
-  // Worst-case mob level for a range-spawn NPC, mirroring the resist
-  // calculator's convention of using the top end of the level range.
-  const mobLevel = npc.max_level > npc.level ? npc.max_level : npc.level
+  // The live level when Zeal reports it and it fits this row; otherwise the
+  // worst case for a range-spawn NPC, mirroring the resist calculator's
+  // convention of using the top end of the level range.
+  const levelLabel = npcLiveLevelLabel(npc, liveLevel)
+  const mobLevel =
+    levelLabel === String(liveLevel)
+      ? (liveLevel as number)
+      : npc.max_level > npc.level
+        ? npc.max_level
+        : npc.level
   const pbaoe = charLevel != null ? pbaoeReduction(charLevel, mobLevel) : null
   return (
     <div className="flex flex-col gap-2">
@@ -512,7 +540,15 @@ function NPCDetails({
             <div>
               <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-muted)' }}>Identity</p>
               <div className="flex flex-wrap gap-1.5">
-                <Stat label="Level" value={npcLevelLabel(npc)} color="var(--color-primary)" />
+                <span
+                  title={
+                    levelLabel !== npcLevelLabel(npc)
+                      ? `Live level from Zeal (DB range ${npcLevelLabel(npc)})`
+                      : undefined
+                  }
+                >
+                  <Stat label="Level" value={levelLabel} color="var(--color-primary)" />
+                </span>
                 <Stat label="Class" value={className(npc.class)} />
                 <Stat label="Race" value={npc.race_name} />
                 <Stat label="Body" value={bodyTypeName(npc.body_type)} />
@@ -604,6 +640,7 @@ function NPCDetails({
             <NPCCasterSummarySection
               summary={casterSummary}
               sections={sections}
+              distance={distance}
               theme={{
                 heading: 'var(--color-muted)',
                 muted: 'var(--color-muted)',
@@ -627,6 +664,7 @@ function NPCCard({
   onItemClick,
   wishlistItemIds,
   charLevel,
+  dist,
 }: {
   state: TargetState
   view: View
@@ -634,8 +672,12 @@ function NPCCard({
   onItemClick: (id: number) => void
   wishlistItemIds: Set<number>
   charLevel: number | null
+  // dist is the live distance feed; null while the target is pinned (the
+  // feed always describes the live target, not the pinned one).
+  dist: NPCTargetDistance | null
 }): React.ReactElement {
   const npc = state.npc_data
+  const distance = dist?.distance ?? null
   const abilities = state.special_abilities ?? []
   const variants = state.variants ?? []
   // npc is the strongest row (backend headlines it); the disclosure shows the
@@ -677,12 +719,14 @@ function NPCCard({
           <TargetHPBar percent={state.hp_percent} />
         ) : null}
 
-        {npc && (npc.raid_target === 1 || npc.rare_spawn === 1) && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {npc.raid_target === 1 && (
+        {((npc && (npc.raid_target === 1 || npc.rare_spawn === 1)) ||
+          (sections.distance && dist?.has_descriptors)) && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {sections.distance && dist && <NPCDistanceChip dist={dist} />}
+            {npc?.raid_target === 1 && (
               <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ backgroundColor: '#7c3aed' }}>RAID TARGET</span>
             )}
-            {npc.rare_spawn === 1 && (
+            {npc?.rare_spawn === 1 && (
               <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ backgroundColor: '#b45309' }}>RARE SPAWN</span>
             )}
           </div>
@@ -707,6 +751,8 @@ function NPCCard({
             onItemClick={onItemClick}
             wishlistItemIds={wishlistItemIds}
             charLevel={charLevel}
+            liveLevel={state.live_level}
+            distance={distance}
           />
           {otherVariants.length > 0 && (
             <OtherVariants
@@ -717,6 +763,8 @@ function NPCCard({
               onItemClick={onItemClick}
               wishlistItemIds={wishlistItemIds}
               charLevel={charLevel}
+              liveLevel={state.live_level}
+              distance={distance}
             />
           )}
         </>
@@ -751,6 +799,7 @@ export default function NPCPanel({
   const sections = useNPCOverlaySections('dashboard')
   const wishlistItemIds = useWishlistItemIds()
   const charLevel = useActiveCharacterLevel()
+  const dist = useNPCTargetDistance()
 
   useEffect(() => {
     getOverlayNPCTarget().then(setTarget).catch(() => setTarget(null))
@@ -840,7 +889,7 @@ export default function NPCPanel({
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>
           </div>
         ) : target.has_target ? (
-          <NPCCard state={target} view={view} sections={sections} onItemClick={handleItemClick} wishlistItemIds={wishlistItemIds} charLevel={charLevel} />
+          <NPCCard state={target} view={view} sections={sections} onItemClick={handleItemClick} wishlistItemIds={wishlistItemIds} charLevel={charLevel} dist={pinned ? null : dist} />
         ) : (
           <NoTarget zone={target.current_zone} />
         )}

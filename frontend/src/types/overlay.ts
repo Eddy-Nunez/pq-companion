@@ -108,5 +108,21 @@ export interface TargetState {
   // strips the suffix to find the underlying NPC, but the HP bar should pin
   // to 0% regardless of what Zeal reports.
   is_corpse?: boolean
+  // live_level / live_class / target_type are what the client reports for the
+  // live spawn (Zeal target descriptors). Absent on Zeal builds without them —
+  // fall back to npc_data's level range and class then. target_type: 0 PC,
+  // 1 NPC, 2 NPC corpse, 3 PC corpse.
+  live_level?: number
+  live_class?: number
+  target_type?: number
   last_updated: string
+}
+
+// TargetDistance is the player→target distance feed (overlay:npc_target_distance
+// and GET /api/overlay/npc/distance). distance is null when Zeal withheld the
+// target position (250+ units away); has_descriptors is false on Zeal builds
+// that don't report target info at all, in which case hide the readout.
+export interface TargetDistance {
+  distance: number | null
+  has_descriptors: boolean
 }

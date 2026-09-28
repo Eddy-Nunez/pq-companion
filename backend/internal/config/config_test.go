@@ -480,3 +480,46 @@ ch_chain:
 		t.Error("explicit opt-out of possible-miss detection was reverted by a reload")
 	}
 }
+
+// The Distance NPC-overlay section was added after the others: an older config
+// gets it turned on once, and a missing cast range is normalised to 200.
+func TestLoadFrom_MigratesNPCDistanceSection_Once(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	const old = `eq_path: /games/EQ
+preferences:
+  npc_behavior_section_migration_done: true
+  npc_overlay_dashboard_sections:
+    identity: true
+  npc_overlay_popout_sections:
+    identity: true
+`
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	cfg := m.Get()
+	if !cfg.Preferences.NPCOverlayDashboardSections.Distance || !cfg.Preferences.NPCOverlayPopoutSections.Distance {
+		t.Error("Distance should be on after migration")
+	}
+	if cfg.Preferences.NPCOverlayCastRange != 200 {
+		t.Errorf("NPCOverlayCastRange = %d, want 200", cfg.Preferences.NPCOverlayCastRange)
+	}
+
+	// An explicit opt-out survives a reload.
+	cfg.Preferences.NPCOverlayPopoutSections.Distance = false
+	if err := m.Update(cfg); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	m2, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if m2.Get().Preferences.NPCOverlayPopoutSections.Distance {
+		t.Error("explicit Distance=false was overridden on reload")
+	}
+}

@@ -26,6 +26,16 @@ export function npcLevelLabel(npc: NPC): string {
   return String(npc.level)
 }
 
+// Prefers the live spawn's actual level (Zeal target descriptors) over the DB
+// row's range. The live value is only trusted when it falls in the row's
+// range — a variant row the live spawn isn't gets its own range instead.
+export function npcLiveLevelLabel(npc: NPC, liveLevel?: number): string {
+  if (liveLevel == null) return npcLevelLabel(npc)
+  const max = Math.max(npc.level, npc.max_level)
+  if (liveLevel < npc.level || liveLevel > max) return npcLevelLabel(npc)
+  return String(liveLevel)
+}
+
 // ── Class ───────────────────────────────────────────────────────────────────────
 
 // NPC class labels live in the canonical Go catalog

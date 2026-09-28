@@ -43,7 +43,12 @@ import type {
 } from '../types/popflag'
 import type { Backup, BackupsResponse } from '../types/backup'
 import type { LogTailerStatus, LogFileInfo } from '../types/logEvent'
-import type { RaidThreatState, TargetState, ThreatState } from '../types/overlay'
+import type {
+  RaidThreatState,
+  TargetDistance,
+  TargetState,
+  ThreatState,
+} from '../types/overlay'
 import type { CombatState, HistoryFacets, HistoryFilter, HistoryListResponse, StoredFight } from '../types/combat'
 import type { TimerState } from '../types/timer'
 import type { RespawnState } from '../types/respawn'
@@ -1675,6 +1680,10 @@ export function stopReplay(): Promise<ReplayStatus> {
 
 export function getOverlayNPCTarget(): Promise<TargetState> {
   return get<TargetState>('/api/overlay/npc/target')
+}
+
+export function getOverlayNPCDistance(): Promise<TargetDistance> {
+  return get<TargetDistance>('/api/overlay/npc/distance')
 }
 
 export function getCombatState(): Promise<CombatState> {

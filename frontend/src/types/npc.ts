@@ -160,6 +160,9 @@ export interface CasterHighlight {
   tag: string
   label: string
   severity: 'danger' | 'info'
+  // reach is the farthest (game units) any of this callout's spells can land
+  // on a player: a PB AE's radius, else its cast range. Ignores model size.
+  reach?: number
 }
 
 // NamedSpell references a spell by id + name. chance/kind are only present for
@@ -177,6 +180,8 @@ export interface NamedSpell {
   ae_range?: number
   resist_type?: string // "MR" | "FR" | "CR" | "PR" | "DR"
   resist_diff?: number
+  // reach: see CasterHighlight.reach.
+  reach?: number
 }
 
 // ClassListSummary is an inherited parent spell list collapsed to a count.
