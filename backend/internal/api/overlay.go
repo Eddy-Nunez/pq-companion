@@ -15,3 +15,9 @@ type overlayHandler struct {
 func (h *overlayHandler) npcTarget(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.npcTracker.GetState())
 }
+
+// npcDistance handles GET /api/overlay/npc/distance.
+// Returns the latest player→target distance (distance null when unknown).
+func (h *overlayHandler) npcDistance(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.npcTracker.GetDistance())
+}

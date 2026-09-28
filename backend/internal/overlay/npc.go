@@ -16,11 +16,34 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db/enums"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/logparser"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/ws"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/zealpipe"
 )
 
 // WSEventNPCTarget is the WebSocket event type broadcast when the inferred
 // combat target changes or is lost.
 const WSEventNPCTarget = "overlay:npc_target"
+
+// WSEventNPCTargetDistance carries the player→target distance. It is kept
+// out of TargetState so a moving player doesn't re-broadcast the whole
+// variant/loot/caster payload several times a second.
+const WSEventNPCTargetDistance = "overlay:npc_target_distance"
+
+// TargetDistance is the payload for WSEventNPCTargetDistance and the REST
+// response for GET /api/overlay/npc/distance.
+type TargetDistance struct {
+	// Distance is the 3D distance to the target in game units, or nil when
+	// Zeal withheld the target position (250+ units away) or doesn't report
+	// it at all.
+	Distance *float64 `json:"distance"`
+	// HasDescriptors is true when this Zeal build reports target
+	// descriptors. With it true and Distance nil, the target is simply out
+	// of the 250-unit reporting range; with it false, the distance readout
+	// isn't available at all and the frontend hides it.
+	HasDescriptors bool `json:"has_descriptors"`
+}
+
+// distanceMinInterval caps distance broadcasts (the pipe ticks at ~10 Hz).
+const distanceMinInterval = 250 * time.Millisecond
 
 // TargetVariant is one possible interpretation of an ambiguous target. About
 // 24% of npc_types rows share a name with at least one other row; when more
@@ -72,6 +95,13 @@ type TargetState struct {
 	// lookup strips the suffix so loot/stats still resolve, but the frontend
 	// pins the HP bar to 0% regardless of what the pipe reports.
 	IsCorpse bool `json:"is_corpse,omitempty"`
+	// LiveLevel / LiveClass / TargetType are the live spawn's actual level,
+	// class and entity type as the client reports them (Zeal target
+	// descriptors, PR #239). Nil on Zeal builds without them — the frontend
+	// then falls back to the DB row's level range and class.
+	LiveLevel  *int `json:"live_level,omitempty"`
+	LiveClass  *int `json:"live_class,omitempty"`
+	TargetType *int `json:"target_type,omitempty"`
 	// LastUpdated is the wall-clock time the state last changed.
 	LastUpdated time.Time `json:"last_updated"`
 }
@@ -123,6 +153,18 @@ type NPCTracker struct {
 	// / Plane of Fear "coin-flip on re-pull"). Spawn ids are recycled on a zone
 	// reset, so the whole map is flushed on every zone change.
 	variantCache map[int]resolvedTarget
+
+	// lastDesc is the most recent target descriptor set from the Zeal pipe
+	// (nil = this Zeal build doesn't report them, or no target). It may
+	// briefly describe the *previous* target while a new target's name label
+	// has arrived but its MsgPlayer hasn't, so it is only ever used via
+	// descFor, which checks the name. Held under mu.
+	lastDesc *zealpipe.TargetDescriptors
+
+	// Distance feed state (see SetPipeTargetSnapshot). Held under mu.
+	dist         TargetDistance
+	distSentAt   time.Time
+	distSentOnce bool
 }
 
 // resolvedTarget is a memoised lookupNPCVariants result, keyed in variantCache
@@ -134,6 +176,49 @@ type resolvedTarget struct {
 	abilities []db.SpecialAbility
 	summary   *db.NPCCasterSummary
 	variants  []TargetVariant
+	// sig is the descriptor input this entry was resolved with. An entry
+	// that is still ambiguous (variants non-empty) is re-resolved when a
+	// materially better input arrives — see resolveSig.changed.
+	sig resolveSig
+}
+
+// resolveSig summarises the Zeal descriptor input a resolution used, so an
+// ambiguous result can be retried only when the input has actually improved
+// rather than on every ~10 Hz pipe tick.
+type resolveSig struct {
+	hasDesc  bool
+	locKnown bool
+	x, y     float64
+}
+
+func sigFor(d *zealpipe.TargetDescriptors) resolveSig {
+	if d == nil {
+		return resolveSig{}
+	}
+	return resolveSig{hasDesc: true, locKnown: d.LocKnown, x: d.GameX, y: d.GameY}
+}
+
+// sigMoveThreshold is how far a target must move before an ambiguous
+// resolution is retried with its new position.
+const sigMoveThreshold = 25.0
+
+// changed reports whether next is worth re-resolving an ambiguous entry for:
+// descriptors or a position appeared, or the target moved far enough to
+// possibly separate its candidates' spawn points.
+func (s resolveSig) changed(next resolveSig) bool {
+	if s.hasDesc != next.hasDesc || s.locKnown != next.locKnown {
+		return true
+	}
+	if !next.locKnown {
+		return false
+	}
+	return math.Hypot(next.x-s.x, next.y-s.y) > sigMoveThreshold
+}
+
+// playerPos is the pipe-sourced player position used by variant filtering.
+type playerPos struct {
+	known bool
+	x, y  float64
 }
 
 // variantCacheMax bounds variantCache within a single zone. Reaching it just
@@ -275,31 +360,47 @@ func (t *NPCTracker) ClearPipeTarget() {
 	t.clearTarget()
 }
 
-// SetPipeTargetID records the current target's spawn id from the Zeal v1.4.6+
-// MsgPlayer snapshot. The target *name* arrives in a separate MsgLabel a beat
-// earlier and has already driven setTarget's first-look resolution; this is
-// the authoritative follow-up that keys the result to a stable id so a later
-// re-pull of the same spawn is sticky.
+// SetPipeTargetID records the current target's spawn id with no descriptors —
+// the Zeal v1.4.6/v1.4.7 shape. See SetPipeTargetSnapshot.
+func (t *NPCTracker) SetPipeTargetID(id *int) {
+	t.SetPipeTargetSnapshot(id, nil, 0, false)
+}
+
+// SetPipeTargetSnapshot records the current target's spawn id and, on Zeal
+// builds that report them, its descriptors (level/class/race/type and, within
+// 250 units, position) plus the player→target distance. The target *name*
+// arrives in a separate MsgLabel a beat earlier and has already driven
+// setTarget's first-look resolution; this is the authoritative follow-up that
+// keys the result to a stable id so a later re-pull of the same spawn is
+// sticky, and narrows it with the descriptors.
 //
 // On a change to a non-nil id with a live target: a cache hit swaps in the
 // memoised resolution (no DB, no re-disambiguation); a miss resolves once and
-// caches it under the id. nil (older Zeal, or no target) just clears the
-// tracked id — no re-resolution, no clearing of the overlay.
-func (t *NPCTracker) SetPipeTargetID(id *int) {
+// caches it under the id. With the id unchanged, a still-ambiguous entry is
+// re-resolved only when the descriptor input materially improved (e.g. the
+// target came within 250 units and its position appeared); a result is only
+// ever replaced by a narrower one, so a resolved target never un-resolves.
+// A nil id (older Zeal, or no target) just clears the tracked id — no
+// re-resolution, no clearing of the overlay.
+//
+// Called at ~10 Hz on the pipe message goroutine.
+func (t *NPCTracker) SetPipeTargetSnapshot(id *int, desc *zealpipe.TargetDescriptors, dist float64, distOK bool) {
+	t.updateDistance(desc != nil, dist, distOK)
+
 	t.mu.Lock()
-	if eqIntPtr(t.lastPipeTargetID, id) {
-		t.mu.Unlock()
-		return
-	}
+	idChanged := !eqIntPtr(t.lastPipeTargetID, id)
 	t.lastPipeTargetID = id
+	t.lastDesc = desc
 	name, isCorpse := "", false
 	if t.st.HasTarget {
 		name, isCorpse = stripCorpseSuffix(t.st.TargetName)
 	}
 	zoneShort := t.pipeZoneShort
-	playerKnown := t.pipePlayerKnown
-	px, py := t.pipePlayerX, t.pipePlayerY
+	pos := playerPos{known: t.pipePlayerKnown, x: t.pipePlayerX, y: t.pipePlayerY}
 	t.mu.Unlock()
+
+	matched := descFor(desc, name)
+	t.applyLive(name, matched)
 
 	if id == nil || name == "" {
 		return
@@ -310,10 +411,24 @@ func (t *NPCTracker) SetPipeTargetID(id *int) {
 	valid := ok && cached.name == name
 	t.mu.RUnlock()
 
+	sig := sigFor(matched)
+	refine := valid && len(cached.variants) > 0 && cached.sig.changed(sig)
+	if !idChanged && valid && !refine {
+		return // the ~10 Hz steady state: nothing new to resolve
+	}
+
 	r := cached
-	if !valid {
-		npc, abs, sum, vars := t.lookupNPCVariants(name, zoneShort, playerKnown, px, py)
-		r = resolvedTarget{name: name, npc: npc, abilities: abs, summary: sum, variants: vars}
+	if !valid || refine {
+		npc, abs, sum, vars := t.lookupNPCVariants(name, zoneShort, pos, matched)
+		fresh := resolvedTarget{name: name, npc: npc, abilities: abs, summary: sum, variants: vars, sig: sig}
+		switch {
+		case !valid:
+			r = fresh
+		case len(fresh.variants) < len(cached.variants):
+			r = fresh // narrowed
+		default:
+			r.sig = sig // no better; remember the attempt so it isn't retried every tick
+		}
 		t.mu.Lock()
 		if len(t.variantCache) >= variantCacheMax {
 			t.variantCache = make(map[int]resolvedTarget)
@@ -323,6 +438,87 @@ func (t *NPCTracker) SetPipeTargetID(id *int) {
 	}
 
 	t.applyResolved(name, isCorpse, r)
+}
+
+// descFor returns d when it describes the target named lookupName (the
+// corpse-stripped display name), else nil. Guards against the name label and
+// the MsgPlayer snapshot briefly describing different targets across a
+// retarget. A descriptor set without a name is trusted as-is.
+func descFor(d *zealpipe.TargetDescriptors, lookupName string) *zealpipe.TargetDescriptors {
+	if d == nil || lookupName == "" {
+		return nil
+	}
+	if d.Name == "" {
+		return d
+	}
+	descName, _ := stripCorpseSuffix(d.Name)
+	if !strings.EqualFold(descName, lookupName) {
+		return nil
+	}
+	return d
+}
+
+// applyLive stamps the live level/class/type onto the current target (or
+// clears them when d is nil), broadcasting only on a change.
+func (t *NPCTracker) applyLive(lookupName string, d *zealpipe.TargetDescriptors) {
+	var level, class, typ *int
+	if d != nil {
+		level, class, typ = &d.Level, &d.Class, &d.Type
+	}
+	t.mu.Lock()
+	curName, _ := stripCorpseSuffix(t.st.TargetName)
+	if !t.st.HasTarget || curName != lookupName ||
+		(eqIntPtr(t.st.LiveLevel, level) && eqIntPtr(t.st.LiveClass, class) && eqIntPtr(t.st.TargetType, typ)) {
+		t.mu.Unlock()
+		return
+	}
+	t.st.LiveLevel, t.st.LiveClass, t.st.TargetType = copyInt(level), copyInt(class), copyInt(typ)
+	t.st.LastUpdated = time.Now()
+	snap := t.st
+	t.mu.Unlock()
+	t.broadcast(snap)
+}
+
+func copyInt(p *int) *int {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+// updateDistance publishes the player→target distance on its own lightweight
+// event: on any change in availability immediately, otherwise only when the
+// rounded distance moved and distanceMinInterval has passed since the last
+// send.
+func (t *NPCTracker) updateDistance(hasDesc bool, dist float64, ok bool) {
+	next := TargetDistance{HasDescriptors: hasDesc}
+	if ok {
+		d := math.Round(dist)
+		next.Distance = &d
+	}
+	now := time.Now()
+	t.mu.Lock()
+	prev := t.dist
+	availability := !t.distSentOnce || prev.HasDescriptors != next.HasDescriptors ||
+		(prev.Distance == nil) != (next.Distance == nil)
+	moved := prev.Distance != nil && next.Distance != nil && *prev.Distance != *next.Distance
+	if !availability && !(moved && now.Sub(t.distSentAt) >= distanceMinInterval) {
+		t.mu.Unlock()
+		return
+	}
+	t.dist = next
+	t.distSentAt = now
+	t.distSentOnce = true
+	t.mu.Unlock()
+	t.hub.Broadcast(ws.Event{Type: WSEventNPCTargetDistance, Data: next})
+}
+
+// GetDistance returns the most recently published target distance.
+func (t *NPCTracker) GetDistance() TargetDistance {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.dist
 }
 
 // cachedResolve returns the memoised resolution for spawn id *id when one
@@ -435,16 +631,25 @@ func (t *NPCTracker) ResetPipeFields() {
 	t.pipePlayerKnown = false
 	// Pipe gone: the spawn-id feed and the variant cache it keys are stale.
 	t.flushVariantCacheLocked()
-	if t.st.HPPercent == -1 && t.st.PetOwner == "" {
-		t.mu.Unlock()
-		return
-	}
+	distStale := t.dist.HasDescriptors || t.dist.Distance != nil
+	t.dist = TargetDistance{}
+	t.distSentOnce = false
+	stateStale := t.st.HPPercent != -1 || t.st.PetOwner != "" || t.st.LiveLevel != nil ||
+		t.st.LiveClass != nil || t.st.TargetType != nil
 	t.st.HPPercent = -1
 	t.st.PetOwner = ""
-	t.st.LastUpdated = time.Now()
+	t.st.LiveLevel, t.st.LiveClass, t.st.TargetType = nil, nil, nil
+	if stateStale {
+		t.st.LastUpdated = time.Now()
+	}
 	snap := t.st
 	t.mu.Unlock()
-	t.broadcast(snap)
+	if distStale {
+		t.hub.Broadcast(ws.Event{Type: WSEventNPCTargetDistance, Data: TargetDistance{}})
+	}
+	if stateStale {
+		t.broadcast(snap)
+	}
 }
 
 // SetPipePlayerSnapshot records the player's current zone and world position
@@ -546,6 +751,7 @@ func (t *NPCTracker) flushVariantCacheLocked() {
 		t.variantCache = make(map[int]resolvedTarget)
 	}
 	t.lastPipeTargetID = nil
+	t.lastDesc = nil
 }
 
 func (t *NPCTracker) setTarget(displayName string) {
@@ -555,9 +761,9 @@ func (t *NPCTracker) setTarget(displayName string) {
 	zone := t.st.CurrentZone
 	// Snapshot the pipe-sourced disambiguation inputs while we hold the lock.
 	zoneShort := t.pipeZoneShort
-	playerKnown := t.pipePlayerKnown
-	px, py := t.pipePlayerX, t.pipePlayerY
+	pos := playerPos{known: t.pipePlayerKnown, x: t.pipePlayerX, y: t.pipePlayerY}
 	targetID := t.lastPipeTargetID
+	lastDesc := t.lastDesc
 	t.mu.RUnlock()
 	if same {
 		return
@@ -573,6 +779,10 @@ func (t *NPCTracker) setTarget(displayName string) {
 	// lookup but keep the original name for display, and flag is_corpse so
 	// the overlay pins HP to 0%.
 	lookupName, isCorpse := stripCorpseSuffix(displayName)
+	// Usually nil here: on a retarget the name label lands before the
+	// MsgPlayer carrying the new target's descriptors, and SetPipeTargetSnapshot
+	// narrows the result a tick later. Used when they're already current.
+	desc := descFor(lastDesc, lookupName)
 
 	// If the Zeal pipe has already given this exact spawn an id and we resolved
 	// it earlier in this zone, reuse that result rather than re-running the
@@ -586,12 +796,16 @@ func (t *NPCTracker) setTarget(displayName string) {
 	if r, ok := t.cachedResolve(targetID, lookupName); ok {
 		primary, primaryAbilities, primarySummary, variants = r.npc, r.abilities, r.summary, r.variants
 	} else {
-		primary, primaryAbilities, primarySummary, variants = t.lookupNPCVariants(lookupName, zoneShort, playerKnown, px, py)
+		primary, primaryAbilities, primarySummary, variants = t.lookupNPCVariants(lookupName, zoneShort, pos, desc)
 	}
 
 	hpPercent := -1
 	if isCorpse {
 		hpPercent = 0
+	}
+	var liveLevel, liveClass, targetType *int
+	if desc != nil {
+		liveLevel, liveClass, targetType = copyInt(&desc.Level), copyInt(&desc.Class), copyInt(&desc.Type)
 	}
 
 	t.mu.Lock()
@@ -605,6 +819,9 @@ func (t *NPCTracker) setTarget(displayName string) {
 		CurrentZone:      t.st.CurrentZone,
 		HPPercent:        hpPercent,
 		IsCorpse:         isCorpse,
+		LiveLevel:        liveLevel,
+		LiveClass:        liveClass,
+		TargetType:       targetType,
 		LastUpdated:      time.Now(),
 	}
 	snap := t.st
@@ -684,11 +901,29 @@ func (t *NPCTracker) clearTarget() {
 //  4. With no player position (or the raid_target skip above), keep all
 //     zone matches as the variant set — honest about not knowing, lets the
 //     UI surface alternatives.
+//
+// When Zeal reports target descriptors (desc non-nil, PR #239), two steps
+// get sharper:
+//   - Before step 3, candidates are narrowed to rows whose race and class
+//     match and whose level range covers the live level (see
+//     filterVariantsByDescriptors). This alone separates rows that share a
+//     spawn point, like ssratemple's necro/SK Shissar Revenant.
+//   - Step 3 uses the *target's* own position when Zeal reported it (only
+//     within 250 units of the player), and then runs for raid bosses too:
+//     the 3a skip exists because the player's position says nothing about
+//     where a pulled boss spawned, but the boss's own position does. Raid
+//     candidates use the looser raidTargetLocTolerance so a boss dragged
+//     toward the midpoint between spawns stays honestly ambiguous.
+//
+// A PC target (desc.Type PC / PC corpse) never resolves to an NPC row.
 func (t *NPCTracker) lookupNPCVariants(
 	displayName, zoneShort string,
-	playerKnown bool, px, py float64,
+	pos playerPos, desc *zealpipe.TargetDescriptors,
 ) (*db.NPC, []db.SpecialAbility, *db.NPCCasterSummary, []TargetVariant) {
 	if t.db == nil {
+		return nil, nil, nil, nil
+	}
+	if desc != nil && (desc.Type == zealpipe.TargetTypePC || desc.Type == zealpipe.TargetTypePCCorpse) {
 		return nil, nil, nil, nil
 	}
 	dbName := strings.ReplaceAll(displayName, " ", "_")
@@ -706,21 +941,36 @@ func (t *NPCTracker) lookupNPCVariants(
 		return nil, nil, nil, nil
 	}
 
+	// Live descriptors first: they identify the row outright where rows
+	// differ in race/class/level, independent of anyone's position.
+	if desc != nil && len(candidates) > 1 {
+		candidates = filterVariantsByDescriptors(candidates, desc)
+	}
+
 	// Position-based disambiguation only applies when multiple variants in
-	// the same zone are still in play, we actually have a player position
-	// from Zeal, AND none of the candidates is a raid boss — raid targets
-	// get pulled far from their spawn2 coordinates before most of the raid
-	// targets them, so "nearest to the player's current position" stops
-	// being a meaningful signal (see lookupNPCVariants doc comment). In that
-	// case we skip filtering and let every candidate flow through as a
-	// variant instead of risking a coin-flip pick that hides a loot table.
-	// Also skip when a db.ScriptSpawnedNPCOverrides candidate is in play —
-	// it has no spawn2 coordinates by definition (see fetchVariants), so
-	// filterVariantsByPlayerPosition would drop the real encounter in favor
-	// of a decoy row purely for having spawn coordinates.
-	if len(candidates) > 1 && playerKnown && zoneShort != "" &&
-		!anyRaidTarget(candidates) && len(db.ScriptSpawnedNPCOverrides[dbName]) == 0 {
-		candidates = filterVariantsByPlayerPosition(candidates, px, py)
+	// the same zone are still in play and we have a position to compare.
+	// The target's own position (Zeal, within 250 units) is trusted for raid
+	// bosses too, with a looser tolerance. The *player's* position is not:
+	// raid targets get pulled far from their spawn2 coordinates before most
+	// of the raid targets them, so "nearest to the player" stops being a
+	// meaningful signal (see the doc comment) and every candidate flows
+	// through as a variant instead of risking a coin-flip pick that hides a
+	// loot table. Always skip when a db.ScriptSpawnedNPCOverrides candidate is
+	// in play — it has no spawn2 coordinates by definition (see
+	// fetchVariants), so filterVariantsByPosition would drop the real
+	// encounter in favor of a decoy row purely for having spawn coordinates.
+	scriptSpawned := len(db.ScriptSpawnedNPCOverrides[dbName]) > 0
+	switch {
+	case len(candidates) < 2 || zoneShort == "" || scriptSpawned:
+		// Nothing to separate, or no reliable coordinates to separate by.
+	case desc != nil && desc.LocKnown:
+		tol := tieToleranceYards
+		if anyRaidTarget(candidates) {
+			tol = raidTargetLocTolerance
+		}
+		candidates = filterVariantsByPosition(candidates, desc.GameX, desc.GameY, tol)
+	case pos.known && !anyRaidTarget(candidates):
+		candidates = filterVariantsByPosition(candidates, pos.x, pos.y, tieToleranceYards)
 	}
 
 	// Order the survivors strongest-first so the headline is the row the player
@@ -869,18 +1119,52 @@ func anyRaidTarget(variants []db.NPCVariant) bool {
 // apart) and tagging shared-spawngroup variants (distance delta ≈ 0).
 const tieToleranceYards = 25.0
 
-// filterVariantsByPlayerPosition keeps only the variants whose nearest spawn
-// point is within tieToleranceYards of the closest variant's nearest spawn.
-// Variants with no spawn points are dropped — without coordinates we can't
-// position-match them, and a sibling variant that does have spawns is the
-// better pick. Falls back to returning all candidates if every variant
-// lacks spawn points (preserves the variant set so callers still see them).
-func filterVariantsByPlayerPosition(variants []db.NPCVariant, px, py float64) []db.NPCVariant {
+// raidTargetLocTolerance is the tie tolerance used when separating raid-boss
+// candidates by the boss's own reported position. Raid bosses are routinely
+// pulled away from their spawn point, so only a decisive lead counts: Kaas
+// Thox's two rows spawn ~640 apart, which resolves at spawn (0 vs 640) and
+// partway through a pull (150 vs 490) but keeps both near the midpoint.
+const raidTargetLocTolerance = 200.0
+
+// filterVariantsByDescriptors keeps the candidates consistent with the live
+// spawn Zeal describes: same race, same class, and a level range covering
+// the live level. If nothing survives (DB drift, an illusioned NPC, a level
+// the DB range doesn't cover), the full set is returned unchanged — a
+// descriptor mismatch must never make the overlay lose the NPC.
+func filterVariantsByDescriptors(variants []db.NPCVariant, d *zealpipe.TargetDescriptors) []db.NPCVariant {
+	out := make([]db.NPCVariant, 0, len(variants))
+	for _, v := range variants {
+		n := v.NPC
+		maxLevel := n.MaxLevel
+		if maxLevel < n.Level {
+			maxLevel = n.Level
+		}
+		if n.Race == d.Race && n.Class == d.Class && d.Level >= n.Level && d.Level <= maxLevel {
+			out = append(out, v)
+		}
+	}
+	if len(out) == 0 {
+		slog.Debug("overlay: target descriptors matched no candidate; keeping all",
+			"level", d.Level, "class", d.Class, "race", d.Race, "candidates", len(variants))
+		return variants
+	}
+	return out
+}
+
+// filterVariantsByPosition keeps only the variants whose nearest spawn point
+// to (x, y) is within tol of the closest variant's nearest spawn. (x, y) is
+// the target's own reported position when Zeal provides it, else the
+// player's. Variants with no spawn points are dropped — without coordinates
+// we can't position-match them, and a sibling variant that does have spawns
+// is the better pick. Falls back to returning all candidates if every
+// variant lacks spawn points (preserves the variant set so callers still
+// see them).
+func filterVariantsByPosition(variants []db.NPCVariant, x, y, tol float64) []db.NPCVariant {
 	dists := make([]float64, len(variants))
 	minDist := math.Inf(1)
 	anyWithSpawns := false
 	for i, v := range variants {
-		d := nearestSpawnDistance(v.SpawnPoints, px, py)
+		d := nearestSpawnDistance(v.SpawnPoints, x, y)
 		dists[i] = d
 		if !math.IsInf(d, 1) {
 			anyWithSpawns = true
@@ -894,7 +1178,7 @@ func filterVariantsByPlayerPosition(variants []db.NPCVariant, px, py float64) []
 	}
 	out := make([]db.NPCVariant, 0, len(variants))
 	for i, v := range variants {
-		if dists[i]-minDist <= tieToleranceYards {
+		if dists[i]-minDist <= tol {
 			out = append(out, v)
 		}
 	}

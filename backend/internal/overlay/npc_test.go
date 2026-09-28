@@ -11,6 +11,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/logparser"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/ws"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/zealpipe"
 )
 
 // newTestTracker returns an NPCTracker with a real (unstarted) hub and no DB.
@@ -312,7 +313,7 @@ func TestFilterVariantsByPlayerPosition_DistinctSpawnsPickOne(t *testing.T) {
 	}
 	// Player at the north spawn — south is 639 yards away, far past the tie
 	// tolerance, so only north survives.
-	got := filterVariantsByPlayerPosition([]db.NPCVariant{north, south}, 141, 318)
+	got := filterVariantsByPosition([]db.NPCVariant{north, south}, 141, 318, tieToleranceYards)
 	if len(got) != 1 {
 		t.Fatalf("got %d variants, want 1", len(got))
 	}
@@ -331,7 +332,7 @@ func TestFilterVariantsByPlayerPosition_SharedSpawnsKeepBoth(t *testing.T) {
 	}
 	necro := db.NPCVariant{NPC: db.NPC{ID: 162197, Class: 11}, SpawnPoints: shared}
 	sk := db.NPCVariant{NPC: db.NPC{ID: 162490, Class: 5}, SpawnPoints: shared}
-	got := filterVariantsByPlayerPosition([]db.NPCVariant{necro, sk}, 550, -390)
+	got := filterVariantsByPosition([]db.NPCVariant{necro, sk}, 550, -390, tieToleranceYards)
 	if len(got) != 2 {
 		t.Fatalf("got %d variants, want 2 (shared spawns must keep both)", len(got))
 	}
@@ -379,7 +380,7 @@ func TestSortVariantsByStrength_HighestHPAmongRaid(t *testing.T) {
 func TestFilterVariantsByPlayerPosition_DropsNoSpawnWhenOthersExist(t *testing.T) {
 	noSpawns := db.NPCVariant{NPC: db.NPC{ID: 1}}
 	withSpawns := db.NPCVariant{NPC: db.NPC{ID: 2}, SpawnPoints: []db.SpawnPoint{{X: 10, Y: 10}}}
-	got := filterVariantsByPlayerPosition([]db.NPCVariant{noSpawns, withSpawns}, 10, 10)
+	got := filterVariantsByPosition([]db.NPCVariant{noSpawns, withSpawns}, 10, 10, tieToleranceYards)
 	if len(got) != 1 || got[0].NPC.ID != 2 {
 		t.Errorf("filter result = %+v, want only id=2", got)
 	}
@@ -720,5 +721,216 @@ func TestPipeTargetID_DisconnectFlushesCache(t *testing.T) {
 	tr.mu.RUnlock()
 	if n != 0 || id != nil {
 		t.Fatalf("disconnect didn't flush: %d entries, id=%v", n, id)
+	}
+}
+
+// ── Zeal target descriptors (PR #239): live level/class/race/position ───────
+
+// descAt builds a descriptor set for tests. loc=false models Zeal withholding
+// target_loc (target 250+ units from the player).
+func descAt(name string, level, class, race int, loc bool, x, y float64) *zealpipe.TargetDescriptors {
+	return &zealpipe.TargetDescriptors{
+		Name: name, Type: zealpipe.TargetTypeNPC, Level: level, Class: class, Race: race,
+		LocKnown: loc, GameX: x, GameY: y,
+	}
+}
+
+// targetWithDesc drives the production order: the name label first, then
+// the MsgPlayer snapshot carrying the spawn id and descriptors.
+func targetWithDesc(tr *NPCTracker, id int, d *zealpipe.TargetDescriptors) TargetState {
+	tr.SetPipeTarget(d.Name)
+	tr.SetPipeTargetSnapshot(ptrInt(id), d, 0, false)
+	return tr.GetState()
+}
+
+func variantIDs(st TargetState) []int {
+	if len(st.Variants) == 0 {
+		if st.NPCData == nil {
+			return nil
+		}
+		return []int{st.NPCData.ID}
+	}
+	ids := make([]int, 0, len(st.Variants))
+	for _, v := range st.Variants {
+		ids = append(ids, v.NPC.ID)
+	}
+	return ids
+}
+
+func sameIDs(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[int]int{}
+	for _, x := range a {
+		seen[x]++
+	}
+	for _, x := range b {
+		seen[x]--
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func TestNPCTracker_TargetDescriptorsResolveVariants(t *testing.T) {
+	const kaas = "Kaas Thox Xi Aten Ha Ra"
+	tests := []struct {
+		name string
+		zone int
+		// player position; Kaas Thox cases stand far from both spawns so the
+		// result can only come from the descriptors.
+		px, py float64
+		desc   *zealpipe.TargetDescriptors
+		want   []int
+	}{
+		// ssratemple: both rows share every spawn point, level range and
+		// race — class is the only thing that tells them apart.
+		{"shissar necro by class", 162, 550, -390,
+			descAt("A Shissar Revenant", 52, 11, 217, true, 550, -390), []int{162197}},
+		{"shissar SK by class", 162, 550, -390,
+			descAt("A Shissar Revenant", 52, 5, 217, true, 550, -390), []int{162490}},
+		// Vex Thal raid bosses: rows identical except spawn position (+318 vs -321).
+		{"kaas thox at north spawn", 158, 0, 0, descAt(kaas, 66, 9, 145, true, 141, 318), []int{158437}},
+		{"kaas thox at south spawn", 158, 0, 0, descAt(kaas, 66, 9, 145, true, 141, -321), []int{158464}},
+		{"kaas thox pulled partway", 158, 0, 0, descAt(kaas, 66, 9, 145, true, 141, 170), []int{158437}},
+		{"kaas thox at midpoint stays ambiguous", 158, 0, 0,
+			descAt(kaas, 66, 9, 145, true, 141, 0), []int{158437, 158464}},
+		{"kaas thox beyond 250 (no loc) stays ambiguous", 158, 0, 0,
+			descAt(kaas, 66, 9, 145, false, 0, 0), []int{158437, 158464}},
+		{"thall va xakra at south spawn", 158, 0, 0,
+			descAt("Thall Va Xakra", 60, 1, 224, true, 142, -408), []int{158465}},
+		// Non-raid pair with four spawn clusters each.
+		{"va xakra inner cluster", 158, 0, 0, descAt("Va Xakra", 60, 5, 224, true, 140, 419), []int{158006}},
+		{"va xakra outer cluster", 158, 0, 0, descAt("Va Xakra", 60, 5, 224, true, 1172, 336), []int{158086}},
+		// A descriptor set no row matches must not lose the NPC.
+		{"mismatch keeps full set", 162, 0, 0,
+			descAt("A Shissar Revenant", 52, 12, 217, false, 0, 0), []int{162197, 162490}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := newRealDBTracker(t)
+			tr.SetPipePlayerSnapshot(tt.zone, tt.px, tt.py, 0)
+			st := targetWithDesc(tr, 4242, tt.desc)
+			if got := variantIDs(st); !sameIDs(got, tt.want) {
+				t.Errorf("resolved to %v, want %v", got, tt.want)
+			}
+			if st.LiveLevel == nil || *st.LiveLevel != tt.desc.Level {
+				t.Errorf("LiveLevel = %v, want %d", st.LiveLevel, tt.desc.Level)
+			}
+			if st.LiveClass == nil || *st.LiveClass != tt.desc.Class {
+				t.Errorf("LiveClass = %v, want %d", st.LiveClass, tt.desc.Class)
+			}
+		})
+	}
+}
+
+// A PC target that happens to share an NPC's name must not show NPC data.
+func TestNPCTracker_TargetDescriptorsPCSkipsNPCLookup(t *testing.T) {
+	tr := newRealDBTracker(t)
+	tr.SetPipePlayerSnapshot(162, 0, 0, 0)
+	d := descAt("A Shissar Revenant", 60, 11, 1, true, 0, 0)
+	d.Type = zealpipe.TargetTypePC
+	st := targetWithDesc(tr, 1, d)
+	if st.NPCData != nil || len(st.Variants) != 0 {
+		t.Errorf("PC target resolved to NPC data: %v / %d variants", st.NPCData, len(st.Variants))
+	}
+}
+
+// Targeted from beyond 250 units (no loc) the boss is ambiguous; once the
+// target comes into range its position narrows the same spawn id's entry.
+// Afterwards, moving to the midpoint must not un-resolve it.
+func TestNPCTracker_TargetDescriptorsRefineAmbiguousEntry(t *testing.T) {
+	const kaas = "Kaas Thox Xi Aten Ha Ra"
+	tr := newRealDBTracker(t)
+	tr.SetPipePlayerSnapshot(158, 0, 0, 0)
+
+	st := targetWithDesc(tr, 77, descAt(kaas, 66, 9, 145, false, 0, 0))
+	if len(st.Variants) != 2 {
+		t.Fatalf("far target: %d variants, want 2", len(st.Variants))
+	}
+
+	tr.SetPipeTargetSnapshot(ptrInt(77), descAt(kaas, 66, 9, 145, true, 141, -321), 200, true)
+	st = tr.GetState()
+	if got := variantIDs(st); !sameIDs(got, []int{158464}) {
+		t.Fatalf("in-range target resolved to %v, want [158464]", got)
+	}
+
+	tr.SetPipeTargetSnapshot(ptrInt(77), descAt(kaas, 66, 9, 145, true, 141, 0), 100, true)
+	if got := variantIDs(tr.GetState()); !sameIDs(got, []int{158464}) {
+		t.Errorf("resolved entry un-resolved after moving to the midpoint: %v", got)
+	}
+
+	// A fresh re-target of the same spawn is served from the refined cache.
+	tr.ClearPipeTarget()
+	tr.SetPipeTargetSnapshot(nil, nil, 0, false)
+	st = targetWithDesc(tr, 77, descAt(kaas, 66, 9, 145, false, 0, 0))
+	if got := variantIDs(st); !sameIDs(got, []int{158464}) {
+		t.Errorf("re-target of resolved spawn = %v, want [158464]", got)
+	}
+}
+
+// Stock Zeal (target_id only): no live fields, and the old raid-boss rule
+// (keep both) still applies.
+func TestNPCTracker_NoDescriptorsKeepsLegacyBehaviour(t *testing.T) {
+	tr := newRealDBTracker(t)
+	tr.SetPipePlayerSnapshot(158, 141, 318, 130)
+	tr.SetPipeTarget("Kaas Thox Xi Aten Ha Ra")
+	tr.SetPipeTargetID(ptrInt(5))
+	st := tr.GetState()
+	if len(st.Variants) != 2 {
+		t.Errorf("Variants len = %d, want 2", len(st.Variants))
+	}
+	if st.LiveLevel != nil || st.LiveClass != nil || st.TargetType != nil {
+		t.Errorf("live fields set without descriptors: %v %v %v", st.LiveLevel, st.LiveClass, st.TargetType)
+	}
+	if d := tr.GetDistance(); d.HasDescriptors || d.Distance != nil {
+		t.Errorf("distance = %+v, want empty", d)
+	}
+}
+
+// Descriptors from the previous target (name mismatch) must be ignored.
+func TestDescFor(t *testing.T) {
+	d := descAt("a gnoll", 10, 1, 39, false, 0, 0)
+	if descFor(d, "a gnoll") != d {
+		t.Error("matching name rejected")
+	}
+	if descFor(d, "A Gnoll") != d {
+		t.Error("case-only difference rejected")
+	}
+	if descFor(d, "an orc pawn") != nil {
+		t.Error("mismatched name accepted")
+	}
+	corpse := descAt("a gnoll's corpse", 10, 1, 39, false, 0, 0)
+	if descFor(corpse, "a gnoll") != corpse {
+		t.Error("corpse suffix not stripped")
+	}
+	if descFor(nil, "a gnoll") != nil {
+		t.Error("nil desc")
+	}
+}
+
+func TestNPCTracker_DistanceFeed(t *testing.T) {
+	tr := newTestTracker()
+	d := descAt("a gnoll", 10, 1, 39, true, 0, 0)
+
+	tr.SetPipeTargetSnapshot(ptrInt(1), d, 142.6, true)
+	if got := tr.GetDistance(); !got.HasDescriptors || got.Distance == nil || *got.Distance != 143 {
+		t.Fatalf("distance = %+v, want 143", got)
+	}
+	// Beyond 250: descriptors but no position → null distance immediately.
+	far := *d
+	far.LocKnown = false
+	tr.SetPipeTargetSnapshot(ptrInt(1), &far, 0, false)
+	if got := tr.GetDistance(); !got.HasDescriptors || got.Distance != nil {
+		t.Fatalf("distance = %+v, want has_descriptors with null distance", got)
+	}
+	// Disconnect clears it.
+	tr.ResetPipeFields()
+	if got := tr.GetDistance(); got.HasDescriptors || got.Distance != nil {
+		t.Fatalf("distance after disconnect = %+v, want empty", got)
 	}
 }

@@ -491,6 +491,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 		})
 		r.Route("/overlay", func(r chi.Router) {
 			r.Get("/npc/target", overlayH.npcTarget)
+			r.Get("/npc/distance", overlayH.npcDistance)
 			r.Get("/combat", combatH.state)
 			r.Get("/threat", threatH.state)
 			r.Delete("/threat/{name}", threatH.removeMob)

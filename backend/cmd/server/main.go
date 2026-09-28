@@ -1481,7 +1481,11 @@ func main() {
 			// target_id: keys the NPC overlay's resolved variant to a stable
 			// spawn id so re-targeting the same same-named mob is sticky
 			// instead of re-rolling the position/strength disambiguation.
-			npcTracker.SetPipeTargetID(p.TargetID)
+			// Target descriptors (Zeal PR #239; nil on releases without it)
+			// narrow same-name rows by live level/class/race/position and
+			// feed the overlay's live level/class and distance readout.
+			dist, distOK := p.DistanceToTarget()
+			npcTracker.SetPipeTargetSnapshot(p.TargetID, p.TargetDescriptors(), dist, distOK)
 			// Also feed the spell-timer engine: it snapshots this alongside
 			// the active character's own spell casts so a trigger-driven
 			// detrimental (e.g. the Slows pack) landing on a mob can be keyed
