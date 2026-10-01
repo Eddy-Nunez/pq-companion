@@ -991,6 +991,18 @@ func (e *Engine) dispatchWebhooks(actions []Action) {
 	}
 }
 
+// captureTemplate turns a "capture" field value into a substitution template.
+// A bare reference ("1", "name") is wrapped in braces as before. A value that
+// already contains "{" or "$" is treated as a template and used verbatim, so
+// "{2} {3}" or "{S1}: {S2}" builds a multi-group value instead of being
+// double-wrapped into "{{2} {3}}" (which left stray outer braces in output).
+func captureTemplate(field string) string {
+	if strings.ContainsAny(field, "{$") {
+		return field
+	}
+	return "{" + field + "}"
+}
+
 // resolveTimerKey returns the spelltimer key for one firing. When the
 // trigger sets TimerKeyCapture and that group participated in the match,
 // the captured text (typically the spell name) becomes the key so each
@@ -1000,7 +1012,7 @@ func resolveTimerKey(t *Trigger, fallback string, match []string, names []string
 	if t.TimerKeyCapture == "" || len(match) == 0 {
 		return fallback
 	}
-	ref := "{" + t.TimerKeyCapture + "}"
+	ref := captureTemplate(t.TimerKeyCapture)
 	if v := substituteCaptures(ref, match, names, nil); v != ref {
 		if v = strings.TrimSpace(v); v != "" {
 			return v
@@ -1020,7 +1032,7 @@ func resolveTimerTarget(t *Trigger, match []string, names []string) string {
 	if t.TimerTargetCapture == "" || len(match) == 0 {
 		return ""
 	}
-	ref := "{" + t.TimerTargetCapture + "}"
+	ref := captureTemplate(t.TimerTargetCapture)
 	if v := substituteCaptures(ref, match, names, nil); v != ref {
 		return strings.TrimSpace(v)
 	}
@@ -1139,7 +1151,7 @@ func resolveTimerDuration(t *Trigger, extra *ExtraPattern, match []string, names
 		return extra.TimerDurationSecs
 	}
 	if t.TimerDurationCapture != "" && len(match) > 0 {
-		ref := "{" + t.TimerDurationCapture + "}"
+		ref := captureTemplate(t.TimerDurationCapture)
 		if v := substituteCaptures(ref, match, names, nil); v != ref {
 			if secs := ParseDurationText(v); secs > 0 {
 				return secs

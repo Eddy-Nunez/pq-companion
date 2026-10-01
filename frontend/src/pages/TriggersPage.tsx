@@ -1524,14 +1524,14 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
                   type="text"
                   value={timerKeyCapture}
                   onChange={(e) => setTimerKeyCapture(e.target.value)}
-                  placeholder="e.g. 1"
-                  className="w-20 rounded px-2 py-0.5 text-xs outline-none text-center font-mono"
+                  placeholder="1 or {1} {2}"
+                  className="w-28 rounded px-2 py-0.5 text-xs outline-none text-center font-mono"
                   style={inputStyle}
                   disabled={submitting}
-                  title="Capture group number or name whose text names the timer (e.g. the spell name) — each captured value runs its own countdown. The worn-off pattern must capture the same value. Empty = use the trigger name."
+                  title="Capture group number or name whose text names the timer (e.g. the spell name), or a template combining groups such as {1} {2} or {S1}: {S2}. Each distinct name runs its own countdown. The worn-off pattern must capture the same value. Empty = use the trigger name."
                 />
                 <span className="text-[10px] italic" style={{ color: 'var(--color-muted)' }}>
-                  one timer per captured spell name; empty = trigger name
+                  group # / name, or a template like {'{1} {2}'}; empty = trigger name
                 </span>
               </div>
             )}
