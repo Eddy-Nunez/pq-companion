@@ -64,6 +64,9 @@ func (s *Service) Synthesize(ctx context.Context, cfg Config, text string, force
 	if !force {
 		if info, err := os.Stat(path); err == nil && info.Size() > 0 {
 			touchCacheFile(path)
+			// Files cached before the stereo upmix existed are still mono;
+			// this is a no-op header peek for everything already converted.
+			upmixStereo(path)
 			return path, nil
 		}
 	}
@@ -95,6 +98,7 @@ func (s *Service) synthesizeWarm(ctx context.Context, cfg Config, text, outPath 
 	if err != nil {
 		return "", err
 	}
+	upmixStereo(rawPath)
 	if err := os.Rename(rawPath, outPath); err != nil {
 		return "", fmt.Errorf("finalize warm wav: %w", err)
 	}

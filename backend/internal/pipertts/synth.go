@@ -5,11 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/jasonsoprovich/pq-companion/backend/internal/tts"
 )
 
 const (
@@ -137,6 +140,7 @@ func synthesizeToFile(ctx context.Context, cfg Config, text, outPath string) err
 		return fmt.Errorf("piper output too large (%d bytes)", info.Size())
 	}
 
+	upmixStereo(tmpPath)
 	if err := os.Rename(tmpPath, outPath); err != nil {
 		return fmt.Errorf("finalize wav: %w", err)
 	}
@@ -160,4 +164,13 @@ func validatePaths(cfg Config) error {
 		return fmt.Errorf("%w: voice model not found", errSynthUnavailable)
 	}
 	return nil
+}
+
+// upmixStereo rewrites a freshly generated mono voice WAV as stereo so it
+// plays in both ears (see tts.UpmixMonoWAV). Best-effort: a failure leaves the
+// original mono file in place, which still plays.
+func upmixStereo(path string) {
+	if err := tts.UpmixMonoWAV(path); err != nil {
+		slog.Warn("piper: stereo upmix failed; keeping mono wav", "err", err)
+	}
 }

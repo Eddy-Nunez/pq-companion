@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/jasonsoprovich/pq-companion/backend/internal/tts"
 )
 
 const (
@@ -152,6 +155,9 @@ func synthesizeToFile(ctx context.Context, cfg Config, text, outPath string) err
 		return errors.New("kokoro returned no audio")
 	}
 
+	if err := tts.UpmixMonoWAV(tmpPath); err != nil {
+		slog.Warn("kokoro: stereo upmix failed; keeping original wav", "err", err)
+	}
 	if err := os.Rename(tmpPath, outPath); err != nil {
 		return fmt.Errorf("finalize wav: %w", err)
 	}
