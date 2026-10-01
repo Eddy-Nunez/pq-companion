@@ -321,6 +321,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Get("/{id}/tasks", tasksH.list)
 			r.Post("/{id}/tasks", tasksH.create)
 			r.Put("/{id}/tasks/reorder", tasksH.reorder)
+			r.Post("/{id}/tasks/import", tasksH.importTask)
 			r.Put("/{id}/tasks/{taskID}", tasksH.update)
 			r.Delete("/{id}/tasks/{taskID}", tasksH.del)
 			r.Post("/{id}/tasks/{taskID}/subtasks", tasksH.createSubtask)

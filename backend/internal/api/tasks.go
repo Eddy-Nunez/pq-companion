@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,6 +24,9 @@ type taskRequest struct {
 type subtaskRequest struct {
 	Name      string `json:"name"`
 	Completed bool   `json:"completed"`
+	// ParentID nests a new subtask under another subtask of the same task.
+	// Omitted/null = direct child of the task. Ignored on update.
+	ParentID *int `json:"parent_id"`
 }
 
 type reorderRequest struct {
@@ -140,9 +144,14 @@ func (h *tasksHandler) createSubtask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	sub, err := h.store.CreateSubtask(taskID, req.Name)
+	sub, err := h.store.CreateSubtask(taskID, req.ParentID, req.Name)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		switch {
+		case errors.Is(err, character.ErrSubtaskTooDeep), errors.Is(err, character.ErrSubtaskNotFound):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 	writeJSON(w, http.StatusCreated, sub)
@@ -182,4 +191,29 @@ func (h *tasksHandler) deleteSubtask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// importTask creates a whole task (with its nested steps) for the character
+// from a file produced by the Export button.
+func (h *tasksHandler) importTask(w http.ResponseWriter, r *http.Request) {
+	charID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid character id")
+		return
+	}
+	var in character.TaskImport
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, "not a valid task file: "+err.Error())
+		return
+	}
+	t, err := h.store.ImportTask(charID, in)
+	if err != nil {
+		if errors.Is(err, character.ErrInvalidTaskImport) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, t)
 }
