@@ -363,7 +363,14 @@ a future data source fix this?" column against the new capabilities.
   reverts.
 - **What remains:** a Vex Thal boss first targeted from 250+ units away, or
   dragged to roughly the midpoint between its two possible spawn points, stays
-  ambiguous and the overlay shows both loot tables, as before. Rows identical in
+  ambiguous and the overlay shows both loot tables, as before — **until the
+  first one dies.** Same-name raid bosses are separate encounters that die one
+  at a time, so once a death is attributed to a row (the dead target's resolved
+  row, or — when it was still ambiguous — the first looted item found in only
+  one candidate's loot table; see `overlay/variant_elimination.go`) that row is
+  dropped from the candidates for 12 hours, and the second boss shows a single
+  loot table. The *first* blob of a night, pulled from 250+ units or to the
+  midpoint, still shows both. Rows identical in
   level/class/race *and* spawn point (true RNG pairs) are indistinguishable by
   design. **Without the new Zeal** (1.4.7 and earlier, or no Zeal), every
   behaviour falls back to the pre-descriptor heuristics: player position vs

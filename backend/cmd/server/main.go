@@ -1865,6 +1865,9 @@ func main() {
 		if lootConsumer != nil {
 			lootConsumer.HandleLine(ts, msg)
 		}
+		// Loot lines identify which same-name raid-boss row just died
+		// (Kaas Thox pair) — see overlay/variant_elimination.go.
+		npcTracker.HandleLootLine(ts, msg)
 		if playersConsumer != nil {
 			playersConsumer.HandleLine(ts, msg)
 		}

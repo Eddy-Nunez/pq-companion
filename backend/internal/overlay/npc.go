@@ -161,6 +161,15 @@ type NPCTracker struct {
 	// descFor, which checks the name. Held under mu.
 	lastDesc *zealpipe.TargetDescriptors
 
+	// Kill-elimination state (variant_elimination.go). deadVariants maps
+	// zone|name → npc_types id → expiry for same-name raid bosses already
+	// killed; pendingKills holds kills not yet tied to a row, awaiting a loot
+	// line; raidVariantMemo / lootItemMemo cache DB lookups. Held under mu.
+	deadVariants    map[string]map[int]time.Time
+	pendingKills    map[string]pendingKill
+	raidVariantMemo map[string][]db.NPCVariant
+	lootItemMemo    map[int]map[int]struct{}
+
 	// Distance feed state (see SetPipeTargetSnapshot). Held under mu.
 	dist         TargetDistance
 	distSentAt   time.Time
@@ -322,6 +331,7 @@ func (t *NPCTracker) Handle(ev logparser.LogEvent) {
 		t.mu.RLock()
 		match := t.st.HasTarget && t.st.TargetName == data.Target
 		t.mu.RUnlock()
+		t.noteKill(data.Target)
 		if match {
 			t.clearTarget()
 		}
@@ -738,6 +748,7 @@ func (t *NPCTracker) isOwnPet(name string) bool {
 func (t *NPCTracker) setZone(zoneName string) {
 	t.mu.Lock()
 	t.st.CurrentZone = zoneName
+	t.raidVariantMemo = nil // zone-scoped; deadVariants deliberately survives
 	t.flushVariantCacheLocked()
 	t.mu.Unlock()
 }
@@ -946,6 +957,9 @@ func (t *NPCTracker) lookupNPCVariants(
 	if desc != nil && len(candidates) > 1 {
 		candidates = filterVariantsByDescriptors(candidates, desc)
 	}
+	// Same-name raid bosses already killed this session can't be the one being
+	// fought (see variant_elimination.go).
+	candidates = t.dropDeadVariants(zoneShort, dbName, candidates, desc)
 
 	// Position-based disambiguation only applies when multiple variants in
 	// the same zone are still in play and we have a position to compare.
