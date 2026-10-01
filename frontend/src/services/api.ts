@@ -2580,12 +2580,18 @@ export function setCharacterRaidBuffs(id: number, spellIDs: number[]): Promise<{
 
 // ── Character Tasks ────────────────────────────────────────────────────────────
 
+// How many levels of subtasks may nest under a task (mirrors
+// character.MaxSubtaskDepth in the backend).
+export const MAX_SUBTASK_DEPTH = 3
+
 export interface Subtask {
   id: number
   task_id: number
+  parent_id: number | null
   name: string
   completed: boolean
   position: number
+  children: Subtask[]
 }
 
 export interface CharacterTask {
@@ -2608,6 +2614,27 @@ export interface TaskRequest {
 export interface SubtaskRequest {
   name: string
   completed: boolean
+  // Nest under another subtask of the same task; omit for a direct child.
+  parent_id?: number | null
+}
+
+// A task file as written by Export and read by Import. Leaves carry their own
+// completed flag; a step with children is complete when all of them are.
+export interface TaskFileStep {
+  name: string
+  completed?: boolean
+  steps?: TaskFileStep[]
+}
+
+export interface TaskFile {
+  format: 'pq-companion-task'
+  version: 1
+  task: {
+    name: string
+    description: string
+    completed?: boolean
+    steps: TaskFileStep[]
+  }
 }
 
 export function listCharacterTasks(charID: number): Promise<{ tasks: CharacterTask[] }> {
@@ -2636,6 +2663,10 @@ export function createCharacterSubtask(charID: number, taskID: number, req: Subt
 
 export function updateCharacterSubtask(charID: number, taskID: number, subtaskID: number, req: SubtaskRequest): Promise<void> {
   return put<void>(`/api/characters/${charID}/tasks/${taskID}/subtasks/${subtaskID}`, req)
+}
+
+export function importCharacterTask(charID: number, file: TaskFile): Promise<CharacterTask> {
+  return post<CharacterTask>(`/api/characters/${charID}/tasks/import`, file)
 }
 
 export function deleteCharacterSubtask(charID: number, taskID: number, subtaskID: number): Promise<void> {

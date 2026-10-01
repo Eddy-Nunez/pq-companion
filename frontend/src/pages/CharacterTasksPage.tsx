@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ListChecks, Plus, Pencil, Trash2, Check, X, GripVertical, ChevronDown, ChevronRight,
+  Download, Upload,
 } from 'lucide-react'
 import {
   DndContext,
@@ -30,12 +31,15 @@ import {
   createCharacterSubtask,
   updateCharacterSubtask,
   deleteCharacterSubtask,
+  importCharacterTask,
+  MAX_SUBTASK_DEPTH,
   type Character,
   type CharacterTask,
   type Subtask,
 } from '../services/api'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
 import CharacterSubTabs from '../components/CharacterSubTabs'
+import { countLeaves, downloadTaskFile } from '../lib/taskFile'
 
 interface TaskFormProps {
   initialName: string
@@ -121,39 +125,153 @@ function TaskForm({
   )
 }
 
-interface SubtaskRowProps {
+interface SubtaskNodeProps {
   subtask: Subtask
-  onToggle: () => void
-  onDelete: () => void
+  // 1 = direct child of the task. Children render at depth + 1 until
+  // MAX_SUBTASK_DEPTH, where the add-child control is hidden.
+  depth: number
+  onToggle: (sub: Subtask) => void
+  onDelete: (sub: Subtask) => void
+  onAddChild: (parent: Subtask, name: string) => void
 }
 
-function SubtaskRow({ subtask, onToggle, onDelete }: SubtaskRowProps): React.ReactElement {
+function SubtaskNode({
+  subtask, depth, onToggle, onDelete, onAddChild,
+}: SubtaskNodeProps): React.ReactElement {
+  const [open, setOpen] = useState(true)
+  const [adding, setAdding] = useState(false)
+  const [childName, setChildName] = useState('')
+  const children = subtask.children ?? []
+  const hasChildren = children.length > 0
+  const canNest = depth < MAX_SUBTASK_DEPTH
+  const progress = hasChildren ? countLeaves(children) : null
+
+  function commitChild() {
+    const name = childName.trim()
+    if (!name) return
+    onAddChild(subtask, name)
+    setChildName('')
+    setOpen(true)
+  }
+
   return (
-    <div className="flex items-center gap-2 py-1">
-      <input
-        type="checkbox"
-        checked={subtask.completed}
-        onChange={onToggle}
-        className="h-4 w-4 cursor-pointer"
-        style={{ accentColor: 'var(--color-primary)' }}
-      />
-      <span
-        className="flex-1 text-sm"
-        style={{
-          color: subtask.completed ? 'var(--color-muted-foreground)' : 'var(--color-foreground)',
-          textDecoration: subtask.completed ? 'line-through' : 'none',
-        }}
-      >
-        {subtask.name}
-      </span>
-      <button
-        onClick={onDelete}
-        className="rounded p-1 transition-colors hover:bg-(--color-surface-2)"
-        style={{ color: 'var(--color-muted)' }}
-        title="Delete subtask"
-      >
-        <Trash2 size={12} />
-      </button>
+    <div>
+      <div className="flex items-center gap-2 py-1">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          disabled={!hasChildren}
+          className="rounded p-0.5"
+          style={{
+            color: 'var(--color-muted)',
+            background: 'none',
+            border: 'none',
+            visibility: hasChildren ? 'visible' : 'hidden',
+            cursor: 'pointer',
+          }}
+          title={open ? 'Collapse' : 'Expand'}
+          aria-label={open ? 'Collapse' : 'Expand'}
+        >
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+        <input
+          type="checkbox"
+          checked={subtask.completed}
+          onChange={() => onToggle(subtask)}
+          className="h-4 w-4 cursor-pointer"
+          style={{ accentColor: 'var(--color-primary)' }}
+        />
+        <span
+          className="flex-1 text-sm"
+          style={{
+            color: subtask.completed ? 'var(--color-muted-foreground)' : 'var(--color-foreground)',
+            textDecoration: subtask.completed ? 'line-through' : 'none',
+          }}
+        >
+          {subtask.name}
+        </span>
+        {progress && (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{
+              backgroundColor: 'var(--color-surface-2)',
+              color: 'var(--color-muted-foreground)',
+            }}
+          >
+            {progress.done}/{progress.total}
+          </span>
+        )}
+        {canNest && (
+          <button
+            onClick={() => setAdding((v) => !v)}
+            className="rounded p-1 transition-colors hover:bg-(--color-surface-2)"
+            style={{ color: 'var(--color-muted)' }}
+            title="Add a sub-step"
+          >
+            <Plus size={12} />
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(subtask)}
+          className="rounded p-1 transition-colors hover:bg-(--color-surface-2)"
+          style={{ color: 'var(--color-muted)' }}
+          title={hasChildren ? 'Delete this step and everything under it' : 'Delete subtask'}
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+      {(hasChildren && open || adding) && (
+        <div
+          className="ml-2.5 pl-3"
+          style={{ borderLeft: '1px solid var(--color-border)' }}
+        >
+          {open && children.map((c) => (
+            <SubtaskNode
+              key={c.id}
+              subtask={c}
+              depth={depth + 1}
+              onToggle={onToggle}
+              onDelete={onDelete}
+              onAddChild={onAddChild}
+            />
+          ))}
+          {adding && (
+            <div className="my-1 flex items-center gap-2">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Add a sub-step…"
+                value={childName}
+                onChange={(e) => setChildName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitChild()
+                  if (e.key === 'Escape') { setAdding(false); setChildName('') }
+                }}
+                className="flex-1 rounded px-2 py-1 text-xs"
+                style={{
+                  backgroundColor: 'var(--color-surface-2)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={commitChild}
+                disabled={!childName.trim()}
+                className="rounded px-2 py-1 text-xs font-medium"
+                style={{
+                  backgroundColor: 'var(--color-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: childName.trim() ? 'pointer' : 'not-allowed',
+                  opacity: childName.trim() ? 1 : 0.6,
+                }}
+              >
+                Add
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -173,9 +291,10 @@ interface TaskCardProps {
   onRequestDelete: () => void
   onConfirmDelete: () => void
   onCancelDelete: () => void
-  onAddSubtask: (name: string) => void
+  onAddSubtask: (parent: Subtask | null, name: string) => void
   onToggleSubtask: (subtask: Subtask) => void
   onDeleteSubtask: (subtask: Subtask) => void
+  onExport: (withProgress: boolean) => void
 }
 
 function TaskCard(props: TaskCardProps): React.ReactElement {
@@ -183,7 +302,7 @@ function TaskCard(props: TaskCardProps): React.ReactElement {
     task, expanded, editing, saving, formError, deleteConfirm,
     onToggleExpanded, onToggleComplete, onStartEdit, onSaveEdit, onCancelEdit,
     onRequestDelete, onConfirmDelete, onCancelDelete,
-    onAddSubtask, onToggleSubtask, onDeleteSubtask,
+    onAddSubtask, onToggleSubtask, onDeleteSubtask, onExport,
   } = props
   const [newSubtask, setNewSubtask] = useState('')
   // dnd-kit sortable: native HTML5 DnD was unreliable in Electron on Windows,
@@ -193,8 +312,8 @@ function TaskCard(props: TaskCardProps): React.ReactElement {
     id: task.id,
   })
 
-  const completedSubs = task.subtasks.filter((s) => s.completed).length
-  const totalSubs = task.subtasks.length
+  // Leaf-based so nested steps count once each, not as parent + children.
+  const { done: completedSubs, total: totalSubs } = countLeaves(task.subtasks)
 
   if (editing) {
     return (
@@ -324,11 +443,13 @@ function TaskCard(props: TaskCardProps): React.ReactElement {
             )}
             <div className="space-y-0.5">
               {task.subtasks.map((sub) => (
-                <SubtaskRow
+                <SubtaskNode
                   key={sub.id}
                   subtask={sub}
-                  onToggle={() => onToggleSubtask(sub)}
-                  onDelete={() => onDeleteSubtask(sub)}
+                  depth={1}
+                  onToggle={onToggleSubtask}
+                  onDelete={onDeleteSubtask}
+                  onAddChild={onAddSubtask}
                 />
               ))}
             </div>
@@ -340,7 +461,7 @@ function TaskCard(props: TaskCardProps): React.ReactElement {
                 onChange={(e) => setNewSubtask(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newSubtask.trim()) {
-                    onAddSubtask(newSubtask.trim())
+                    onAddSubtask(null, newSubtask.trim())
                     setNewSubtask('')
                   }
                 }}
@@ -355,7 +476,7 @@ function TaskCard(props: TaskCardProps): React.ReactElement {
               <button
                 onClick={() => {
                   if (newSubtask.trim()) {
-                    onAddSubtask(newSubtask.trim())
+                    onAddSubtask(null, newSubtask.trim())
                     setNewSubtask('')
                   }
                 }}
@@ -371,6 +492,25 @@ function TaskCard(props: TaskCardProps): React.ReactElement {
               >
                 <Plus size={11} />
                 Add
+              </button>
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-xs" style={{ color: 'var(--color-muted)' }}>
+              <span className="flex items-center gap-1"><Download size={11} /> Export</span>
+              <button
+                onClick={() => onExport(false)}
+                className="underline-offset-2 hover:underline"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-muted-foreground)' }}
+                title="Save as a clean template (nothing checked) to share"
+              >
+                as template
+              </button>
+              <button
+                onClick={() => onExport(true)}
+                className="underline-offset-2 hover:underline"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-muted-foreground)' }}
+                title="Save including which steps are checked"
+              >
+                with progress
               </button>
             </div>
           </div>
@@ -533,13 +673,24 @@ export default function CharacterTasksPage(): React.ReactElement {
     }
   }
 
-  async function handleAddSubtask(taskID: number, name: string) {
+  // Cascade and roll-up completion live on the server (a parent completes when
+  // all its children do; checking a parent checks everything under it), so
+  // subtask mutations just re-fetch rather than duplicate that logic here.
+  async function refreshTasks() {
+    if (charID === null) return
+    const resp = await listCharacterTasks(charID)
+    setTasks(resp.tasks)
+  }
+
+  async function handleAddSubtask(taskID: number, parent: Subtask | null, name: string) {
     if (charID === null) return
     try {
-      const created = await createCharacterSubtask(charID, taskID, { name, completed: false })
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskID ? { ...t, subtasks: [...t.subtasks, created] } : t))
-      )
+      await createCharacterSubtask(charID, taskID, {
+        name,
+        completed: false,
+        parent_id: parent ? parent.id : null,
+      })
+      await refreshTasks()
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Failed to add subtask')
     }
@@ -547,25 +698,11 @@ export default function CharacterTasksPage(): React.ReactElement {
 
   async function handleToggleSubtask(taskID: number, sub: Subtask) {
     if (charID === null) return
-    const next = !sub.completed
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskID
-          ? { ...t, subtasks: t.subtasks.map((s) => (s.id === sub.id ? { ...s, completed: next } : s)) }
-          : t,
-      ),
-    )
     try {
-      await updateCharacterSubtask(charID, taskID, sub.id, { name: sub.name, completed: next })
+      await updateCharacterSubtask(charID, taskID, sub.id, { name: sub.name, completed: !sub.completed })
+      await refreshTasks()
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Failed to update subtask')
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskID
-            ? { ...t, subtasks: t.subtasks.map((s) => (s.id === sub.id ? { ...s, completed: sub.completed } : s)) }
-            : t,
-        ),
-      )
     }
   }
 
@@ -573,11 +710,28 @@ export default function CharacterTasksPage(): React.ReactElement {
     if (charID === null) return
     try {
       await deleteCharacterSubtask(charID, taskID, sub.id)
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskID ? { ...t, subtasks: t.subtasks.filter((s) => s.id !== sub.id) } : t)),
-      )
+      await refreshTasks()
     } catch (err: unknown) {
       setLoadError(err instanceof Error ? err.message : 'Failed to delete subtask')
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // let the same file be picked again
+    if (!file || charID === null) return
+    setLoadError(null)
+    try {
+      const parsed = JSON.parse(await file.text())
+      const created = await importCharacterTask(charID, parsed)
+      await refreshTasks()
+      setExpanded((prev) => new Set(prev).add(created.id))
+    } catch (err: unknown) {
+      setLoadError(
+        err instanceof SyntaxError
+          ? 'That file is not valid JSON.'
+          : err instanceof Error ? err.message : 'Failed to import task',
+      )
     }
   }
 
@@ -631,6 +785,25 @@ export default function CharacterTasksPage(): React.ReactElement {
           </div>
         </div>
         {activeChar && mode === 'idle' && (
+          <div className="flex items-center gap-2">
+          <label
+            className="flex cursor-pointer items-center gap-1.5 rounded px-3 py-1.5 text-sm"
+            style={{
+              backgroundColor: 'var(--color-surface-2)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-muted-foreground)',
+            }}
+            title="Import a task file (.pqtask.json) shared by another player"
+          >
+            <Upload size={14} />
+            Import
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+          </label>
           <button
             onClick={() => { setMode('creating'); setFormError(null) }}
             className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium"
@@ -644,6 +817,7 @@ export default function CharacterTasksPage(): React.ReactElement {
             <Plus size={14} />
             Add Task
           </button>
+          </div>
         )}
       </div>
 
@@ -731,9 +905,10 @@ export default function CharacterTasksPage(): React.ReactElement {
                   onRequestDelete={() => setDeleteConfirm(task.id)}
                   onConfirmDelete={() => handleDelete(task.id)}
                   onCancelDelete={() => setDeleteConfirm(null)}
-                  onAddSubtask={(name) => handleAddSubtask(task.id, name)}
+                  onAddSubtask={(parent, name) => handleAddSubtask(task.id, parent, name)}
                   onToggleSubtask={(sub) => handleToggleSubtask(task.id, sub)}
                   onDeleteSubtask={(sub) => handleDeleteSubtask(task.id, sub)}
+                  onExport={(withProgress) => downloadTaskFile(task, withProgress)}
                 />
               ))}
             </div>
