@@ -311,6 +311,14 @@ func (e *Engine) keyTargetTokenLocked(spell *db.Spell, targetName string, at tim
 	if targetName == "" || spell == nil || spell.Name == "" {
 		return targetName
 	}
+	// Beneficial spells land on players/pets, whose names are already unique,
+	// so there is nothing to disambiguate. Tagging them only splits one buff
+	// into two rows (tagged when the cast is correlated with a pipe target id,
+	// untagged when it isn't — another caster's cast, a missing id, or a new
+	// spawn id after zoning), and the old row then runs out beside the refresh.
+	if spell.GoodEffect != 0 {
+		return targetName
+	}
 	if e.lastCastTargetID == 0 || e.lastCastSpell == "" {
 		return targetName
 	}
@@ -1786,6 +1794,40 @@ func (e *Engine) onSpellLanded(landedAt time.Time, data logparser.SpellLandedDat
 		delete(e.timers, existingKey)
 		break
 	}
+	// A buff recast on the same recipient replaces the old row no matter how
+	// old it is or how it was keyed. The absorb loop above only merges rows
+	// younger than dedupGraceWindow, so a refresh whose key differs (combined
+	// "Resist Magic" vs "Group Resist Magic", an id-tagged vs untagged key)
+	// would otherwise leave the previous timer running beside the new one.
+	// Buffs only: same-named NPC debuffs and AoE mez rows must coexist.
+	if timer.Category == CategoryBuff {
+		for existingKey, existing := range e.timers {
+			if existingKey == key || existing.Category != CategoryBuff {
+				continue
+			}
+			if existing.TargetName == "" ||
+				normalizeNPCName(existing.TargetName) != normalizeNPCName(target) ||
+				!sameBuffFamily(existing, spellName, spell.ID) {
+				continue
+			}
+			if existing.DisplayThresholdSecs > 0 && timer.DisplayThresholdSecs == 0 {
+				timer.DisplayThresholdSecs = existing.DisplayThresholdSecs
+			}
+			if len(existing.TimerAlerts) > 0 && len(timer.TimerAlerts) == 0 {
+				timer.TimerAlerts = existing.TimerAlerts
+			}
+			if existing.BarColor != "" && timer.BarColor == "" {
+				timer.BarColor = existing.BarColor
+			}
+			if existing.Pinned {
+				timer.Pinned = true
+			}
+			if existing.CustomGroup != "" && timer.CustomGroup == "" {
+				timer.CustomGroup = existing.CustomGroup
+			}
+			delete(e.timers, existingKey)
+		}
+	}
 	// Pending-arm promotion: for deferred-render spells (mez), the
 	// trigger's metadata was stashed instead of creating a timer on
 	// cast-begin. Graft it onto the new timer now. The arm is NOT consumed
@@ -1916,6 +1958,33 @@ var ambiguousLandGroups = []ambiguousLandGroup{
 		repSpellID:  582, // Illusion: Human — a plain 360-tick / formula-3 illusion
 		memberIDs:   nil,
 	},
+}
+
+// landGroupIndex returns the index in ambiguousLandGroups of the group that a
+// timer named name / carrying spell id belongs to (by combined display name or
+// member spell id), or -1. Illusion has no member list, so it only matches by
+// its combined display name.
+func landGroupIndex(name string, id int) int {
+	for i := range ambiguousLandGroups {
+		g := &ambiguousLandGroups[i]
+		if g.displayName == name || (id > 0 && g.memberIDs[id]) {
+			return i
+		}
+	}
+	return -1
+}
+
+// sameBuffFamily reports whether an existing timer is the same buff as an
+// incoming (name, spellID): the same spell (sameSpellForDedup), or two names
+// from one ambiguousLandGroups entry — e.g. "Resist Magic" (the combined name
+// another caster's group cast resolves to) and "Group Resist Magic" (your own
+// cast). They are one buff on one recipient, so a refresh must replace it.
+func sameBuffFamily(existing *ActiveTimer, name string, spellID int) bool {
+	if sameSpellForDedup(existing, name, spellID) {
+		return true
+	}
+	a := landGroupIndex(existing.SpellName, existing.SpellID)
+	return a >= 0 && a == landGroupIndex(name, spellID)
 }
 
 // matchAmbiguousLandGroup returns the group whose members are EXACTLY the
