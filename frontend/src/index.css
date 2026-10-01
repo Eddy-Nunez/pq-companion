@@ -73,6 +73,16 @@ html {
   color-scheme: dark;
 }
 
+/* Native <select> popups are drawn by the OS/Chromium, not the page, so an
+   option inherits the select's foreground colour but NOT a transparent
+   background — on Windows that left light text on a white list. Give every
+   option an explicit dark surface so no select can regress to unreadable. */
+select option,
+select optgroup {
+  background-color: var(--color-surface-2);
+  color: var(--color-foreground);
+}
+
 /* Range sliders — paint the filled track in EQ gold everywhere. Without this,
    native range inputs fall back to each OS's default accent (blue on Windows,
    system grey on Mac), so the same slider looked different per-platform and

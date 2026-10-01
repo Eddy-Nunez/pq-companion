@@ -145,8 +145,9 @@ function SearchPane({ selectedId, onSelect }: SearchPaneProps): React.ReactEleme
           Expansion
         </label>
         <select
-          className="flex-1 rounded border bg-transparent px-1.5 py-0.5 text-xs outline-none"
+          className="flex-1 rounded border px-1.5 py-0.5 text-xs outline-none"
           style={{
+            backgroundColor: 'var(--color-surface-2)',
             borderColor: 'var(--color-border)',
             color: 'var(--color-foreground)',
           }}
