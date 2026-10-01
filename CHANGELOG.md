@@ -9,6 +9,21 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.25.1 — 2026-09-30
+
+Fixes from Monday's Vex Thal raid — duplicate buff timers, the second Kaas Thox loot table, Piper TTS in one ear, and trigger timer names — plus nested task lists with import/export.
+
+### Highlights
+- **Nested tasks** — steps can now nest three levels deep under a task, with collapse/expand, per-branch progress, and an add-sub-step button. Checking a parent checks everything under it, and a parent completes when all its steps do. Task progress counts individual steps rather than parents.
+- **Task import/export** — export any task as a clean template or with your progress to a `.pqtask.json` file, and import one from another player with the new Import button. Handy for sharing epic quest checklists.
+- **Second Kaas Thox loot table resolves after the first dies** — Vex Thal's same-name raid bosses die one at a time, so once one is killed (matched from your target, or from the first looted item that only one boss drops) the overlay stops showing its loot table for the other. The first boss of a night, pulled from 250+ units, can still show both tables.
+
+### Fixes
+- **Buff timers refresh instead of duplicating** — recasting Visions of Grandeur or Group Resist Magic (yours or another caster's) on the same person now replaces the running timer rather than leaving the old one to expire beside a new one.
+- **Piper/Kokoro TTS plays in both ears** — voices are mono, and some headsets played them in the left ear only; generated audio is now true stereo, including already-cached phrases.
+- **Trigger timer names accept templates** — `{1} {2}` or `{S1}: {S2}` in "Timer name from capture" (and the target/duration fields) now builds the name instead of printing stray curly brackets. A bare group number still works.
+- **Zones expansion dropdown is readable on Windows** — the option list no longer renders light text on a white background.
+
 ## v0.25.0 — 2026-09-28
 
 Refreshes the game database ahead of Planes of Power's launch, fixes the Bazaar Trader Tracker over-counting charged items, and closes two `#popflags` gaps found before they could bite anyone.
