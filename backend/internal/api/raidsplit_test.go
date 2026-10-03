@@ -186,3 +186,48 @@ func validSplitEncounter() *raidcomp.Encounter {
 		},
 	}
 }
+
+// TestRaidSplit_NoNullArrays pins the no-null contract: Go nil slices
+// marshal as JSON null and the report renderer indexes these arrays
+// unconditionally, so every list field must be [] even when empty (the
+// null-classes lesson, applied to the split report).
+func TestRaidSplit_NoNullArrays(t *testing.T) {
+	_, r, s := newRaidSplitTestRouter(t)
+	if err := s.SaveEncounter(validSplitEncounter()); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	for name, body := range map[string]map[string]any{
+		"small roster": { // everyone seats → empty unassigned
+			"encounter_id": "split-test",
+			"preference":   "trinity",
+			"roster": []map[string]any{
+				{"name": "Tank", "class": "war"},
+				{"name": "Heal", "class": "clr"},
+				{"name": "Dps", "class": "rog"},
+			},
+		},
+		"empty roster": {"encounter_id": "split-test", "preference": "trinity"},
+		"compless encounter": {"encounter_id": "no-comps", "preference": "trinity"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if name == "compless encounter" {
+				if err := s.SaveEncounter(&raidcomp.Encounter{ID: "no-comps", Name: "No Comps", Zone: "kael", Status: raidcomp.StatusActive}); err != nil {
+					t.Fatalf("save: %v", err)
+				}
+			}
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec := doReq(t, r, http.MethodPost, "/api/raids/split", b)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			for _, field := range []string{"groups", "unassigned", "min", "rec"} {
+				if strings.Contains(rec.Body.String(), `"`+field+`":null`) {
+					t.Errorf("response contains %q:null — nil slice leaked (body: %s)", field, rec.Body.String())
+				}
+			}
+		})
+	}
+}

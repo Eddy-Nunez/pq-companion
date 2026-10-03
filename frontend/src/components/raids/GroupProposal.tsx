@@ -158,13 +158,18 @@ function GroupCard({ group }: { group: ProposedGroup }): React.ReactElement {
 }
 
 export default function GroupProposal({ report }: Props): React.ReactElement {
+  // ?? [] guards: the backend's no-null contract makes these arrays always
+  // present, but stale responses (or a mid-upgrade backend) could still send
+  // null — render empty rather than crash (the null-classes lesson).
+  const groups = report.groups ?? []
+  const unassigned = report.unassigned ?? []
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3 text-sm flex-wrap" style={{ color: 'var(--color-muted-foreground)' }}>
         <Users size={14} />
         <span>
           Proposal for <span className="font-medium" style={{ color: 'var(--color-foreground)' }}>{report.encounter_name}</span>
-          {' '}· {report.groups.length} group{report.groups.length === 1 ? '' : 's'} of ≤{report.group_size} ·{' '}
+          {' '}· {groups.length} group{groups.length === 1 ? '' : 's'} of ≤{report.group_size} ·{' '}
           {report.preference} seating
         </span>
       </div>
@@ -181,12 +186,12 @@ export default function GroupProposal({ report }: Props): React.ReactElement {
       ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-        {report.groups.map((g) => (
+        {groups.map((g) => (
           <GroupCard key={g.number} group={g} />
         ))}
       </div>
 
-      {report.unassigned.length > 0 ? (
+      {unassigned.length > 0 ? (
         <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
           <div
             className="flex items-center gap-2 px-3 py-1.5"
@@ -194,10 +199,10 @@ export default function GroupProposal({ report }: Props): React.ReactElement {
           >
             <UserX size={13} style={{ color: 'var(--color-danger)' }} />
             <span className="text-sm font-semibold" style={{ color: 'var(--color-foreground)' }}>
-              Unseated ({report.unassigned.length})
+              Unseated ({unassigned.length})
             </span>
           </div>
-          {report.unassigned.map((u, i) => (
+          {unassigned.map((u, i) => (
             <div key={`${u.name}-${i}`} className="flex items-baseline gap-2 px-3 py-1.5 text-sm">
               <span style={{ color: 'var(--color-foreground)' }}>{u.name}</span>
               <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{u.class ?? 'unclassed'}</span>
@@ -207,7 +212,7 @@ export default function GroupProposal({ report }: Props): React.ReactElement {
         </div>
       ) : null}
 
-      <CoverageTable min={report.min} rec={report.rec} />
+      <CoverageTable min={report.min ?? []} rec={report.rec ?? []} />
     </div>
   )
 }

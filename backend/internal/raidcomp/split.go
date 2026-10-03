@@ -272,6 +272,11 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 		EncounterName: enc.Name,
 		Preference:    req.Preference,
 		GroupSize:     size,
+		// Nil slices marshal as JSON null; the frontend renders these as
+		// arrays unconditionally, so they must always be [] (same
+		// no-null rule as the taxonomy DTOs).
+		Unassigned: []Unassigned{},
+		Warnings:   []string{},
 	}
 	if len(enc.Comps) == 0 {
 		rep.Warnings = append(rep.Warnings, "encounter has no composition recorded — proposal seats members without comp roles")
@@ -315,7 +320,15 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 	}
 
 	rep.Groups = assembleGroups(ms, size)
+	// buildCoverage returns empty (non-nil) slices so min/rec are [] not
+	// null even when the encounter has no comps.
 	rep.Min, rep.Rec = buildCoverage(ordered, slots)
+	if rep.Min == nil {
+		rep.Min = []Coverage{}
+	}
+	if rep.Rec == nil {
+		rep.Rec = []Coverage{}
+	}
 	sort.Slice(rep.Unassigned, func(i, j int) bool { return rep.Unassigned[i].Name < rep.Unassigned[j].Name })
 	return rep, nil
 }
