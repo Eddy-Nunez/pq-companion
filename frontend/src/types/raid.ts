@@ -169,3 +169,71 @@ export interface RaidRoleProvisionResult {
   created: string[]
   present: string[]
 }
+
+// ── Group composition proposal (split) ───────────────────────────
+
+export type SplitPreference = 'trinity' | 'focused' | 'curated'
+
+export type CompLevelFill = 'min' | 'rec'
+
+export interface SplitWildcard {
+  kind: 'member' | 'class' | 'path' | 'any'
+  value?: string
+  member?: string
+  group?: number
+  max?: number
+  min?: number
+  locked?: boolean
+}
+
+export interface SplitRequest {
+  encounter_id: string
+  preference: SplitPreference
+  group_size?: number
+  respect_existing_groups?: boolean
+  wildcards?: SplitWildcard[]
+  roster?: CheckRosterInput[]
+}
+
+export interface SplitSlot {
+  member: string
+  class?: ClassCode
+  role: string
+  sub_role?: string
+  path: string
+  label: string
+  level?: CompLevelFill
+  group: number
+  rank?: string
+}
+
+export interface ProposedGroup {
+  number: number
+  size: number
+  slots: SplitSlot[]
+}
+
+export interface SplitUnassigned {
+  name: string
+  class?: ClassCode
+  reason: string
+}
+
+export interface SplitCoverage {
+  path: string
+  label: string
+  need: number
+  placed: number
+}
+
+export interface SplitReport {
+  encounter_id: string
+  encounter_name: string
+  preference: SplitPreference
+  group_size: number
+  groups: ProposedGroup[]
+  unassigned: SplitUnassigned[]
+  min: SplitCoverage[]
+  rec: SplitCoverage[]
+  warnings?: string[]
+}

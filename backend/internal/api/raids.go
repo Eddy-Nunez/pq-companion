@@ -270,6 +270,27 @@ func (h *raidsHandler) deleteEncounter(w http.ResponseWriter, r *http.Request) {
 
 // ── Composition check ──────────────────────────────────────────────────────
 
+// splitRosterInput is one manual roster row for a split proposal. Group is
+// optional ("1".."12" like the live Zeal roster); rank likewise.
+type splitRosterInput struct {
+	Name  string `json:"name"`
+	Class string `json:"class"`
+	Group string `json:"group,omitempty"`
+	Rank  string `json:"rank,omitempty"`
+}
+
+// splitRequest asks for a group-composition proposal: a target encounter,
+// a grouping preference, and an optional manual roster (live roster is used
+// otherwise — same roster-source convention as the check endpoint).
+type splitRequest struct {
+	EncounterID           string                   `json:"encounter_id"`
+	Preference            string                   `json:"preference"`
+	GroupSize             int                      `json:"group_size,omitempty"`
+	RespectExistingGroups bool                     `json:"respect_existing_groups,omitempty"`
+	Wildcards             []raidcomp.Wildcard      `json:"wildcards,omitempty"`
+	Roster                []splitRosterInput       `json:"roster,omitempty"`
+}
+
 // checkCompRequest asks for a composition check. roster is optional: when
 // omitted (or empty), the live Zeal roster snapshot is used. Members' classes
 // accept either a taxonomy code ("sk") or a class name ("Shadow Knight").
@@ -327,6 +348,70 @@ func (h *raidsHandler) checkComp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, raidcomp.Check(leaves, enc, members))
+}
+
+// splitComp generates a group-composition proposal (the "split" page):
+// seats the roster into groups against the encounter's target composition
+// using the requested preference (trinity | focused | curated). Pure
+// proposal — nothing is persisted.
+func (h *raidsHandler) splitComp(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	var req splitRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.EncounterID == "" {
+		writeError(w, http.StatusBadRequest, "encounter_id required")
+		return
+	}
+	enc, err := h.store.GetEncounter(req.EncounterID)
+	if errors.Is(err, raidcomp.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "raid encounter not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load raid encounter: "+err.Error())
+		return
+	}
+	leaves, err := h.store.Leaves()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load role taxonomy: "+err.Error())
+		return
+	}
+
+	var members []raidcomp.RosterMember
+	if len(req.Roster) > 0 {
+		for _, m := range req.Roster {
+			code, _ := raidcomp.CodeForInput(m.Class)
+			members = append(members, raidcomp.RosterMember{
+				Name: m.Name, Class: code, Group: m.Group, Rank: m.Rank,
+			})
+		}
+	} else {
+		snap, seen := h.roster.Get()
+		if seen {
+			for _, m := range snap.Members {
+				members = append(members, raidcomp.RosterMember{
+					Name: m.Name, Class: m.Code, Level: m.Level, Group: m.Group, Rank: m.Rank,
+				})
+			}
+		}
+	}
+
+	rep, err := raidcomp.Split(leaves, enc, raidcomp.SplitRequest{
+		Preference:            raidcomp.SplitPreference(req.Preference),
+		GroupSize:             req.GroupSize,
+		RespectExistingGroups: req.RespectExistingGroups,
+		Wildcards:             req.Wildcards,
+	}, members)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 // decodeJSON decodes a JSON request body with unknown fields rejected and a

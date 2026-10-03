@@ -3423,6 +3423,8 @@ import type {
   RaidImportCommitRequest,
   RaidImportCommitResult,
   RaidRoleProvisionResult,
+  SplitRequest,
+  SplitReport,
 } from '../types/raid'
 
 export function getRaidTaxonomy(): Promise<RaidTaxonomy> {
@@ -3489,4 +3491,8 @@ export function commitRaidImport(req: RaidImportCommitRequest): Promise<RaidImpo
 
 export function provisionRaidRoles(paths: string[]): Promise<RaidRoleProvisionResult> {
   return post<RaidRoleProvisionResult>('/api/raids/roles/provision', { paths })
+}
+
+export function splitRaidComp(req: SplitRequest): Promise<SplitReport> {
+  return post<SplitReport>('/api/raids/split', req)
 }

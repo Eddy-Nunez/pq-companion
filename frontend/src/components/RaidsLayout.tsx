@@ -1,6 +1,6 @@
 import React from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Users, ShieldCheck, PencilRuler } from 'lucide-react'
+import { Users, ShieldCheck, PencilRuler, GitFork } from 'lucide-react'
 
 interface RaidTab {
   to: string
@@ -11,6 +11,7 @@ interface RaidTab {
 const TABS: RaidTab[] = [
   { to: '/raids', label: 'Raid Summary', icon: <Users size={14} /> },
   { to: '/raids/check', label: 'Composition Check', icon: <ShieldCheck size={14} /> },
+  { to: '/raids/split', label: 'Group Proposal', icon: <GitFork size={14} /> },
   { to: '/raids/editor', label: 'Raid Editor', icon: <PencilRuler size={14} /> },
 ]
 
