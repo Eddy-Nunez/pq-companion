@@ -354,3 +354,177 @@ func TestSplit_RespectExistingGroupsKeepsLiveGroupsTogether(t *testing.T) {
 		t.Errorf("live group 3 held together: want >=5 members in group 3, got %d (groups %+v)", inG3, rep.Groups)
 	}
 }
+
+// ── cohort mode (full template per cohort) ─────────────────────────────────
+
+// cohortComp: each cohort targets the FULL template — 1 defensive tank,
+// 2 CH clerics, 3 damage = 6 members per raid.
+func cohortComp(id string) *Encounter {
+	return &Encounter{
+		ID: id, Name: "Cohort Encounter", Zone: "kael", Status: StatusActive,
+		Comps: []CompRow{
+			{Role: "tank", Sub: "defensive", Min: 1, Rec: 1},
+			{Role: "healer", Sub: "ch_cleric", Min: 2, Rec: 2},
+			{Role: "damage", Min: 3, Rec: 3},
+		},
+	}
+}
+
+func cohortRoster() []RosterMember {
+	members := []RosterMember{
+		{Name: "TankA", Class: CodeWarrior},
+		{Name: "TankB", Class: CodeWarrior},
+		{Name: "ClericA", Class: CodeCleric},
+		{Name: "ClericB", Class: CodeCleric},
+		{Name: "ClericC", Class: CodeCleric},
+		{Name: "ClericD", Class: CodeCleric},
+	}
+	for i := 1; i <= 6; i++ {
+		members = append(members, RosterMember{Name: fmt.Sprintf("Rogue%02d", i), Class: CodeRogue})
+	}
+	return members
+}
+
+func cohortCoverage(t *testing.T, cr CohortReport, path string) Coverage {
+	t.Helper()
+	for _, c := range cr.Min {
+		if c.Path == path {
+			return c
+		}
+	}
+	t.Fatalf("cohort %d has no coverage row for %s", cr.Number, path)
+	return Coverage{}
+}
+
+func TestSplit_Cohorts_FairScarceClassSplit(t *testing.T) {
+	// 4 clerics, 2 cohorts each needing 2: the interleave must deal them
+	// 2/2, not 3/1 or 4/0.
+	rep, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 2}, cohortRoster())
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	if len(rep.Cohorts) != 2 {
+		t.Fatalf("want 2 cohorts, got %d", len(rep.Cohorts))
+	}
+	for _, cr := range rep.Cohorts {
+		cov := cohortCoverage(t, cr, "healer.ch_cleric")
+		if cov.Placed != 2 {
+			t.Errorf("raid %d clerics placed %d, want 2 (fair split)", cr.Number, cov.Placed)
+		}
+		if cov.Placed < cov.Need && len(cr.Warnings) == 0 {
+			t.Errorf("raid %d short of MIN but no warning", cr.Number)
+		}
+	}
+}
+
+func TestSplit_Cohorts_ShortfallWarnsHonestly(t *testing.T) {
+	// 3 clerics, 2 cohorts each needing 2 → 2/1 and raid 2 warns.
+	members := []RosterMember{
+		{Name: "TankA", Class: CodeWarrior},
+		{Name: "TankB", Class: CodeWarrior},
+		{Name: "ClericA", Class: CodeCleric},
+		{Name: "ClericB", Class: CodeCleric},
+		{Name: "ClericC", Class: CodeCleric},
+		{Name: "Rogue01", Class: CodeRogue},
+		{Name: "Rogue02", Class: CodeRogue},
+		{Name: "Rogue03", Class: CodeRogue},
+	}
+	rep, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 2}, members)
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	c1 := cohortCoverage(t, rep.Cohorts[0], "healer.ch_cleric")
+	c2 := cohortCoverage(t, rep.Cohorts[1], "healer.ch_cleric")
+	if c1.Placed != 2 || c2.Placed != 1 {
+		t.Errorf("cleric split = %d/%d, want 2/1 (interleave order)", c1.Placed, c2.Placed)
+	}
+	found := false
+	for _, w := range rep.Cohorts[1].Warnings {
+		if strings.Contains(w, "ch_cleric") || strings.Contains(w, "CH Cleric") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("raid 2 should carry a MIN shortfall warning; warnings=%v", rep.Cohorts[1].Warnings)
+	}
+}
+
+func TestSplit_Cohorts_EveryoneSeated(t *testing.T) {
+	rep, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 2}, cohortRoster())
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	total := 0
+	for _, cr := range rep.Cohorts {
+		for _, g := range cr.Groups {
+			if len(g.Slots) > g.Size {
+				t.Errorf("raid %d group %d overfull: %d/%d", cr.Number, g.Number, len(g.Slots), g.Size)
+			}
+			total += len(g.Slots)
+		}
+		if cr.RosterCount != 6 {
+			t.Errorf("raid %d roster_count = %d, want 6 (12 members / 2 cohorts)", cr.Number, cr.RosterCount)
+		}
+	}
+	if total != 12 {
+		t.Errorf("seated %d of 12 members", total)
+	}
+	if len(rep.Unassigned) != 0 {
+		t.Errorf("cohort mode should seat everyone; unassigned=%v", rep.Unassigned)
+	}
+}
+
+func TestSplit_Cohorts_LiveGroupSeedingKeepsTowerGroups(t *testing.T) {
+	// 12 members across 4 live groups: groups 1,2 → raid 1; 3,4 → raid 2.
+	var members []RosterMember
+	for g := 1; g <= 4; g++ {
+		for i := 0; i < 3; i++ {
+			members = append(members, RosterMember{
+				Name:  fmt.Sprintf("G%dm%d", g, i),
+				Class: CodeRogue,
+				Group: fmt.Sprintf("%d", g),
+			})
+		}
+	}
+	rep, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 2}, members)
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	for _, cr := range rep.Cohorts {
+		want := cr.Number // raid 1 = live groups 1,2; raid 2 = 3,4
+		for _, g := range cr.Groups {
+			for _, s := range g.Slots {
+				prefix := fmt.Sprintf("G%d", want*2-1)
+				prefix2 := fmt.Sprintf("G%d", want*2)
+				if !strings.HasPrefix(s.Member, prefix) && !strings.HasPrefix(s.Member, prefix2) {
+					t.Errorf("raid %d group %d holds %q — live groups leaked across cohorts", cr.Number, g.Number, s.Member)
+				}
+			}
+		}
+	}
+}
+
+func TestSplit_Cohorts_RejectsFocusedAndCurated(t *testing.T) {
+	if _, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitFocused, Cohorts: 2}, cohortRoster()); err == nil {
+		t.Fatal("focused + cohorts must be rejected")
+	}
+	if _, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitCurated, Cohorts: 2}, cohortRoster()); err == nil {
+		t.Fatal("curated + cohorts must be rejected")
+	}
+	if _, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 7}, cohortRoster()); err == nil {
+		t.Fatal("cohorts 7 must be rejected (max 6)")
+	}
+}
+
+func TestSplit_Cohorts_LegacyShapeForSingleRaid(t *testing.T) {
+	rep, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 1}, cohortRoster())
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	if len(rep.Groups) == 0 || len(rep.Min) == 0 {
+		t.Fatal("cohorts=1 must populate the legacy fields")
+	}
+	if len(rep.Cohorts) != 1 || len(rep.Cohorts[0].Groups) == 0 {
+		t.Fatal("cohorts=1 must mirror the legacy shape as one cohort entry")
+	}
+}

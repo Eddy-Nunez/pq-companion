@@ -68,6 +68,12 @@ type SplitRequest struct {
 	RespectExistingGroups bool `json:"respect_existing_groups,omitempty"`
 	// Wildcards only apply to SplitCurated.
 	Wildcards []Wildcard `json:"wildcards,omitempty"`
+	// Cohorts splits the roster into this many smaller raids, each targeting
+	// the FULL encounter template (best effort — per-cohort coverage and
+	// warnings report shortfalls; see docs/raid-split-cohorts-plan.md).
+	// 0/1 = single raid (legacy shape). Trinity only: cohort-scoped curated
+	// rules and focused clustering are not supported yet.
+	Cohorts int `json:"cohorts,omitempty"`
 }
 
 // Slot is one proposed assignment: a member filling a comp-role slot (or a
@@ -121,10 +127,30 @@ type SplitReport struct {
 	Min           []Coverage      `json:"min"`
 	Rec           []Coverage      `json:"rec"`
 	Warnings      []string        `json:"warnings,omitempty"`
+	// Cohorts carries the per-cohort reports (docs/raid-split-cohorts-plan.md).
+	// Single-raid requests populate exactly one entry mirroring the legacy
+	// fields above; cohort mode (>1) is authoritative there and leaves the
+	// legacy fields empty — never null (the no-null rule).
+	Cohorts []CohortReport `json:"cohorts"`
+}
+
+// CohortReport is one smaller raid produced by cohort mode: its own groups
+// and its own MIN/REC coverage verdict against the full template.
+type CohortReport struct {
+	Number      int             `json:"number"`
+	Groups      []ProposedGroup `json:"groups"`
+	Min         []Coverage      `json:"min"`
+	Rec         []Coverage      `json:"rec"`
+	RosterCount int             `json:"roster_count"`
+	Warnings    []string        `json:"warnings,omitempty"`
 }
 
 // maxSplitGroups mirrors EQ's raid cap: 12 groups of 6.
 const maxSplitGroups = 12
+
+// maxSplitCohorts caps cohort mode (docs/raid-split-cohorts-plan.md): beyond
+// six smaller raids the per-cohort comps stop being meaningful.
+const maxSplitCohorts = 6
 
 // splitMember is the internal roster member shape plus seat/role state.
 type splitMember struct {
@@ -135,6 +161,11 @@ type splitMember struct {
 	group   int // proposed group (0 = unseated)
 	slot    *splitSlot
 	pinned  bool
+	// cohort mode: cohort is the member's raid (0 = unset in the legacy
+	// single-raid path); localGrp is their live group renumbered within its
+	// cohort block (0 = no live group).
+	cohort   int
+	localGrp int
 }
 
 // splitSlot is one open comp slot to fill.
@@ -142,6 +173,7 @@ type splitSlot struct {
 	leaf   RoleLeaf
 	level  CompLevel
 	bucket int
+	cohort int // cohort mode: which raid this slot belongs to (0 = legacy)
 	filled bool
 	member *splitMember
 }
@@ -266,6 +298,18 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 	if size < 1 || size > 12 {
 		return nil, fmt.Errorf("raidcomp: group_size must be 1..12, got %d", size)
 	}
+	if req.Cohorts < 0 || req.Cohorts > maxSplitCohorts {
+		return nil, fmt.Errorf("raidcomp: cohorts must be 0..%d, got %d", maxSplitCohorts, req.Cohorts)
+	}
+	if req.Cohorts > 1 {
+		// Cohort mode is trinity-only in v1 (docs/raid-split-cohorts-plan.md):
+		// curated group pins are ambiguous across cohorts and focused class
+		// clustering contradicts pre-formed tower groups.
+		if req.Preference != SplitTrinity {
+			return nil, fmt.Errorf("raidcomp: %s does not support cohorts yet (trinity only)", req.Preference)
+		}
+		return splitCohorts(leaves, enc, req, members)
+	}
 
 	rep := &SplitReport{
 		EncounterID:   enc.ID,
@@ -277,6 +321,7 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 		// no-null rule as the taxonomy DTOs).
 		Unassigned: []Unassigned{},
 		Warnings:   []string{},
+		Cohorts:    []CohortReport{},
 	}
 	if len(enc.Comps) == 0 {
 		rep.Warnings = append(rep.Warnings, "encounter has no composition recorded — proposal seats members without comp roles")
@@ -319,7 +364,7 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 		applyCuratedMinChecks(req.Wildcards, ms, rep)
 	}
 
-	rep.Groups = assembleGroups(ms, size)
+	rep.Groups = assembleGroups(ms, 0, size)
 	// buildCoverage returns empty (non-nil) slices so min/rec are [] not
 	// null even when the encounter has no comps.
 	rep.Min, rep.Rec = buildCoverage(ordered, slots)
@@ -330,6 +375,18 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 		rep.Rec = []Coverage{}
 	}
 	sort.Slice(rep.Unassigned, func(i, j int) bool { return rep.Unassigned[i].Name < rep.Unassigned[j].Name })
+	// Mirror the legacy shape as a single-entry Cohorts list so clients can
+	// consume one uniform shape (the UI reads cohorts first).
+	seated := 0
+	for i := range ms {
+		if ms[i].group != 0 {
+			seated++
+		}
+	}
+	rep.Cohorts = append(rep.Cohorts, CohortReport{
+		Number: 1, Groups: rep.Groups, Min: rep.Min, Rec: rep.Rec,
+		RosterCount: seated, Warnings: rep.Warnings,
+	})
 	return rep, nil
 }
 
@@ -743,13 +800,15 @@ func capDescribe(c *curatedCaps, code ClassCode) string {
 }
 
 // assembleGroups turns seat state into the report's group list, carrying
-// each member's slot metadata (role/level) onto their seat row.
-func assembleGroups(ms []splitMember, size int) []ProposedGroup {
+// each member's slot metadata (role/level) onto their seat row. cohort
+// filters the member set: 0 = all (legacy single-raid path), otherwise only
+// members of that cohort.
+func assembleGroups(ms []splitMember, cohort, size int) []ProposedGroup {
 	byGroup := map[int][]Slot{}
 	maxGrp := 0
 	for i := range ms {
 		m := &ms[i]
-		if m.group == 0 {
+		if m.group == 0 || (cohort != 0 && m.cohort != cohort) {
 			continue
 		}
 		if m.group > maxGrp {
@@ -832,4 +891,282 @@ func applyCuratedMinChecks(rules []Wildcard, ms []splitMember, rep *SplitReport)
 				w.Kind, w.Value, w.Min, n))
 		}
 	}
+}
+
+// ── cohort mode (docs/raid-split-cohorts-plan.md) ──────────────────────────
+
+// splitCohorts partitions the roster into K smaller raids, each targeting the
+// FULL encounter template (best effort). Trinity only.
+//
+// Pipeline: per-cohort woven full-template slots → live-group cohort seeding
+// (distinct live groups chunked into K contiguous blocks — pre-formed tower
+// groups stay intact) → interleaved allocation (cohorts round-robin per slot
+// index, so scarce classes spread evenly; seeded members prefer their own
+// cohort) → free-agent fill distribution (smallest cohort first) → per-cohort
+// layout (seeded members at their live group renumbered within its block,
+// everything else in woven order via the group cursor) → per-cohort coverage
+// and MIN-shortfall warnings.
+func splitCohorts(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []RosterMember) (*SplitReport, error) {
+	K := req.Cohorts
+	size := req.GroupSize
+	if size <= 0 {
+		size = 6
+	}
+	rep := &SplitReport{
+		EncounterID:   enc.ID,
+		EncounterName: enc.Name,
+		Preference:    req.Preference,
+		GroupSize:     size,
+		// Legacy fields stay empty (never null) in cohort mode; the UI reads
+		// the Cohorts list.
+		Groups:     []ProposedGroup{},
+		Unassigned: []Unassigned{},
+		Min:        []Coverage{},
+		Rec:        []Coverage{},
+		Warnings:   []string{},
+		Cohorts:    make([]CohortReport, 0, K),
+	}
+	if len(enc.Comps) == 0 {
+		rep.Warnings = append(rep.Warnings, "encounter has no composition recorded — proposal seats members without comp roles")
+	}
+
+	ordered := orderedSplitLeaves(leaves, enc)
+
+	// Per-cohort woven full-template slots, tagged with their cohort.
+	cohortSlots := make([][]splitSlot, K+1)
+	for c := 1; c <= K; c++ {
+		s := buildSplitSlots(ordered)
+		weave(s)
+		for i := range s {
+			s[i].cohort = c
+		}
+		cohortSlots[c] = s
+	}
+
+	// Resolve members.
+	ms := make([]splitMember, 0, len(members))
+	for _, m := range members {
+		if m.Name == "" {
+			continue
+		}
+		ms = append(ms, splitMember{name: m.Name, code: m.Class, liveGrp: m.Group, rank: m.Rank})
+	}
+
+	// Cohort seeding: chunk the DISTINCT live group numbers present into K
+	// contiguous blocks (sorted, near-equal). Members without a live group
+	// are free agents.
+	var liveNumbers []int
+	seen := map[int]bool{}
+	for i := range ms {
+		if n := liveGroupNum(ms[i].liveGrp); n > 0 && !seen[n] {
+			seen[n] = true
+			liveNumbers = append(liveNumbers, n)
+		}
+	}
+	sort.Ints(liveNumbers)
+	cohortOfLive := map[int]int{}
+	localOfLive := map[int]int{}
+	idx := 0
+	for c := 1; c <= K && idx < len(liveNumbers); c++ {
+		blockLen := len(liveNumbers)/K + boolToInt(c <= len(liveNumbers)%K)
+		for j := 0; j < blockLen && idx < len(liveNumbers); j++ {
+			cohortOfLive[liveNumbers[idx]] = c
+			localOfLive[liveNumbers[idx]] = j + 1
+			idx++
+		}
+	}
+	for i := range ms {
+		if n := liveGroupNum(ms[i].liveGrp); n > 0 {
+			if c, ok := cohortOfLive[n]; ok {
+				ms[i].cohort = c
+				ms[i].localGrp = localOfLive[n]
+			}
+		}
+	}
+
+	// Interleaved allocation: walk the cohorts round-robin per slot index so
+	// scarce classes alternate between cohorts instead of cohort 1 hoarding
+	// them. Seeded members prefer their own cohort's slots; ties by name.
+	maxLen := 0
+	for c := 1; c <= K; c++ {
+		if len(cohortSlots[c]) > maxLen {
+			maxLen = len(cohortSlots[c])
+		}
+	}
+	for i := 0; i < maxLen; i++ {
+		for c := 1; c <= K; c++ {
+			if i >= len(cohortSlots[c]) {
+				continue
+			}
+			s := &cohortSlots[c][i]
+			m := pickCohortMember(s, ms)
+			if m == nil {
+				continue
+			}
+			m.slot = s
+			s.filled = true
+			s.member = m
+		}
+	}
+
+	// Free agents slotted into a cohort belong to it from here on.
+	for i := range ms {
+		if ms[i].cohort == 0 && ms[i].slot != nil {
+			ms[i].cohort = ms[i].slot.cohort
+		}
+	}
+
+	// Headcount per cohort, then free-agent fill distribution round-robin to
+	// the smallest cohort (everyone lands in some raid — the roster IS the
+	// pool being split).
+	counts := make([]int, K+1)
+	for i := range ms {
+		if ms[i].cohort != 0 {
+			counts[ms[i].cohort]++
+		}
+	}
+	var free []*splitMember
+	for i := range ms {
+		if ms[i].cohort == 0 {
+			free = append(free, &ms[i])
+		}
+	}
+	sort.Slice(free, func(i, j int) bool { return free[i].name < free[j].name })
+	for _, m := range free {
+		smallest := 1
+		for c := 2; c <= K; c++ {
+			if counts[c] < counts[smallest] {
+				smallest = c
+			}
+		}
+		m.cohort = smallest
+		counts[smallest]++
+	}
+
+	// Per-cohort layout and reports.
+	for c := 1; c <= K; c++ {
+		cr := CohortReport{
+			Number: c, Groups: []ProposedGroup{}, Min: []Coverage{}, Rec: []Coverage{}, Warnings: []string{},
+		}
+		cr.RosterCount = counts[c]
+		if counts[c] == 0 {
+			cr.Warnings = append(cr.Warnings, fmt.Sprintf("raid %d has no members — roster too small for %d cohorts", c, K))
+			rep.Cohorts = append(rep.Cohorts, cr)
+			continue
+		}
+		budget := (counts[c] + size - 1) / size // groups this cohort fields
+		tracker := newGroupTracker(size)
+
+		// Seeded members seat at their live group renumbered within its
+		// block (when it fits the cohort's group budget).
+		for i := range ms {
+			m := &ms[i]
+			if m.cohort != c || m.localGrp == 0 || m.group != 0 {
+				continue
+			}
+			if m.localGrp <= budget && tracker.space(m.localGrp) {
+				tracker.seat(m.localGrp)
+				m.group = m.localGrp
+			}
+		}
+
+		// Slot members seat in woven order via the cursor (the trinity shape).
+		gi := 1
+		for si := range cohortSlots[c] {
+			s := &cohortSlots[c][si]
+			if !s.filled {
+				continue
+			}
+			m := s.member
+			if m.group != 0 {
+				continue
+			}
+			for gi <= maxSplitGroups && !tracker.space(gi) {
+				gi++
+			}
+			if gi > maxSplitGroups {
+				break
+			}
+			tracker.seat(gi)
+			m.group = gi
+		}
+
+		// Any cohort member still unseated (fills, seeded overflow): cursor.
+		for i := range ms {
+			m := &ms[i]
+			if m.cohort != c || m.group != 0 {
+				continue
+			}
+			for gi <= maxSplitGroups && !tracker.space(gi) {
+				gi++
+			}
+			if gi > maxSplitGroups {
+				break
+			}
+			tracker.seat(gi)
+			m.group = gi
+		}
+
+		cr.Groups = assembleGroups(ms, c, size)
+		cr.Min, cr.Rec = buildCoverage(ordered, cohortSlots[c])
+		if cr.Min == nil {
+			cr.Min = []Coverage{}
+		}
+		if cr.Rec == nil {
+			cr.Rec = []Coverage{}
+		}
+		for _, row := range cr.Min {
+			if gap := row.Need - row.Placed; gap > 0 {
+				cr.Warnings = append(cr.Warnings, fmt.Sprintf(
+					"raid %d: %s %d/%d of MIN (short %d)", c, row.Label, row.Placed, row.Need, gap))
+			}
+		}
+		rep.Cohorts = append(rep.Cohorts, cr)
+	}
+	return rep, nil
+}
+
+// pickCohortMember selects the best eligible member for a cohort slot:
+// members seeded into the slot's cohort first, then free agents; ties break
+// by name. Members seeded into a DIFFERENT cohort are never eligible.
+func pickCohortMember(s *splitSlot, ms []splitMember) *splitMember {
+	var best *splitMember
+	for i := range ms {
+		m := &ms[i]
+		if !m.eligible(s) {
+			continue
+		}
+		if m.cohort != 0 && m.cohort != s.cohort {
+			continue
+		}
+		if best == nil {
+			best = m
+			continue
+		}
+		as, bs := cohortScore(m, s), cohortScore(best, s)
+		if as != bs {
+			if as > bs {
+				best = m
+			}
+			continue
+		}
+		if m.name < best.name {
+			best = m
+		}
+	}
+	return best
+}
+
+func cohortScore(m *splitMember, s *splitSlot) int {
+	if m.cohort == s.cohort {
+		return 2
+	}
+	return 1
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
