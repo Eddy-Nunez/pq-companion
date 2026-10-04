@@ -23,6 +23,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -88,6 +89,9 @@ func loadScenario(path string) ([]zealpipe.SimRaidMember, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	// Editors and PowerShell's UTF8 writer commonly add a BOM; Go's
+	// encoding/json rejects it, so strip one if present.
+	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
 	var wrapper struct {
 		Zone    int                      `json:"zone"`
 		Members []zealpipe.SimRaidMember `json:"members"`
