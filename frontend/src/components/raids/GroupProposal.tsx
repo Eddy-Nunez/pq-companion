@@ -9,7 +9,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
-import { Users, UserX, AlertTriangle, ShieldCheck, GripVertical } from 'lucide-react'
+import { Users, UserX, AlertTriangle, ShieldCheck, Crown, GripVertical } from 'lucide-react'
 import type {
   CohortReport,
   CompLevelFill,
@@ -369,6 +369,10 @@ function SeatRow({ slot, cohort, groupId, index, interactive, stripe, classNames
     [setDragRef, setDropRef],
   )
   const className = classNames?.[slot.class ?? '']
+  // Slot 1 of every group is the Group Leader seat — the label belongs to
+  // the POSITION, not the person, so dragging anyone into slot 1 makes them
+  // that proposed group's leader and the label never moves.
+  const leaderSeat = index === 0
   return (
     <div
       ref={setRef}
@@ -378,9 +382,19 @@ function SeatRow({ slot, cohort, groupId, index, interactive, stripe, classNames
       style={isOver && interactive ? { ...dropHighlight, backgroundColor: 'var(--color-surface-2)' } : undefined}
     >
       {interactive ? <GripVertical size={12} className="opacity-40" style={{ color: 'var(--color-muted-foreground)' }} /> : null}
-      <span className="text-sm truncate" title={slot.rank ? `${slot.member} · ${slot.rank}` : slot.member} style={{ color: 'var(--color-foreground)' }}>
+      <span className="text-sm truncate flex items-center gap-1.5" title={slot.member} style={{ color: 'var(--color-foreground)' }}>
         {slot.member}
-        {slot.rank ? <span className="text-[11px] opacity-60"> · {slot.rank}</span> : null}
+        {leaderSeat ? (
+          <span
+            className="inline-flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded font-medium shrink-0"
+            title="Slot 1 is the Group Leader seat — whoever sits here leads this proposed group"
+            style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }}
+          >
+            <Crown size={10} /> Group Leader
+          </span>
+        ) : slot.rank ? (
+          <span className="text-[11px] opacity-60 shrink-0">{slot.rank}</span>
+        ) : null}
       </span>
       <span className="text-xs" title={className ? slot.class : undefined} style={{ color: 'var(--color-muted-foreground)' }}>
         {className ?? slot.class ?? '—'}
