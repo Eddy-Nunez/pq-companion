@@ -111,6 +111,9 @@ export default function RaidSplitPage(): React.ReactElement {
   const [respectGroups, setRespectGroups] = useState(true)
   const [wildcards, setWildcards] = useState<SplitWildcard[]>([])
   const [report, setReport] = useState<SplitReport | null>(null)
+  // adjusted = the user hand-edited the proposal via drag-and-drop since the
+  // last generate; a regenerate replaces the whole report and resets it.
+  const [adjusted, setAdjusted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [splitError, setSplitError] = useState('')
 
@@ -135,6 +138,7 @@ export default function RaidSplitPage(): React.ReactElement {
         wildcards: preference === 'curated' && wildcards.length > 0 ? wildcards : undefined,
       })
       setReport(rep)
+      setAdjusted(false)
     } catch (err) {
       setSplitError(err instanceof Error ? err.message : String(err))
       setReport(null)
@@ -176,6 +180,15 @@ export default function RaidSplitPage(): React.ReactElement {
         >
           <Play size={14} /> {busy ? 'Proposing…' : 'Generate proposal'}
         </button>
+        {adjusted ? (
+          <span
+            className="text-[11px] px-1.5 py-0.5 rounded font-medium"
+            style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+            title="Proposal hand-edited via drag-and-drop — regenerate to start over"
+          >
+            manually adjusted
+          </span>
+        ) : null}
         <button
           onClick={() => void refresh()}
           disabled={refreshing}
@@ -277,7 +290,13 @@ export default function RaidSplitPage(): React.ReactElement {
       ) : null}
 
       {report ? (
-        <GroupProposal report={report} />
+        <GroupProposal
+          report={report}
+          onEdit={(next) => {
+            setReport(next)
+            setAdjusted(true)
+          }}
+        />
       ) : (
         <div className="text-sm py-6 text-center" style={{ color: 'var(--color-muted-foreground)' }}>
           Pick an encounter and generate a proposal to see suggested groups.
