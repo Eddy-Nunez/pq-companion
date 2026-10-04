@@ -30,14 +30,17 @@ import type { CompLevelFill, SplitCoverage, SplitReport, SplitSlot, SplitUnassig
 interface Props {
   report: SplitReport
   onEdit?: (next: SplitReport) => void
+  // class code → display name from the live taxonomy ("pal" → "Paladin");
+  // codes render verbatim when absent.
+  classNames?: Record<string, string>
 }
 
 // ── drag ids ────────────────────────────────────────────────────────────────
 // seat:<group>:<index>  draggable seat + swap target
-// open:<group>:<index>   open-seat insert target (ids must be unique per
-//                        placeholder — dnd-kit registers droppables by id)
-// bench:<index>          draggable unseated member
-// benchlist              the unseated card as a bench drop target
+// open:<group>:<index>  open-seat insert target (ids must be unique per
+//                       placeholder — dnd-kit registers droppables by id)
+// bench:<index>         draggable unseated member
+// benchlist             the unseated card as a bench drop target
 
 type DragRef = { kind: 'seat'; group: number; index: number } | { kind: 'bench'; index: number }
 
@@ -52,6 +55,60 @@ function parseDragId(id: string): DragRef | null {
     return { kind: 'bench', index: Number(p[1]) }
   }
   return null
+}
+
+// ── role families ───────────────────────────────────────────────────────────
+// The taxonomy's role ids bucket cleanly by prefix (same split the backend's
+// roleBucket uses), which buys badge tinting and per-group shape summaries:
+// a raid leader scans "2 tank · 2 heal · 1 sup · 1 dmg" without reading rows.
+
+interface RoleFamily {
+  label: string // short label for the group-shape summary
+  color: string // badge tint (dark-theme friendly)
+}
+
+const FAMILY_TANK: RoleFamily = { label: 'tank', color: '#3b82f6' } // blue
+const FAMILY_HEAL: RoleFamily = { label: 'heal', color: '#22c55e' } // green
+const FAMILY_SUP: RoleFamily = { label: 'sup', color: '#a855f7' } // purple (slows/debuffs/CC)
+const FAMILY_DMG: RoleFamily = { label: 'dmg', color: '#f97316' } // orange
+const FAMILY_UTIL: RoleFamily = { label: 'util', color: '#64748b' } // slate (rgc, lockpicker, coth…)
+const FAMILY_FILL: RoleFamily = { label: 'fill', color: '#475569' } // dim slate
+
+export function roleFamily(slot: Pick<SplitSlot, 'role' | 'path'>): RoleFamily {
+  const key = slot.role || slot.path || ''
+  if (!key) return FAMILY_FILL
+  if (key === 'tank' || key.startsWith('tank.')) return FAMILY_TANK
+  if (key === 'healer' || key.startsWith('healer.')) return FAMILY_HEAL
+  if (key === 'slower' || key === 'debuffer' || key === 'cc' || key.startsWith('debuffer.')) return FAMILY_SUP
+  if (key === 'damage') return FAMILY_DMG
+  return FAMILY_UTIL
+}
+
+function RoleBadge({ slot }: { slot: Pick<SplitSlot, 'role' | 'path' | 'label' | 'level'> }): React.ReactElement | null {
+  if (!slot.role) {
+    return <span className="text-xs opacity-50" style={{ color: 'var(--color-muted-foreground)' }}>fill (no comp role)</span>
+  }
+  const fam = roleFamily(slot)
+  return (
+    <span className="text-xs inline-flex items-center gap-1.5">
+      <span style={{ color: 'var(--color-foreground)' }}>{slot.label || slot.path}</span>
+      <span
+        className="text-[10px] px-1 py-0.5 rounded font-medium"
+        title={
+          slot.level === 'min'
+            ? `${fam.label} slot · MIN (hard floor)`
+            : `${fam.label} slot · REC (comfort)`
+        }
+        style={{
+          backgroundColor: fam.color + '26', // ~15% alpha wash
+          color: fam.color,
+          border: `1px solid ${fam.color}55`,
+        }}
+      >
+        {slot.level} · {fam.label}
+      </span>
+    </span>
+  )
 }
 
 // ── report mutations (pure over a clone; false = rejected, no change) ──────
@@ -132,7 +189,7 @@ function finalize(r: SplitReport): SplitReport {
   }
 }
 
-// ── coverage table (unchanged logic, now fed live-recomputed rows) ─────────
+// ── coverage table (fed live-recomputed rows) ───────────────────────────────
 
 function CoverageRows({ rows, level }: { rows: SplitCoverage[]; level: string }): React.ReactElement {
   const short = rows.filter((r) => r.placed < r.need)
@@ -222,17 +279,25 @@ function CoverageTable({ min, rec }: { min: SplitCoverage[]; rec: SplitCoverage[
 
 // ── draggable/droppable pieces ──────────────────────────────────────────────
 
-const SLOT_COLS = 'grid-cols-[minmax(120px,1.2fr)_minmax(70px,0.8fr)_minmax(150px,1.4fr)]'
+// One grid template shared by the header and every seat row so the columns
+// stay aligned. Interactive rows gain a leading grip cell — the old 3-column
+// template mis-rendered 4-cell rows (roles wrapped under the header, the
+// bug in the first screenshot pass).
+const seatGrid = (interactive: boolean): string =>
+  interactive
+    ? 'grid-cols-[18px_minmax(110px,1.2fr)_minmax(64px,0.7fr)_minmax(150px,1.6fr)]'
+    : 'grid-cols-[minmax(110px,1.2fr)_minmax(64px,0.7fr)_minmax(150px,1.6fr)]'
 
 const dropHighlight: React.CSSProperties = { borderColor: 'var(--color-primary)' }
 
 // SeatRow is both a drag source and a swap target (drop member → member).
-function SeatRow({ slot, groupId, index, interactive, stripe }: {
+function SeatRow({ slot, groupId, index, interactive, stripe, classNames }: {
   slot: SplitSlot
   groupId: number
   index: number
   interactive: boolean
   stripe: boolean
+  classNames?: Record<string, string>
 }): React.ReactElement {
   const id = `seat:${groupId}:${index}`
   const { setNodeRef: setDragRef, attributes, listeners, isDragging } = useDraggable({ id, disabled: !interactive })
@@ -244,41 +309,24 @@ function SeatRow({ slot, groupId, index, interactive, stripe }: {
     },
     [setDragRef, setDropRef],
   )
+  const className = classNames?.[slot.class ?? '']
   return (
     <div
       ref={setRef}
       {...listeners}
       {...attributes}
-      className={`grid ${SLOT_COLS} gap-3 items-center px-3 py-1.5 border border-transparent ${stripe ? 'bg-(--color-surface-2)/50' : ''} ${interactive ? 'cursor-grab touch-none active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40' : ''}`}
+      className={`grid ${seatGrid(interactive)} gap-3 items-center px-3 py-1.5 border border-transparent ${stripe ? 'bg-(--color-surface-2)/50' : ''} ${interactive ? 'cursor-grab touch-none active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40' : ''}`}
       style={isOver && interactive ? { ...dropHighlight, backgroundColor: 'var(--color-surface-2)' } : undefined}
     >
-      {interactive ? <GripVertical size={12} className="-ml-1 opacity-40" style={{ color: 'var(--color-muted-foreground)' }} /> : null}
-      <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+      {interactive ? <GripVertical size={12} className="opacity-40" style={{ color: 'var(--color-muted-foreground)' }} /> : null}
+      <span className="text-sm truncate" title={slot.rank ? `${slot.member} · ${slot.rank}` : slot.member} style={{ color: 'var(--color-foreground)' }}>
         {slot.member}
         {slot.rank ? <span className="text-[11px] opacity-60"> · {slot.rank}</span> : null}
       </span>
-      <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-        {slot.class ?? '—'}
+      <span className="text-xs" title={className ? slot.class : undefined} style={{ color: 'var(--color-muted-foreground)' }}>
+        {className ?? slot.class ?? '—'}
       </span>
-      {slot.role ? (
-        <span className="text-xs">
-          <span style={{ color: 'var(--color-foreground)' }}>{slot.label || slot.path}</span>
-          <span
-            className="ml-1.5 text-[10px] px-1 py-0.5 rounded"
-            style={{
-              backgroundColor: slot.level === 'min' ? 'var(--color-primary)' : 'var(--color-surface-2)',
-              color: slot.level === 'min' ? 'var(--color-primary-foreground, #fff)' : 'var(--color-muted-foreground)',
-            }}
-            title={slot.level === 'min' ? 'Fills a MIN (hard floor) slot' : 'Fills a REC (comfort) slot'}
-          >
-            {slot.level}
-          </span>
-        </span>
-      ) : (
-        <span className="text-xs opacity-50" style={{ color: 'var(--color-muted-foreground)' }}>
-          fill (no comp role)
-        </span>
-      )}
+      <RoleBadge slot={slot} />
     </div>
   )
 }
@@ -296,27 +344,29 @@ function OpenSeat({ groupId, index, interactive }: {
   return (
     <div
       ref={setNodeRef}
-      className={`mx-3 mb-1.5 rounded border border-dashed px-3 py-1 text-xs ${interactive ? 'touch-none' : ''}`}
+      className={`mx-3 my-0.5 rounded border border-dashed px-3 py-1 text-[11px] text-center ${interactive ? 'touch-none' : ''}`}
       style={{
         borderColor: isOver && interactive ? 'var(--color-primary)' : 'var(--color-border)',
-        color: 'var(--color-muted-foreground)',
+        color: isOver && interactive ? 'var(--color-primary)' : 'var(--color-muted-foreground)',
         backgroundColor: isOver && interactive ? 'var(--color-surface-2)' : 'transparent',
       }}
     >
-      open seat — drop here to insert
+      {isOver && interactive ? 'drop to seat here' : '+ open seat'}
     </div>
   )
 }
 
 // BenchRow is a drag source (insert or swap into groups).
-function BenchRow({ entry, index, interactive, stripe }: {
+function BenchRow({ entry, index, interactive, stripe, classNames }: {
   entry: SplitUnassigned
   index: number
   interactive: boolean
   stripe: boolean
+  classNames?: Record<string, string>
 }): React.ReactElement {
   const id = `bench:${index}`
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id, disabled: !interactive })
+  const className = classNames?.[entry.class ?? '']
   return (
     <div
       ref={setNodeRef}
@@ -326,18 +376,39 @@ function BenchRow({ entry, index, interactive, stripe }: {
     >
       {interactive ? <GripVertical size={12} className="-ml-1 self-center opacity-40" style={{ color: 'var(--color-muted-foreground)' }} /> : null}
       <span style={{ color: 'var(--color-foreground)' }}>{entry.name}</span>
-      <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{entry.class ?? 'unclassed'}</span>
+      <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{className ?? entry.class ?? 'unclassed'}</span>
       <span className="text-xs" style={{ color: 'var(--color-danger)' }}>{entry.reason}</span>
     </div>
   )
 }
 
-function GroupCard({ group, interactive }: { group: { number: number; size: number; slots: SplitSlot[] }; interactive: boolean }): React.ReactElement {
+function GroupCard({ group, interactive, classNames }: {
+  group: { number: number; size: number; slots: SplitSlot[] }
+  interactive: boolean
+  classNames?: Record<string, string>
+}): React.ReactElement {
   const openSeats = Math.max(0, group.size - group.slots.length)
+
+  // Group shape summary: family counts in a fixed order so every card reads
+  // the same — "2 tank · 1 heal · 2 sup · 1 dmg · 1 fill".
+  const shape = useMemo(() => {
+    const order = [FAMILY_TANK, FAMILY_HEAL, FAMILY_SUP, FAMILY_DMG, FAMILY_UTIL, FAMILY_FILL]
+    const counts = new Map<string, { fam: RoleFamily; n: number }>()
+    for (const s of group.slots) {
+      const fam = roleFamily(s)
+      const e = counts.get(fam.label)
+      if (e) e.n++
+      else counts.set(fam.label, { fam, n: 1 })
+    }
+    return order
+      .filter((f) => counts.has(f.label))
+      .map((f) => ({ fam: f, n: counts.get(f.label)!.n }))
+  }, [group.slots])
+
   return (
     <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}>
       <div
-        className="flex items-center gap-2 px-3 py-1.5"
+        className="flex items-center gap-2 px-3 py-1.5 flex-wrap"
         style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-2)' }}
       >
         <span className="text-sm font-semibold" style={{ color: 'var(--color-foreground)' }}>
@@ -346,12 +417,21 @@ function GroupCard({ group, interactive }: { group: { number: number; size: numb
         <span className="text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
           {group.slots.length}/{group.size} seats
         </span>
+        {shape.length > 0 ? (
+          <span className="ml-auto flex items-center gap-1.5 text-[11px]">
+            {shape.map(({ fam, n }) => (
+              <span key={fam.label} style={{ color: fam.color }}>
+                {n} {fam.label}
+              </span>
+            ))}
+          </span>
+        ) : null}
       </div>
       <div>
         {group.slots.length > 0 ? (
           <>
             <div
-              className={`grid ${SLOT_COLS} gap-3 px-3 py-1 text-[11px] uppercase tracking-wide`}
+              className={`grid ${seatGrid(interactive)} gap-3 px-3 py-1 text-[11px] uppercase tracking-wide`}
               style={{ color: 'var(--color-muted-foreground)' }}
             >
               {interactive ? <span /> : null}
@@ -360,7 +440,7 @@ function GroupCard({ group, interactive }: { group: { number: number; size: numb
               <span>Proposed role</span>
             </div>
             {group.slots.map((slot, i) => (
-              <SeatRow key={`${slot.member}-${i}`} slot={slot} groupId={group.number} index={i} interactive={interactive} stripe={i % 2 === 1} />
+              <SeatRow key={`${slot.member}-${i}`} slot={slot} groupId={group.number} index={i} interactive={interactive} stripe={i % 2 === 1} classNames={classNames} />
             ))}
           </>
         ) : (
@@ -378,7 +458,7 @@ function GroupCard({ group, interactive }: { group: { number: number; size: numb
   )
 }
 
-export default function GroupProposal({ report, onEdit }: Props): React.ReactElement {
+export default function GroupProposal({ report, onEdit, classNames }: Props): React.ReactElement {
   // ?? [] guards: the backend's no-null contract makes these arrays always
   // present, but stale responses (or a mid-upgrade backend) could still send
   // null — render empty rather than crash (the null-classes lesson).
@@ -450,7 +530,7 @@ export default function GroupProposal({ report, onEdit }: Props): React.ReactEle
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
         {groups.map((g) => (
-          <GroupCard key={g.number} group={g} interactive={interactive} />
+          <GroupCard key={g.number} group={g} interactive={interactive} classNames={classNames} />
         ))}
       </div>
 
@@ -481,7 +561,7 @@ export default function GroupProposal({ report, onEdit }: Props): React.ReactEle
             </div>
           ) : (
             unassigned.map((u, i) => (
-              <BenchRow key={`${u.name}-${i}`} entry={u} index={i} interactive={interactive} stripe={i % 2 === 1} />
+              <BenchRow key={`${u.name}-${i}`} entry={u} index={i} interactive={interactive} stripe={i % 2 === 1} classNames={classNames} />
             ))
           )}
         </div>
@@ -500,12 +580,12 @@ export default function GroupProposal({ report, onEdit }: Props): React.ReactEle
         {draggedSlot ? (
           <div className="flex items-center gap-2 rounded border px-2 py-1 text-xs shadow-lg" style={{ backgroundColor: 'var(--color-surface-2)', borderColor: 'var(--color-primary)', color: 'var(--color-foreground)' }}>
             {draggedSlot.member}
-            {draggedSlot.class ? <span className="opacity-60">({draggedSlot.class})</span> : null}
+            {draggedSlot.class ? <span className="opacity-60">({classNames?.[draggedSlot.class] ?? draggedSlot.class})</span> : null}
           </div>
         ) : draggedEntry ? (
           <div className="flex items-center gap-2 rounded border px-2 py-1 text-xs shadow-lg" style={{ backgroundColor: 'var(--color-surface-2)', borderColor: 'var(--color-primary)', color: 'var(--color-foreground)' }}>
             {draggedEntry.name}
-            {draggedEntry.class ? <span className="opacity-60">({draggedEntry.class})</span> : null}
+            {draggedEntry.class ? <span className="opacity-60">({classNames?.[draggedEntry.class] ?? draggedEntry.class})</span> : null}
           </div>
         ) : null}
       </DragOverlay>

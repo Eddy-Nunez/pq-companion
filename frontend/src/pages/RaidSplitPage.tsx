@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { GitFork, Play, RefreshCw, Plus, Trash2, Lock } from 'lucide-react'
 import { useRaidReadiness } from '../hooks/useRaidReadiness'
-import { splitRaidComp } from '../services/api'
+import { getRaidTaxonomy, splitRaidComp } from '../services/api'
 import type { SplitPreference, SplitReport, SplitWildcard } from '../types/raid'
 import GroupProposal from '../components/raids/GroupProposal'
 import RosterStatusBanner from '../components/raids/RosterStatusBanner'
@@ -114,8 +114,24 @@ export default function RaidSplitPage(): React.ReactElement {
   // adjusted = the user hand-edited the proposal via drag-and-drop since the
   // last generate; a regenerate replaces the whole report and resets it.
   const [adjusted, setAdjusted] = useState(false)
+  // Class display names from the live taxonomy ("pal" → "Paladin") — the
+  // proposal renders real class names instead of seed codes. Fetched once;
+  // a failure just leaves the codes visible.
+  const [classNames, setClassNames] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [splitError, setSplitError] = useState('')
+
+  React.useEffect(() => {
+    let cancelled = false
+    getRaidTaxonomy()
+      .then((tax) => {
+        if (!cancelled) setClassNames(tax.class_names ?? {})
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const selectedEncounter = useMemo(
     () => orderedEncounters.find((e) => e.id === selectedId) ?? null,
@@ -292,6 +308,7 @@ export default function RaidSplitPage(): React.ReactElement {
       {report ? (
         <GroupProposal
           report={report}
+          classNames={classNames}
           onEdit={(next) => {
             setReport(next)
             setAdjusted(true)
