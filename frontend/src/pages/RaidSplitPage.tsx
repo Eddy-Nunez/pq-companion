@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import { GitFork, Play, RefreshCw, Plus, Trash2, Lock } from 'lucide-react'
 import { useRaidReadiness } from '../hooks/useRaidReadiness'
-import { getRaidTaxonomy, splitRaidComp } from '../services/api'
-import type { SplitPreference, SplitReport, SplitWildcard } from '../types/raid'
+import { getRaidSplitPlan, getRaidTaxonomy, splitRaidComp } from '../services/api'
+import type { SplitPlanReport, SplitPreference, SplitReport, SplitWildcard } from '../types/raid'
 import GroupProposal from '../components/raids/GroupProposal'
 import RosterStatusBanner from '../components/raids/RosterStatusBanner'
 
@@ -118,6 +118,10 @@ export default function RaidSplitPage(): React.ReactElement {
   // proposal renders real class names instead of seed codes. Fetched once;
   // a failure just leaves the codes visible.
   const [classNames, setClassNames] = useState<Record<string, string>>({})
+  // Cohort mode: split into N smaller raids (1 = single raid). The plan
+  // endpoint suggests how many complete MIN comps the live roster can staff.
+  const [cohorts, setCohorts] = useState(1)
+  const [plan, setPlan] = useState<SplitPlanReport | null>(null)
   const [busy, setBusy] = useState(false)
   const [splitError, setSplitError] = useState('')
 
@@ -132,6 +136,21 @@ export default function RaidSplitPage(): React.ReactElement {
       cancelled = true
     }
   }, [])
+
+  // Plan (cohort auto-suggest) follows the picked encounter.
+  React.useEffect(() => {
+    let cancelled = false
+    setPlan(null)
+    if (!selectedId) return
+    getRaidSplitPlan(selectedId)
+      .then((p) => {
+        if (!cancelled) setPlan(p)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   const selectedEncounter = useMemo(
     () => orderedEncounters.find((e) => e.id === selectedId) ?? null,
@@ -152,6 +171,7 @@ export default function RaidSplitPage(): React.ReactElement {
         group_size: groupSize,
         respect_existing_groups: respectGroups,
         wildcards: preference === 'curated' && wildcards.length > 0 ? wildcards : undefined,
+        cohorts: cohorts > 1 ? cohorts : undefined,
       })
       setReport(rep)
       setAdjusted(false)
@@ -258,6 +278,20 @@ export default function RaidSplitPage(): React.ReactElement {
               onChange={(e) => setGroupSize(Math.max(1, Math.min(12, Number(e.target.value) || 6)))}
             />
           </label>
+          <label className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--color-foreground)' }} title="Split the roster into N smaller raids, each staffed against the full template">
+            split into
+            <select
+              className={selectCls}
+              style={selectStyle}
+              value={cohorts}
+              onChange={(e) => setCohorts(Number(e.target.value) || 1)}
+            >
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>{n} raid{n > 1 ? 's' : ''}</option>
+              ))
+              }
+            </select>
+          </label>
           <label className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--color-foreground)' }} title="Seat members into their live Zeal groups where possible">
             <input type="checkbox" checked={respectGroups} onChange={(e) => setRespectGroups(e.target.checked)} />
             keep live groups together
@@ -265,6 +299,14 @@ export default function RaidSplitPage(): React.ReactElement {
         </div>
         {prefHint ? (
           <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{prefHint}</p>
+        ) : null}
+
+        {cohorts > 1 && plan ? (
+          <p className="text-xs" style={{ color: plan.max_cohorts >= cohorts ? 'var(--color-success)' : 'var(--color-danger)' }}>
+            {plan.max_cohorts >= cohorts
+              ? `live roster can staff ${plan.max_cohorts} complete raid${plan.max_cohorts === 1 ? '' : 's'}${plan.binding_path ? ` — capped by ${plan.leaves.find((l) => l.path === plan.binding_path)?.label ?? plan.binding_path}` : ''}`
+              : `warning: the live roster only staffs ${plan.max_cohorts} complete raid${plan.max_cohorts === 1 ? '' : 's'}${plan.binding_path ? ` — capped by ${plan.leaves.find((l) => l.path === plan.binding_path)?.label ?? plan.binding_path}` : ''}; extra raids will show MIN gaps`}
+          </p>
         ) : null}
 
         {preference === 'curated' ? (

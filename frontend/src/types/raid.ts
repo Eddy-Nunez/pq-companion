@@ -192,6 +192,9 @@ export interface SplitRequest {
   group_size?: number
   respect_existing_groups?: boolean
   wildcards?: SplitWildcard[]
+  // Cohort mode: split the roster into N smaller raids (2..6), each staffed
+  // against the full template. Omitted = single raid.
+  cohorts?: number
   roster?: CheckRosterInput[]
 }
 
@@ -236,4 +239,37 @@ export interface SplitReport {
   min: SplitCoverage[]
   rec: SplitCoverage[]
   warnings?: string[]
+  // Per-cohort reports (cohort mode). Single-raid responses carry exactly
+  // one entry mirroring the legacy fields; cohort mode (>1 raids) is
+  // authoritative here and leaves the legacy fields empty.
+  cohorts: CohortReport[]
+}
+
+export interface CohortReport {
+  number: number
+  groups: ProposedGroup[]
+  min: SplitCoverage[]
+  rec: SplitCoverage[]
+  roster_count: number
+  warnings?: string[]
+}
+
+// ── cohort auto-suggest (split plan) ──────────────────────────
+
+export interface SplitPlanLeaf {
+  path: string
+  label: string
+  eligible: number
+  min: number
+  rec: number
+}
+
+export interface SplitPlanReport {
+  encounter_id: string
+  encounter_name: string
+  roster_total: number
+  roster_mapped: number
+  max_cohorts: number
+  binding_path?: string
+  leaves: SplitPlanLeaf[]
 }

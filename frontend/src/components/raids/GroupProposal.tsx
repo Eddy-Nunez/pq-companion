@@ -10,22 +10,30 @@ import {
 } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { Users, UserX, AlertTriangle, ShieldCheck, GripVertical } from 'lucide-react'
-import type { CompLevelFill, SplitCoverage, SplitReport, SplitSlot, SplitUnassigned } from '../../types/raid'
+import type {
+  CohortReport,
+  CompLevelFill,
+  SplitCoverage,
+  SplitReport,
+  SplitSlot,
+  SplitUnassigned,
+} from '../../types/raid'
 
-// GroupProposal renders the split proposal: proposed groups with their
-// role-filled seats, unseated members with reasons, coverage rollups against
-// the encounter's MIN/REC staffing, and any proposal warnings. It is a
-// PROPOSAL view — nothing here mutates the raid or the roster.
+// GroupProposal renders the split proposal: one section per cohort (single
+// raid by default), each with its proposed groups, role-filled seats, and
+// its own MIN/REC coverage verdict against the encounter template; plus the
+// shared unseated card and proposal warnings. It is a PROPOSAL view —
+// nothing here mutates the raid or the roster.
 //
 // With an onEdit callback the report is interactively adjustable via
 // dnd-kit (the house drag layer — native HTML5 drag is unreliable in
 // Electron on Windows): drag a member onto another member to SWAP their
 // seats (contents exchange wholesale — member, role and rank travel
-// together), onto an open seat to INSERT them (a bench member seats as
-// fill; a member from another group keeps their role), or onto the
-// unseated card to BENCH them. Coverage is recomputed from the edited
-// seats after every change, so the MIN/REC table always tells the truth
-// about the proposal as adjusted. Regenerating resets all edits.
+// together, across cohorts too), onto an open seat to INSERT them (a bench
+// member seats as fill; a member from another group/raid keeps their role),
+// or onto the unseated card to BENCH them. Coverage is recomputed from the
+// edited seats after every change, so the MIN/REC tables always tell the
+// truth about the proposal as adjusted. Regenerating resets all edits.
 
 interface Props {
   report: SplitReport
@@ -36,25 +44,66 @@ interface Props {
 }
 
 // ── drag ids ────────────────────────────────────────────────────────────────
-// seat:<group>:<index>  draggable seat + swap target
-// open:<group>:<index>  open-seat insert target (ids must be unique per
-//                       placeholder — dnd-kit registers droppables by id)
-// bench:<index>         draggable unseated member
-// benchlist             the unseated card as a bench drop target
+// seat:<cohort>:<group>:<index>  draggable seat + swap target
+// open:<cohort>:<group>:<index>  open-seat insert target (unique per slot —
+//                                dnd-kit registers droppables by id)
+// bench:<index>                  draggable unseated member
+// benchlist                      the unseated card as a bench drop target
 
-type DragRef = { kind: 'seat'; group: number; index: number } | { kind: 'bench'; index: number }
+type SeatRef = { cohort: number; group: number; index: number }
+type DragRef = { kind: 'seat'; ref: SeatRef } | { kind: 'bench'; index: number }
+type DropRef =
+  | { kind: 'seat'; ref: SeatRef }
+  | { kind: 'open'; cohort: number; group: number }
+  | { kind: 'benchlist' }
 
-function parseDragId(id: string): DragRef | null {
+function parseDragId(id: string): DragRef | DropRef | null {
   const p = id.split(':')
-  if (p[0] === 'seat' && p.length === 3) {
-    const group = Number(p[1])
-    const index = Number(p[2])
-    if (Number.isFinite(group) && Number.isFinite(index)) return { kind: 'seat', group, index }
+  const num = (s: string | undefined): number => (s !== undefined && Number.isFinite(Number(s)) ? Number(s) : NaN)
+  if (p[0] === 'seat' && p.length === 4) {
+    const cohort = num(p[1])
+    const group = num(p[2])
+    const index = num(p[3])
+    if (Number.isFinite(cohort) && Number.isFinite(group) && Number.isFinite(index)) {
+      return { kind: 'seat', ref: { cohort, group, index } }
+    }
   }
-  if (p[0] === 'bench' && p.length === 2 && Number.isFinite(Number(p[1]))) {
-    return { kind: 'bench', index: Number(p[1]) }
+  if (p[0] === 'open' && p.length === 3) {
+    const cohort = num(p[1])
+    const group = num(p[2])
+    if (Number.isFinite(cohort) && Number.isFinite(group)) return { kind: 'open', cohort, group }
   }
+  if (p[0] === 'bench' && p.length === 2 && Number.isFinite(num(p[1]))) {
+    return { kind: 'bench', index: num(p[1]) }
+  }
+  if (id === 'benchlist') return { kind: 'benchlist' }
   return null
+}
+
+// ── cohort normalization (legacy single-raid reports) ───────────────────────
+
+// cohortsOf returns the report's cohorts, synthesizing one entry from the
+// legacy flat fields when an older response omits them.
+function cohortsOf(report: SplitReport): CohortReport[] {
+  if (report.cohorts && report.cohorts.length > 0) return report.cohorts
+  return [
+    {
+      number: 1,
+      groups: report.groups ?? [],
+      min: report.min ?? [],
+      rec: report.rec ?? [],
+      roster_count: (report.groups ?? []).reduce((n, g) => n + g.slots.length, 0),
+      warnings: [],
+    },
+  ]
+}
+
+function cohortByNumber(r: SplitReport, number: number): CohortReport | undefined {
+  return (r.cohorts ?? []).find((c) => c.number === number)
+}
+
+function groupIn(cohort: CohortReport | undefined, number: number) {
+  return cohort?.groups.find((g) => g.number === number)
 }
 
 // ── role families ───────────────────────────────────────────────────────────
@@ -113,40 +162,38 @@ function RoleBadge({ slot }: { slot: Pick<SplitSlot, 'role' | 'path' | 'label' |
 
 // ── report mutations (pure over a clone; false = rejected, no change) ──────
 
-function findGroup(r: SplitReport, number: number) {
-  return (r.groups ?? []).find((g) => g.number === number)
-}
-
 function applySwap(r: SplitReport, a: DragRef, b: DragRef): boolean {
-  if (a.kind === 'bench' && b.kind === 'seat') return applySwap(r, b, a)
-  if (a.kind === 'seat' && b.kind === 'seat') {
-    if (a.group === b.group && a.index === b.index) return false
-    const ga = findGroup(r, a.group)
-    const gb = findGroup(r, b.group)
-    const sa = ga?.slots[a.index]
-    const sb = gb?.slots[b.index]
-    if (!ga || !gb || !sa || !sb) return false
-    ga.slots[a.index] = { ...sb, group: ga.number }
-    gb.slots[b.index] = { ...sa, group: gb.number }
+  const seatOf = (d: DragRef): SeatRef | null => (d.kind === 'seat' ? d.ref : null)
+  const sa = seatOf(a)
+  const sb = seatOf(b)
+  if (sa && sb) {
+    if (sa.cohort === sb.cohort && sa.group === sb.group && sa.index === sb.index) return false
+    const ga = groupIn(cohortByNumber(r, sa.cohort), sa.group)
+    const gb = groupIn(cohortByNumber(r, sb.cohort), sb.group)
+    const slotA = ga?.slots[sa.index]
+    const slotB = gb?.slots[sb.index]
+    if (!ga || !gb || !slotA || !slotB) return false
+    ga.slots[sa.index] = { ...slotB, group: ga.number }
+    gb.slots[sb.index] = { ...slotA, group: gb.number }
     return true
   }
-  if (a.kind === 'bench' && b.kind === 'bench') return false // reorder: no-op
-  // bench → seat: the incoming member seats as FILL; the displaced member
+  // bench ↔ seat: the incoming member seats as FILL; the displaced member
   // (and their role assignment) goes to the bench — the coverage table
   // reflects the vacated slot honestly.
-  const gb = findGroup(r, (b as Extract<DragRef, { kind: 'seat' }>).group)
-  const bi = (a as Extract<DragRef, { kind: 'bench' }>).index
-  const si = (b as Extract<DragRef, { kind: 'seat' }>).index
-  const seat = gb?.slots[si]
-  const entry = r.unassigned?.[bi]
-  if (!gb || !seat || !entry) return false
-  gb.slots[si] = { member: entry.name, class: entry.class, role: '', path: '', label: '', group: gb.number }
-  r.unassigned[bi] = { name: seat.member, class: seat.class, reason: 'swapped out by hand' }
-  return true
+  if (a.kind === 'bench' && sb) {
+    const gb = groupIn(cohortByNumber(r, sb.cohort), sb.group)
+    const seat = gb?.slots[sb.index]
+    const entry = r.unassigned?.[a.index]
+    if (!gb || !seat || !entry) return false
+    gb.slots[sb.index] = { member: entry.name, class: entry.class, role: '', path: '', label: '', group: gb.number }
+    r.unassigned[a.index] = { name: seat.member, class: seat.class, reason: 'swapped out by hand' }
+    return true
+  }
+  return false // bench ↔ bench: reorder, no-op
 }
 
-function applyInsert(r: SplitReport, from: DragRef, targetGroup: number): boolean {
-  const g = findGroup(r, targetGroup)
+function applyInsert(r: SplitReport, from: DragRef, cohort: number, group: number): boolean {
+  const g = groupIn(cohortByNumber(r, cohort), group)
   if (!g || g.slots.length >= g.size) return false // full: swap onto a member instead
   if (from.kind === 'bench') {
     const entry = r.unassigned?.[from.index]
@@ -155,43 +202,53 @@ function applyInsert(r: SplitReport, from: DragRef, targetGroup: number): boolea
     g.slots.push({ member: entry.name, class: entry.class, role: '', path: '', label: '', group: g.number })
     return true
   }
-  if (from.group === targetGroup) return false
-  const src = findGroup(r, from.group)
-  const slot = src?.slots[from.index]
+  if (from.ref.cohort === cohort && from.ref.group === group) return false
+  const src = groupIn(cohortByNumber(r, from.ref.cohort), from.ref.group)
+  const slot = src?.slots[from.ref.index]
   if (!src || !slot) return false
-  src.slots.splice(from.index, 1) // their seat opens up; the role travels with them
+  src.slots.splice(from.ref.index, 1) // their seat opens up; the role travels with them
   g.slots.push({ ...slot, group: g.number })
   return true
 }
 
 function applyBench(r: SplitReport, from: DragRef): boolean {
   if (from.kind !== 'seat') return false
-  const g = findGroup(r, from.group)
-  const slot = g?.slots[from.index]
+  const g = groupIn(cohortByNumber(r, from.ref.cohort), from.ref.group)
+  const slot = g?.slots[from.ref.index]
   if (!g || !slot) return false
-  g.slots.splice(from.index, 1)
+  g.slots.splice(from.ref.index, 1)
   r.unassigned.push({ name: slot.member, class: slot.class, reason: 'benched by hand' })
   return true
 }
 
-// finalize re-stamps group numbers and recomputes coverage from the edited
-// seats, so MIN/REC placed counts always match what the proposal now shows.
+// finalize re-stamps group numbers and recomputes per-cohort coverage from
+// the edited seats, so MIN/REC placed counts always match what the proposal
+// now shows. Single-cohort reports sync the legacy fields too, keeping the
+// backend's mirror accurate.
 function finalize(r: SplitReport): SplitReport {
-  for (const g of r.groups ?? []) {
-    for (const s of g.slots) s.group = g.number
+  const cohorts = r.cohorts ?? []
+  for (const c of cohorts) {
+    for (const g of c.groups) {
+      for (const s of g.slots) s.group = g.number
+    }
+    c.roster_count = c.groups.reduce((n, g) => n + g.slots.length, 0)
+    const placedFor = (path: string, level: CompLevelFill): number =>
+      c.groups.reduce((n, g) => n + g.slots.filter((s) => s.path === path && s.level === level).length, 0)
+    c.min = (c.min ?? []).map((row) => ({ ...row, placed: placedFor(row.path, 'min') }))
+    c.rec = (c.rec ?? []).map((row) => ({ ...row, placed: placedFor(row.path, 'rec') }))
   }
-  const placedFor = (path: string, level: CompLevelFill): number =>
-    (r.groups ?? []).reduce((n, g) => n + g.slots.filter((s) => s.path === path && s.level === level).length, 0)
-  return {
-    ...r,
-    min: (r.min ?? []).map((row) => ({ ...row, placed: placedFor(row.path, 'min') })),
-    rec: (r.rec ?? []).map((row) => ({ ...row, placed: placedFor(row.path, 'rec') })),
+  if (cohorts.length === 1) {
+    r.groups = cohorts[0].groups
+    r.min = cohorts[0].min
+    r.rec = cohorts[0].rec
   }
+  r.unassigned = [...(r.unassigned ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+  return r
 }
 
-// ── coverage table (fed live-recomputed rows) ───────────────────────────────
+// ── coverage ────────────────────────────────────────────────────────────────
 
-function CoverageRows({ rows, level }: { rows: SplitCoverage[]; level: string }): React.ReactElement {
+function CoveragePills({ rows, level }: { rows: SplitCoverage[]; level: string }): React.ReactElement {
   const short = rows.filter((r) => r.placed < r.need)
   if (rows.length === 0) {
     return (
@@ -203,14 +260,14 @@ function CoverageRows({ rows, level }: { rows: SplitCoverage[]; level: string })
   if (short.length === 0) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--color-success)' }}>
-        <ShieldCheck size={13} /> {level} fully staffed
+        <ShieldCheck size={13} /> {level} OK
       </span>
     )
   }
   const total = short.reduce((n, r) => n + (r.need - r.placed), 0)
   return (
     <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--color-danger)' }}>
-      <AlertTriangle size={13} /> {level} short by {total} ({short.length} role{short.length === 1 ? '' : 's'})
+      <AlertTriangle size={13} /> {level} short {total} ({short.length} role{short.length === 1 ? '' : 's'})
     </span>
   )
 }
@@ -280,9 +337,7 @@ function CoverageTable({ min, rec }: { min: SplitCoverage[]; rec: SplitCoverage[
 // ── draggable/droppable pieces ──────────────────────────────────────────────
 
 // One grid template shared by the header and every seat row so the columns
-// stay aligned. Interactive rows gain a leading grip cell — the old 3-column
-// template mis-rendered 4-cell rows (roles wrapped under the header, the
-// bug in the first screenshot pass).
+// stay aligned. Interactive rows gain a leading grip cell.
 const seatGrid = (interactive: boolean): string =>
   interactive
     ? 'grid-cols-[18px_minmax(110px,1.2fr)_minmax(64px,0.7fr)_minmax(150px,1.6fr)]'
@@ -291,15 +346,16 @@ const seatGrid = (interactive: boolean): string =>
 const dropHighlight: React.CSSProperties = { borderColor: 'var(--color-primary)' }
 
 // SeatRow is both a drag source and a swap target (drop member → member).
-function SeatRow({ slot, groupId, index, interactive, stripe, classNames }: {
+function SeatRow({ slot, cohort, groupId, index, interactive, stripe, classNames }: {
   slot: SplitSlot
+  cohort: number
   groupId: number
   index: number
   interactive: boolean
   stripe: boolean
   classNames?: Record<string, string>
 }): React.ReactElement {
-  const id = `seat:${groupId}:${index}`
+  const id = `seat:${cohort}:${groupId}:${index}`
   const { setNodeRef: setDragRef, attributes, listeners, isDragging } = useDraggable({ id, disabled: !interactive })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id, disabled: !interactive })
   const setRef = React.useCallback(
@@ -332,14 +388,13 @@ function SeatRow({ slot, groupId, index, interactive, stripe, classNames }: {
 }
 
 // OpenSeat is an insert target: an unoccupied seat in a not-full group.
-// Each placeholder registers its own droppable id (open:<group>:<index>) —
-// duplicate ids would collide in dnd-kit's registry.
-function OpenSeat({ groupId, index, interactive }: {
+function OpenSeat({ cohort, groupId, index, interactive }: {
+  cohort: number
   groupId: number
   index: number
   interactive: boolean
 }): React.ReactElement {
-  const id = `open:${groupId}:${index}`
+  const id = `open:${cohort}:${groupId}:${index}`
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !interactive })
   return (
     <div
@@ -382,7 +437,9 @@ function BenchRow({ entry, index, interactive, stripe, classNames }: {
   )
 }
 
-function GroupCard({ group, interactive, classNames }: {
+function GroupCard({ title, cohort, group, interactive, classNames }: {
+  title: string
+  cohort: number
   group: { number: number; size: number; slots: SplitSlot[] }
   interactive: boolean
   classNames?: Record<string, string>
@@ -390,7 +447,7 @@ function GroupCard({ group, interactive, classNames }: {
   const openSeats = Math.max(0, group.size - group.slots.length)
 
   // Group shape summary: family counts in a fixed order so every card reads
-  // the same — "2 tank · 1 heal · 2 sup · 1 dmg · 1 fill".
+  // the same — "2 tank · 1 heal · 2 sup · 1 dmg".
   const shape = useMemo(() => {
     const order = [FAMILY_TANK, FAMILY_HEAL, FAMILY_SUP, FAMILY_DMG, FAMILY_UTIL, FAMILY_FILL]
     const counts = new Map<string, { fam: RoleFamily; n: number }>()
@@ -412,7 +469,7 @@ function GroupCard({ group, interactive, classNames }: {
         style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-2)' }}
       >
         <span className="text-sm font-semibold" style={{ color: 'var(--color-foreground)' }}>
-          Group {group.number}
+          {title}
         </span>
         <span className="text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
           {group.slots.length}/{group.size} seats
@@ -440,7 +497,7 @@ function GroupCard({ group, interactive, classNames }: {
               <span>Proposed role</span>
             </div>
             {group.slots.map((slot, i) => (
-              <SeatRow key={`${slot.member}-${i}`} slot={slot} groupId={group.number} index={i} interactive={interactive} stripe={i % 2 === 1} classNames={classNames} />
+              <SeatRow key={`${slot.member}-${i}`} slot={slot} cohort={cohort} groupId={group.number} index={i} interactive={interactive} stripe={i % 2 === 1} classNames={classNames} />
             ))}
           </>
         ) : (
@@ -450,7 +507,7 @@ function GroupCard({ group, interactive, classNames }: {
         )}
         {interactive
           ? Array.from({ length: openSeats }, (_, i) => (
-              <OpenSeat key={i} groupId={group.number} index={i} interactive={interactive} />
+              <OpenSeat key={i} cohort={cohort} groupId={group.number} index={i} interactive={interactive} />
             ))
           : null}
       </div>
@@ -462,7 +519,7 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
   // ?? [] guards: the backend's no-null contract makes these arrays always
   // present, but stale responses (or a mid-upgrade backend) could still send
   // null — render empty rather than crash (the null-classes lesson).
-  const groups = report.groups ?? []
+  const cohorts = cohortsOf(report)
   const unassigned = report.unassigned ?? []
   const interactive = onEdit != null
 
@@ -470,34 +527,37 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
   const [dragging, setDragging] = useState<DragRef | null>(null)
 
   function handleDragStart(e: DragStartEvent): void {
-    setDragging(parseDragId(String(e.active.id)))
+    const parsed = parseDragId(String(e.active.id))
+    setDragging(parsed && parsed.kind === 'seat' ? { kind: 'seat', ref: parsed.ref } : parsed && parsed.kind === 'bench' ? { kind: 'bench', index: parsed.index } : null)
   }
 
   function handleDragEnd(e: DragEndEvent): void {
     setDragging(null)
     if (!onEdit || !e.over) return
     const from = parseDragId(String(e.active.id))
-    if (!from) return
+    const to = parseDragId(String(e.over.id))
+    if (!from || !to || from.kind === 'open' || from.kind === 'benchlist') return
     const next = structuredClone(report)
+    // Normalize a legacy (pre-cohorts) report into one cohort before editing,
+    // so mutations always work on the cohort shape.
+    if (!(next.cohorts && next.cohorts.length > 0)) {
+      next.cohorts = cohortsOf(report).map((c) => ({ ...c, groups: c.groups.map((g) => ({ ...g, slots: g.slots.map((s) => ({ ...s })) })) }))
+    }
     let done = false
-    const overId = String(e.over.id)
-    if (overId === 'benchlist') {
+    if (to.kind === 'benchlist') {
       done = applyBench(next, from)
-    } else {
-      const parts = overId.split(':')
-      if (parts[0] === 'seat') {
-        const to = parseDragId(overId)
-        if (to) done = applySwap(next, from, to)
-      } else if (parts[0] === 'open') {
-        const g = Number(parts[1])
-        if (Number.isFinite(g)) done = applyInsert(next, from, g)
-      }
+    } else if (to.kind === 'seat') {
+      done = applySwap(next, from, { kind: 'seat', ref: to.ref })
+    } else if (to.kind === 'open') {
+      done = applyInsert(next, from, to.cohort, to.group)
     }
     if (done) onEdit(finalize(next))
   }
 
-  const draggedSlot = dragging?.kind === 'seat' ? findGroup(report, dragging.group)?.slots[dragging.index] : null
-  const draggedEntry = dragging?.kind === 'bench' ? unassigned[dragging.index] : null
+  const draggedSlot = dragging?.kind === 'seat'
+    ? groupIn(cohortByNumber(report, dragging.ref.cohort), dragging.ref.group)?.slots[dragging.ref.index] ?? null
+    : null
+  const draggedEntry = dragging?.kind === 'bench' ? unassigned[dragging.index] ?? null : null
 
   const { setNodeRef: setBenchDropRef, isOver: benchOver } = useDroppable({ id: 'benchlist', disabled: !interactive })
 
@@ -507,12 +567,12 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
         <Users size={14} />
         <span>
           Proposal for <span className="font-medium" style={{ color: 'var(--color-foreground)' }}>{report.encounter_name}</span>
-          {' '}· {groups.length} group{groups.length === 1 ? '' : 's'} of ≤{report.group_size} ·{' '}
-          {report.preference} seating
+          {' '}· {cohorts.length > 1 ? `${cohorts.length} raids` : `${cohorts[0]?.groups.length ?? 0} group${(cohorts[0]?.groups.length ?? 0) === 1 ? '' : 's'}`}
+          {' '}of ≤{report.group_size} · {report.preference} seating
         </span>
         {interactive ? (
           <span className="text-xs opacity-80">
-            drag members to swap · drop on an open seat to insert · drop here to bench
+            drag members to swap · drop on an open seat to insert · drop on Unseated to bench
           </span>
         ) : null}
       </div>
@@ -528,11 +588,45 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-        {groups.map((g) => (
-          <GroupCard key={g.number} group={g} interactive={interactive} classNames={classNames} />
-        ))}
-      </div>
+      {cohorts.map((cohort) => (
+        <div key={cohort.number} className="flex flex-col gap-3">
+          {cohorts.length > 1 ? (
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded"
+              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-2)' }}
+            >
+              <span className="text-sm font-semibold" style={{ color: 'var(--color-foreground)' }}>
+                Raid {cohort.number}
+              </span>
+              <span className="text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                {cohort.roster_count} members · {cohort.groups.length} group{cohort.groups.length === 1 ? '' : 's'}
+              </span>
+              {cohort.warnings && cohort.warnings.length > 0 ? (
+                <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--color-danger)' }}>
+                  <AlertTriangle size={11} /> {cohort.warnings[0]}
+                </span>
+              ) : null}
+              <span className="ml-auto flex items-center gap-3">
+                <CoveragePills rows={cohort.min ?? []} level="MIN" />
+                <CoveragePills rows={cohort.rec ?? []} level="REC" />
+              </span>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+            {cohort.groups.map((g) => (
+              <GroupCard
+                key={g.number}
+                title={cohorts.length > 1 ? `Raid ${cohort.number} · Group ${g.number}` : `Group ${g.number}`}
+                cohort={cohort.number}
+                group={g}
+                interactive={interactive}
+                classNames={classNames}
+              />
+            ))}
+          </div>
+          <CoverageTable min={cohort.min ?? []} rec={cohort.rec ?? []} />
+        </div>
+      ))}
 
       {unassigned.length > 0 || interactive ? (
         <div
@@ -566,8 +660,6 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
           )}
         </div>
       ) : null}
-
-      <CoverageTable min={report.min ?? []} rec={report.rec ?? []} />
     </div>
   )
 

@@ -3425,6 +3425,7 @@ import type {
   RaidRoleProvisionResult,
   SplitRequest,
   SplitReport,
+  SplitPlanReport,
 } from '../types/raid'
 
 export function getRaidTaxonomy(): Promise<RaidTaxonomy> {
@@ -3495,4 +3496,10 @@ export function provisionRaidRoles(paths: string[]): Promise<RaidRoleProvisionRe
 
 export function splitRaidComp(req: SplitRequest): Promise<SplitReport> {
   return post<SplitReport>('/api/raids/split', req)
+}
+
+// Cohort auto-suggest: how many complete MIN comps the live roster can
+// staff for this encounter, and which class caps it (advisory).
+export function getRaidSplitPlan(encounterId: string): Promise<SplitPlanReport> {
+  return get<SplitPlanReport>(`/api/raids/split/plan?encounter_id=${encodeURIComponent(encounterId)}`)
 }
