@@ -68,7 +68,10 @@ function parseDragId(id: string): DragRef | DropRef | null {
       return { kind: 'seat', ref: { cohort, group, index } }
     }
   }
-  if (p[0] === 'open' && p.length === 3) {
+  if (p[0] === 'open' && p.length === 4) {
+    // open:<cohort>:<group>:<index> — the index exists only to keep
+    // placeholder ids unique (dnd-kit registers droppables by id) and is
+    // not needed to resolve the target group.
     const cohort = num(p[1])
     const group = num(p[2])
     if (Number.isFinite(cohort) && Number.isFinite(group)) return { kind: 'open', cohort, group }
