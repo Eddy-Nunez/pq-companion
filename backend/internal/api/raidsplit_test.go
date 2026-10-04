@@ -23,6 +23,7 @@ func newRaidSplitTestRouter(t *testing.T) (*raidsHandler, *chi.Mux, *raidcomp.St
 	h := &raidsHandler{store: s, roster: raidcomp.NewRoster(), pipe: nil, liveZone: nil}
 	r := chi.NewRouter()
 	r.Post("/api/raids/split", h.splitComp)
+	r.Get("/api/raids/split/plan", h.splitPlan)
 	return h, r, s
 }
 
@@ -229,5 +230,101 @@ func TestRaidSplit_NoNullArrays(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRaidSplit_CohortsPassthrough(t *testing.T) {
+	_, r, s := newRaidSplitTestRouter(t)
+	if err := s.SaveEncounter(validSplitEncounter()); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	code, out := doSplit(t, r, map[string]any{
+		"encounter_id": "split-test",
+		"preference":   "trinity",
+		"cohorts":      2,
+		"roster": []map[string]any{
+			{"name": "Tank", "class": "war"},
+			{"name": "Heal", "class": "clr"},
+			{"name": "Heal2", "class": "clr"},
+			{"name": "Dps1", "class": "rog"},
+			{"name": "Dps2", "class": "rog"},
+			{"name": "Dps3", "class": "rog"},
+			{"name": "Dps4", "class": "rog"},
+		},
+	})
+	if code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %v", code, out)
+	}
+	cohorts, ok := out["cohorts"].([]any)
+	if !ok || len(cohorts) != 2 {
+		t.Fatalf("want 2 cohorts, got %v", out["cohorts"])
+	}
+	// Legacy fields are empty but never null in cohort mode (no-null rule).
+	for _, field := range []string{"groups", "unassigned", "min", "rec", "cohorts"} {
+		if v, ok := out[field]; !ok || v == nil {
+			t.Errorf("field %q missing or null in cohort response: %v", field, out[field])
+		}
+	}
+	// Curated + cohorts is a 400 with the reason.
+	code, _ = doSplit(t, r, map[string]any{
+		"encounter_id": "split-test", "preference": "curated", "cohorts": 2,
+		"roster": []map[string]any{{"name": "T", "class": "war"}},
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("curated + cohorts: want 400, got %d", code)
+	}
+}
+
+func TestRaidSplitPlan_Endpoint(t *testing.T) {
+	h, r, s := newRaidSplitTestRouter(t)
+	if err := s.SaveEncounter(validSplitEncounter()); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	// Live roster: 2 wars, 2 clerics, 4 rogues → every leaf staffable twice.
+	h.roster.Set(113, "kael", []raidcomp.Member{
+		{Name: "T1", Class: 1, Code: raidcomp.CodeWarrior},
+		{Name: "T2", Class: 1, Code: raidcomp.CodeWarrior},
+		{Name: "C1", Class: 2, Code: raidcomp.CodeCleric},
+		{Name: "C2", Class: 2, Code: raidcomp.CodeCleric},
+		{Name: "R1", Class: 9, Code: raidcomp.CodeRogue},
+		{Name: "R2", Class: 9, Code: raidcomp.CodeRogue},
+		{Name: "R3", Class: 9, Code: raidcomp.CodeRogue},
+		{Name: "R4", Class: 9, Code: raidcomp.CodeRogue},
+	})
+	rec := doReq(t, r, http.MethodGet, "/api/raids/split/plan?encounter_id=split-test", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var plan struct {
+		MaxCohorts   int    `json:"max_cohorts"`
+		BindingPath  string `json:"binding_path"`
+		RosterMapped int    `json:"roster_mapped"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.MaxCohorts != 2 {
+		t.Errorf("max_cohorts = %d, want 2", plan.MaxCohorts)
+	}
+	if plan.RosterMapped != 8 {
+		t.Errorf("roster_mapped = %d, want 8", plan.RosterMapped)
+	}
+	// Starve the clerics: 1 cleric against min 1 caps the split at 1, while
+	// tanks (2/1) and damage (4/2) still allow 2 — binding on ch_cleric.
+	h.roster.Set(113, "kael", []raidcomp.Member{
+		{Name: "T1", Class: 1, Code: raidcomp.CodeWarrior},
+		{Name: "T2", Class: 1, Code: raidcomp.CodeWarrior},
+		{Name: "C1", Class: 2, Code: raidcomp.CodeCleric},
+		{Name: "R1", Class: 9, Code: raidcomp.CodeRogue},
+		{Name: "R2", Class: 9, Code: raidcomp.CodeRogue},
+		{Name: "R3", Class: 9, Code: raidcomp.CodeRogue},
+		{Name: "R4", Class: 9, Code: raidcomp.CodeRogue},
+	})
+	rec = doReq(t, r, http.MethodGet, "/api/raids/split/plan?encounter_id=split-test", nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.MaxCohorts != 1 || plan.BindingPath != "healer.ch_cleric" {
+		t.Errorf("starved plan: max=%d binding=%q, want 1/healer.ch_cleric", plan.MaxCohorts, plan.BindingPath)
 	}
 }

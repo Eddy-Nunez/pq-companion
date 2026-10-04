@@ -528,3 +528,36 @@ func TestSplit_Cohorts_LegacyShapeForSingleRaid(t *testing.T) {
 		t.Fatal("cohorts=1 must mirror the legacy shape as one cohort entry")
 	}
 }
+
+func TestSplitPlan_CapsAndBinding(t *testing.T) {
+	// cohortComp: tank min 1 (2 wars → ratio 2), ch_cleric min 2 (4 clerics → 2),
+	// damage min 3 (6 rogues → 2) → max 2 cohorts.
+	plan := SplitPlan(splitLeaves(t), cohortComp("c"), cohortRoster())
+	if plan.MaxCohorts != 2 {
+		t.Errorf("max_cohorts = %d, want 2", plan.MaxCohorts)
+	}
+	// Starve clerics to 2 (ratio 1) while tanks keep ratio 2: binding is
+	// ch_cleric, the first leaf to hit the minimum ratio.
+	starved := []RosterMember{
+		{Name: "TankA", Class: CodeWarrior},
+		{Name: "TankB", Class: CodeWarrior},
+		{Name: "ClericA", Class: CodeCleric},
+		{Name: "ClericB", Class: CodeCleric},
+		{Name: "Rogue01", Class: CodeRogue},
+		{Name: "Rogue02", Class: CodeRogue},
+		{Name: "Rogue03", Class: CodeRogue},
+	}
+	plan = SplitPlan(splitLeaves(t), cohortComp("c"), starved)
+	if plan.MaxCohorts != 1 {
+		t.Errorf("starved max_cohorts = %d, want 1", plan.MaxCohorts)
+	}
+	if plan.BindingPath != "healer.ch_cleric" {
+		t.Errorf("binding = %q, want healer.ch_cleric", plan.BindingPath)
+	}
+	// Roster can't staff one comp: ratio 0 floors to the advisory 1.
+	lone := []RosterMember{{Name: "Solo", Class: CodeRogue}}
+	plan = SplitPlan(splitLeaves(t), cohortComp("c"), lone)
+	if plan.MaxCohorts != 1 {
+		t.Errorf("unstaffable max_cohorts = %d, want 1", plan.MaxCohorts)
+	}
+}

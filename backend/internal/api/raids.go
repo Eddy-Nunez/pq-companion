@@ -283,12 +283,15 @@ type splitRosterInput struct {
 // a grouping preference, and an optional manual roster (live roster is used
 // otherwise — same roster-source convention as the check endpoint).
 type splitRequest struct {
-	EncounterID           string                   `json:"encounter_id"`
-	Preference            string                   `json:"preference"`
-	GroupSize             int                      `json:"group_size,omitempty"`
-	RespectExistingGroups bool                     `json:"respect_existing_groups,omitempty"`
-	Wildcards             []raidcomp.Wildcard      `json:"wildcards,omitempty"`
-	Roster                []splitRosterInput       `json:"roster,omitempty"`
+	EncounterID           string              `json:"encounter_id"`
+	Preference            string              `json:"preference"`
+	GroupSize             int                 `json:"group_size,omitempty"`
+	RespectExistingGroups bool                `json:"respect_existing_groups,omitempty"`
+	Wildcards             []raidcomp.Wildcard `json:"wildcards,omitempty"`
+	// Cohorts (2..raidcomp.MaxSplitCohorts) splits the roster into N smaller
+	// raids, each targeting the full template — see the engine's docs.
+	Cohorts int                       `json:"cohorts,omitempty"`
+	Roster  []splitRosterInput        `json:"roster,omitempty"`
 }
 
 // checkCompRequest asks for a composition check. roster is optional: when
@@ -406,12 +409,51 @@ func (h *raidsHandler) splitComp(w http.ResponseWriter, r *http.Request) {
 		GroupSize:             req.GroupSize,
 		RespectExistingGroups: req.RespectExistingGroups,
 		Wildcards:             req.Wildcards,
+		Cohorts:               req.Cohorts,
 	}, members)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
+}
+
+// splitPlan is the cohort auto-suggest: how many complete MIN comps the
+// LIVE roster can staff for the given encounter, and which class caps it.
+// Advisory — the client may request any cohorts count.
+func (h *raidsHandler) splitPlan(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	id := r.URL.Query().Get("encounter_id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "encounter_id required")
+		return
+	}
+	enc, err := h.store.GetEncounter(id)
+	if errors.Is(err, raidcomp.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "raid encounter not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load raid encounter: "+err.Error())
+		return
+	}
+	leaves, err := h.store.Leaves()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load role taxonomy: "+err.Error())
+		return
+	}
+	var members []raidcomp.RosterMember
+	snap, seen := h.roster.Get()
+	if seen {
+		for _, m := range snap.Members {
+			members = append(members, raidcomp.RosterMember{
+				Name: m.Name, Class: m.Code, Level: m.Level, Group: m.Group, Rank: m.Rank,
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, raidcomp.SplitPlan(leaves, enc, members))
 }
 
 // decodeJSON decodes a JSON request body with unknown fields rejected and a

@@ -150,7 +150,9 @@ const maxSplitGroups = 12
 
 // maxSplitCohorts caps cohort mode (docs/raid-split-cohorts-plan.md): beyond
 // six smaller raids the per-cohort comps stop being meaningful.
-const maxSplitCohorts = 6
+// MaxSplitCohorts caps cohort mode (docs/raid-split-cohorts-plan.md): beyond
+// six smaller raids the per-cohort comps stop being meaningful.
+const MaxSplitCohorts = 6
 
 // splitMember is the internal roster member shape plus seat/role state.
 type splitMember struct {
@@ -298,8 +300,8 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 	if size < 1 || size > 12 {
 		return nil, fmt.Errorf("raidcomp: group_size must be 1..12, got %d", size)
 	}
-	if req.Cohorts < 0 || req.Cohorts > maxSplitCohorts {
-		return nil, fmt.Errorf("raidcomp: cohorts must be 0..%d, got %d", maxSplitCohorts, req.Cohorts)
+	if req.Cohorts < 0 || req.Cohorts > MaxSplitCohorts {
+		return nil, fmt.Errorf("raidcomp: cohorts must be 0..%d, got %d", MaxSplitCohorts, req.Cohorts)
 	}
 	if req.Cohorts > 1 {
 		// Cohort mode is trinity-only in v1 (docs/raid-split-cohorts-plan.md):
@@ -1169,4 +1171,87 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ── cohort auto-suggest (GET /api/raids/split/plan) ────────────────────────
+
+// SplitPlanLeaf is one comp row's staffing picture against the live roster:
+// how many members are class-eligible vs how many the comp asks per raid.
+type SplitPlanLeaf struct {
+	Path     string `json:"path"`
+	Label    string `json:"label"`
+	Eligible int    `json:"eligible"`
+	Min      int    `json:"min"`
+	Rec      int    `json:"rec"`
+}
+
+// SplitPlanReport is the cohort auto-suggest: how many COMPLETE MIN comps
+// the roster can staff (MaxCohorts, capped at MaxSplitCohorts), which leaf
+// is the binding constraint (BindingPath), and the per-leaf detail behind
+// that number.
+type SplitPlanReport struct {
+	EncounterID   string          `json:"encounter_id"`
+	EncounterName string          `json:"encounter_name"`
+	RosterTotal   int             `json:"roster_total"`
+	RosterMapped  int             `json:"roster_mapped"`
+	MaxCohorts    int             `json:"max_cohorts"`
+	BindingPath   string          `json:"binding_path,omitempty"`
+	Leaves        []SplitPlanLeaf `json:"leaves"`
+}
+
+// SplitPlan computes the cohort auto-suggest for one encounter against a
+// roster. Pure input → report, like Check/Split.
+func SplitPlan(leaves []RoleLeaf, enc *Encounter, members []RosterMember) SplitPlanReport {
+	rep := SplitPlanReport{
+		EncounterID:   enc.ID,
+		EncounterName: enc.Name,
+		RosterTotal:   len(members),
+		Leaves:        []SplitPlanLeaf{},
+	}
+	byCode := map[ClassCode]int{}
+	for _, m := range members {
+		if m.Class == "" {
+			continue
+		}
+		rep.RosterMapped++
+		byCode[m.Class]++
+	}
+	compByLeaf := make(map[string]CompRow, len(enc.Comps))
+	for _, c := range enc.Comps {
+		compByLeaf[leafKey(c.Role, c.Sub)] = c
+	}
+	best := 0
+	seenMin := false // best==0 is a legitimate ratio (unstaffable leaf) — track
+	                // initialization separately or every leaf re-binds
+	for _, leaf := range leaves {
+		row, ok := compByLeaf[leafKey(leaf.Role, leaf.Sub)]
+		if !ok || (row.Min == 0 && row.Rec == 0) {
+			continue
+		}
+		eligible := 0
+		for _, code := range leaf.Classes {
+			eligible += byCode[code]
+		}
+		rep.Leaves = append(rep.Leaves, SplitPlanLeaf{
+			Path: leaf.Path(), Label: leaf.Label,
+			Eligible: eligible, Min: row.Min, Rec: row.Rec,
+		})
+		if row.Min <= 0 {
+			continue
+		}
+		ratio := eligible / row.Min // 0 when the roster cannot even staff one comp
+		if !seenMin || ratio < best {
+			best = ratio
+			rep.BindingPath = leaf.Path()
+			seenMin = true
+		}
+	}
+	rep.MaxCohorts = best
+	if rep.MaxCohorts < 1 {
+		rep.MaxCohorts = 1 // advisory floor: a single raid is always attemptable
+	}
+	if rep.MaxCohorts > MaxSplitCohorts {
+		rep.MaxCohorts = MaxSplitCohorts
+	}
+	return rep
 }

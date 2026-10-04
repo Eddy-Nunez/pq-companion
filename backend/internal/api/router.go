@@ -425,6 +425,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Post("/import/preview", raidsH.importPreview)
 			r.Post("/import/commit", raidsH.importCommit)
 			r.Post("/check", raidsH.checkComp)
+			r.Get("/split/plan", raidsH.splitPlan)
 			r.Post("/split", raidsH.splitComp)
 		})
 		r.Route("/backups", func(r chi.Router) {
