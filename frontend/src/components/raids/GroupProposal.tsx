@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
+  MeasuringStrategy,
   PointerSensor,
   useDraggable,
   useDroppable,
@@ -683,7 +684,17 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
   if (!interactive) return body
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setDragging(null)}>
+    <DndContext
+      sensors={sensors}
+      // Re-measure droppables while dragging: the Unseated card sits below
+      // the fold of a long scrollable page, and droppable rects measured
+      // once at drag start go stale the moment the user scrolls — the bench
+      // drop then silently missed (no highlight, no mutation).
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setDragging(null)}
+    >
       {body}
       <DragOverlay>
         {draggedSlot ? (
