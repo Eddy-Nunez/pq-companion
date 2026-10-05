@@ -5,6 +5,8 @@ import {
   BookOpen,
   CheckCircle2,
   CheckSquare,
+  Eye,
+  EyeOff,
   Square,
   ExternalLink,
   Map as MapIcon,
@@ -15,7 +17,10 @@ import {
   X,
 } from 'lucide-react'
 import {
+  addSpellPass,
   getAllInventories,
+  getSpellPasses,
+  removeSpellPass,
   getScrollSpellIdsForItems,
   getSpell,
   getSpellsByClass,
@@ -95,7 +100,7 @@ function saveDeselected(character: string, ids: Set<number>): void {
   }
 }
 
-type Filter = 'all' | 'known' | 'missing'
+type Filter = 'all' | 'known' | 'missing' | 'passed'
 
 interface LevelFilter {
   min: string
@@ -352,11 +357,15 @@ interface SpellRowProps {
   known: boolean
   ownedLocations: OwnedScrollLocation[]
   selected: boolean
+  // passed marks a not-yet-known spell the user chose to skip; onTogglePass is
+  // omitted when passing isn't available (character unresolved).
+  passed: boolean
   onSelect: (id: number) => void
   onToggleSelect: (id: number) => void
+  onTogglePass?: (id: number) => void
 }
 
-function SpellRow({ spell, classIndex, known, ownedLocations, selected, onSelect, onToggleSelect }: SpellRowProps): React.ReactElement {
+function SpellRow({ spell, classIndex, known, ownedLocations, selected, passed, onSelect, onToggleSelect, onTogglePass }: SpellRowProps): React.ReactElement {
   const level = classLevel(spell, classIndex)
   return (
     <div
@@ -371,6 +380,8 @@ function SpellRow({ spell, classIndex, known, ownedLocations, selected, onSelect
             size={15}
             style={{ color: 'var(--color-primary)' }}
           />
+        ) : passed ? (
+          <EyeOff size={15} style={{ color: 'var(--color-muted)' }} />
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSelect(spell.id) }}
@@ -389,7 +400,7 @@ function SpellRow({ spell, classIndex, known, ownedLocations, selected, onSelect
         id={spell.new_icon}
         name={spell.name}
         size={22}
-        className={known ? '' : 'opacity-60'}
+        className={known ? '' : passed ? 'opacity-30' : 'opacity-60'}
       />
 
       {/* Spell name */}
@@ -402,6 +413,14 @@ function SpellRow({ spell, classIndex, known, ownedLocations, selected, onSelect
         >
           {spell.name}
         </span>
+        {passed && (
+          <span
+            className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+            style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted)', border: '1px solid var(--color-border)' }}
+          >
+            passed
+          </span>
+        )}
         {!known && ownedLocations.length > 0 && (
           <span title={ownedScrollTooltip(ownedLocations)}>
             <PackageCheck size={12} className="shrink-0" style={{ color: '#f59e0b' }} />
@@ -424,6 +443,19 @@ function SpellRow({ spell, classIndex, known, ownedLocations, selected, onSelect
       >
         {spell.mana > 0 ? `${spell.mana}m` : ''}
       </span>
+
+      {/* Pass / un-pass: skip a spell the user will never buy (reversible). */}
+      {!known && onTogglePass && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onTogglePass(spell.id) }}
+          className={`shrink-0 transition-opacity ${passed ? '' : 'opacity-0 group-hover:opacity-100'}`}
+          title={passed ? 'Un-pass — count this spell as missing again' : "Pass — don't count this spell as missing"}
+        >
+          {passed
+            ? <Eye size={12} style={{ color: 'var(--color-primary)' }} />
+            : <EyeOff size={12} style={{ color: 'var(--color-muted)' }} />}
+        </button>
+      )}
 
       {/* Open in explorer */}
       <button
@@ -462,6 +494,8 @@ export default function SpellChecklistPage(): React.ReactElement {
   const [showRoute, setShowRoute] = useState(false)
   // Ids the user has unchecked for the current shopping run (per character).
   const [deselected, setDeselected] = useState<Set<number>>(new Set())
+  // Spells the viewed character has passed on (server-side, per character).
+  const [passedIds, setPassedIds] = useState<Set<number>>(new Set())
   const navigate = useNavigate()
 
   // Default the viewed character to the active character once known.
@@ -485,6 +519,21 @@ export default function SpellChecklistPage(): React.ReactElement {
       setLevelFilter({ min: '', max: '' })
     }
   }, [viewedCharacter, characters])
+
+  const viewedCharacterId = characters.find(
+    (c) => c.name.toLowerCase() === viewedCharacter.toLowerCase(),
+  )?.id
+
+  // Load the viewed character's passed spells whenever it changes.
+  useEffect(() => {
+    setPassedIds(new Set())
+    if (viewedCharacterId === undefined) return
+    let cancelled = false
+    getSpellPasses(viewedCharacterId)
+      .then((res) => { if (!cancelled) setPassedIds(new Set(res.spell_ids)) })
+      .catch(() => { /* non-fatal: nothing passed */ })
+    return () => { cancelled = true }
+  }, [viewedCharacterId])
 
   const loadSpells = useCallback((idx: number) => {
     setLoadingSpells(true)
@@ -582,7 +631,8 @@ export default function SpellChecklistPage(): React.ReactElement {
 
   const filteredSpells = spells.filter((s) => {
     if (filter === 'known' && !knownIds.has(s.id)) return false
-    if (filter === 'missing' && knownIds.has(s.id)) return false
+    if (filter === 'missing' && (knownIds.has(s.id) || passedIds.has(s.id))) return false
+    if (filter === 'passed' && (knownIds.has(s.id) || !passedIds.has(s.id))) return false
     if (nameQuery && !s.name.toLowerCase().includes(nameQuery)) return false
     const lvl = classLevel(s, classIndex)
     if (minLvl > 0 && lvl < minLvl) return false
@@ -598,7 +648,7 @@ export default function SpellChecklistPage(): React.ReactElement {
   // regardless of which tab is active. Vendor-only spells are filtered out
   // server-side and reported as "unavailable" in the panel.
   const missingSpells = spells.filter((s) => {
-    if (knownIds.has(s.id)) return false
+    if (knownIds.has(s.id) || passedIds.has(s.id)) return false
     const lvl = classLevel(s, classIndex)
     if (minLvl > 0 && lvl < minLvl) return false
     if (maxLvl > 0 && lvl > maxLvl) return false
@@ -609,6 +659,26 @@ export default function SpellChecklistPage(): React.ReactElement {
   // only store *deselections*.
   const selectedMissing = missingSpells.filter((s) => !deselected.has(s.id))
   const selectedIds = selectedMissing.map((s) => s.id)
+
+  const passedCount = spells.filter((s) => !knownIds.has(s.id) && passedIds.has(s.id)).length
+
+  // Optimistically flip the pass flag, rolling back if the server rejects it.
+  function togglePass(id: number) {
+    if (viewedCharacterId === undefined) return
+    const wasPassed = passedIds.has(id)
+    const apply = (on: boolean) =>
+      setPassedIds((prev) => {
+        const next = new Set(prev)
+        if (on) next.add(id)
+        else next.delete(id)
+        return next
+      })
+    apply(!wasPassed)
+    const req = wasPassed
+      ? removeSpellPass(viewedCharacterId, id)
+      : addSpellPass(viewedCharacterId, id)
+    req.catch(() => apply(wasPassed))
+  }
 
   function commitDeselected(next: Set<number>) {
     setDeselected(next)
@@ -706,7 +776,7 @@ export default function SpellChecklistPage(): React.ReactElement {
             className="flex rounded overflow-hidden text-xs"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            {(['all', 'known', 'missing'] as Filter[]).map((f) => (
+            {(['all', 'known', 'missing', 'passed'] as Filter[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -718,10 +788,10 @@ export default function SpellChecklistPage(): React.ReactElement {
                     filter === f
                       ? 'var(--color-primary)'
                       : 'var(--color-muted-foreground)',
-                  borderRight: f !== 'missing' ? '1px solid var(--color-border)' : 'none',
+                  borderRight: f !== 'passed' ? '1px solid var(--color-border)' : 'none',
                 }}
               >
-                {f}
+                {f}{f === 'passed' && passedCount > 0 ? ` (${passedCount})` : ''}
               </button>
             ))}
           </div>
@@ -935,7 +1005,9 @@ export default function SpellChecklistPage(): React.ReactElement {
                   ? 'No known spells for this class.'
                   : filter === 'missing'
                     ? 'All spells known!'
-                    : 'No spells found for this class.'}
+                    : filter === 'passed'
+                      ? 'No passed spells. Use the eye icon on a missing spell to skip it.'
+                      : 'No spells found for this class.'}
             </p>
           </div>
         )}
@@ -948,8 +1020,10 @@ export default function SpellChecklistPage(): React.ReactElement {
             known={knownIds.has(spell.id)}
             ownedLocations={ownedScrollLocations.get(spell.id) ?? []}
             selected={!deselected.has(spell.id)}
+            passed={!knownIds.has(spell.id) && passedIds.has(spell.id)}
             onSelect={handleSelectSpell}
             onToggleSelect={toggleSelect}
+            onTogglePass={viewedCharacterId !== undefined ? togglePass : undefined}
           />
         ))}
       </div>

@@ -2706,6 +2706,21 @@ export function addWishlistEntries(
   })
 }
 
+// ── Spell checklist "pass" ─────────────────────────────────────────────────
+// Spells a character has chosen to skip, so they stop counting as missing.
+
+export function getSpellPasses(charID: number): Promise<{ spell_ids: number[] }> {
+  return get(`/api/characters/${charID}/spell-pass`)
+}
+
+export function addSpellPass(charID: number, spellID: number): Promise<void> {
+  return put(`/api/characters/${charID}/spell-pass/${spellID}`, {})
+}
+
+export function removeSpellPass(charID: number, spellID: number): Promise<void> {
+  return del(`/api/characters/${charID}/spell-pass/${spellID}`)
+}
+
 export function deleteWishlistEntry(charID: number, entryID: number): Promise<void> {
   return del(`/api/characters/${charID}/wishlist/${entryID}`)
 }

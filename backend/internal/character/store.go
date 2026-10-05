@@ -190,6 +190,9 @@ func (s *Store) migrate() error {
 	if err := s.migrateWishlist(); err != nil {
 		return err
 	}
+	if err := s.migrateSpellPass(); err != nil {
+		return err
+	}
 	if err := s.migrateFavoriteRecipes(); err != nil {
 		return err
 	}

@@ -125,6 +125,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 	)
 	tasksH := &tasksHandler{store: charStore}
 	skillsH := &skillsHandler{charStore: charStore, store: skillsStore, db: database}
+	spellPassH := &spellPassHandler{store: charStore}
 	wishlistH := &wishlistHandler{store: charStore, db: database, hub: hub, watcher: wishlistWatcher}
 	rollsH := &rollsHandler{tracker: rollTracker}
 	factionsH := &factionsHandler{store: charStore, db: database, engine: factionEngine}
@@ -327,6 +328,9 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Post("/{id}/tasks/{taskID}/subtasks", tasksH.createSubtask)
 			r.Put("/{id}/tasks/{taskID}/subtasks/{subtaskID}", tasksH.updateSubtask)
 			r.Delete("/{id}/tasks/{taskID}/subtasks/{subtaskID}", tasksH.deleteSubtask)
+			r.Get("/{id}/spell-pass", spellPassH.list)
+			r.Put("/{id}/spell-pass/{spellID}", spellPassH.add)
+			r.Delete("/{id}/spell-pass/{spellID}", spellPassH.remove)
 			r.Get("/{id}/wishlist", wishlistH.list)
 			r.Post("/{id}/wishlist", wishlistH.add)
 			r.Put("/{id}/wishlist/reorder", wishlistH.reorder)
