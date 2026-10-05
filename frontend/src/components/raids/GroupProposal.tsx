@@ -96,14 +96,25 @@ export function raidMoveLines(group: { number: number; slots: SplitSlot[] }): st
   return group.slots.map((s) => `#raidmove ${s.member} ${group.number}`)
 }
 
-// CopyRaidMoveButton copies the group's #raidmove script to the clipboard
+// raidMoveScript builds a whole-raid move script: every seated member of
+// the given groups in order, optionally followed by bench members moved to
+// group 0 (ungrouped) so one paste sets up the entire raid. Used by the
+// copy-all buttons (proposal header for single-raid reports, per-cohort
+// headers in cohort mode — a single global script for multi-raid would mix
+// each raid's local group numbers, so cohort raids copy one raid at a time).
+export function raidMoveScript(groups: { number: number; slots: SplitSlot[] }[], bench?: string[]): string {
+  const lines = groups.flatMap((g) => raidMoveLines(g))
+  for (const name of bench ?? []) lines.push(`#raidmove ${name} 0`)
+  return lines.join('\n')
+}
+
+// CopyScriptButton copies a ready-made #raidmove script to the clipboard
 // (house clipboard pattern: writeText + transient check mark).
-function CopyRaidMoveButton({ group }: { group: { number: number; slots: SplitSlot[] } }): React.ReactElement {
+function CopyScriptButton({ script, label, title }: { script: string; label: string; title: string }): React.ReactElement {
   const [copied, setCopied] = useState(false)
-  const lines = raidMoveLines(group)
   function handleCopy(): void {
-    if (lines.length === 0) return
-    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    if (!script) return
+    navigator.clipboard.writeText(script).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }).catch(() => {})
@@ -112,13 +123,25 @@ function CopyRaidMoveButton({ group }: { group: { number: number; slots: SplitSl
     <button
       type="button"
       onClick={handleCopy}
-      disabled={lines.length === 0}
-      title={lines.length > 0 ? `Copy ${lines.length} #raidmove command${lines.length === 1 ? '' : 's'} — one per member, moving them into group ${group.number}` : 'No seated members to move'}
-      className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded"
+      disabled={!script}
+      title={title}
+      className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded shrink-0"
       style={{ backgroundColor: 'var(--color-surface)', color: copied ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}
     >
-      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : '#raidmove'}
+      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : label}
     </button>
+  )
+}
+
+// CopyRaidMoveButton copies one group card's #raidmove script.
+function CopyRaidMoveButton({ group }: { group: { number: number; slots: SplitSlot[] } }): React.ReactElement {
+  const lines = raidMoveLines(group)
+  return (
+    <CopyScriptButton
+      script={lines.join('\n')}
+      label="#raidmove"
+      title={lines.length > 0 ? `Copy ${lines.length} #raidmove command${lines.length === 1 ? '' : 's'} — one per member, moving them into group ${group.number}` : 'No seated members to move'}
+    />
   )
 }
 
@@ -586,6 +609,11 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
   const cohorts = cohortsOf(report)
   const unassigned = report.unassigned ?? []
   const interactive = onEdit != null
+  // Whole-raid copy buttons: single-raid reports copy every group (plus
+  // bench → group 0) from the proposal header; cohort reports put the
+  // button on each raid's header (per-raid local group numbers — one raid
+  // at a time in game).
+  const benchNames = unassigned.map((u) => u.name)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const [dragging, setDragging] = useState<DragRef | null>(null)
@@ -634,6 +662,13 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
           {' '}· {cohorts.length > 1 ? `${cohorts.length} raids` : `${cohorts[0]?.groups.length ?? 0} group${(cohorts[0]?.groups.length ?? 0) === 1 ? '' : 's'}`}
           {' '}of ≤{report.group_size} · {report.preference} seating
         </span>
+        {cohorts.length === 1 ? (
+          <CopyScriptButton
+            script={raidMoveScript(cohorts[0]?.groups ?? [], benchNames)}
+            label="copy all #raidmove"
+            title={`Copy the whole raid's #raidmove script — one command per member in group order${benchNames.length > 0 ? `, bench members to group 0 (ungrouped)` : ''}`}
+          />
+        ) : null}
         {interactive ? (
           <span className="text-xs opacity-80">
             drag members to swap · drop on an open seat to insert · drop on Unseated to bench
@@ -670,6 +705,11 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
                   <AlertTriangle size={11} /> {cohort.warnings[0]}
                 </span>
               ) : null}
+              <CopyScriptButton
+                script={raidMoveScript(cohort.groups)}
+                label="#raidmove"
+                title={`Copy raid ${cohort.number}'s whole #raidmove script — one command per member in group order (paste after forming this raid)`}
+              />
               <span className="ml-auto flex items-center gap-3">
                 <CoveragePills rows={cohort.min ?? []} level="MIN" />
                 <CoveragePills rows={cohort.rec ?? []} level="REC" />
