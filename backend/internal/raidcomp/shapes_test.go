@@ -138,14 +138,48 @@ func shapesCohortComp(id string, shapes ...Shape) *Encounter {
 	return e
 }
 
-func TestSplit_Shapes_RequireCohortMode(t *testing.T) {
-	enc := shapesCohortComp("c", Shape{ID: "healstack", Rows: []ShapeRow{{Role: "healer", Sub: "ch_cleric", Count: 2}}})
-	for _, cohorts := range []int{0, 1} {
-		_, err := Split(splitLeaves(t), enc, SplitRequest{
-			Preference: SplitTrinity, Cohorts: cohorts, Shapes: []string{"healstack"},
-		}, cohortRoster())
-		if err == nil || !strings.Contains(err.Error(), "cohorts >= 2") {
-			t.Errorf("cohorts=%d: err = %v, want cohort-mode rejection", cohorts, err)
+func TestSplit_Shapes_SingleRaid(t *testing.T) {
+	// The cohort-only constraint was lifted (2026-10-05): a single-raid
+	// proposal with a shape seats the shape group first, credits its seats
+	// toward MIN coverage, and badges the group card.
+	enc := shapesCohortComp("c", Shape{ID: "healstack", Rows: []ShapeRow{
+		{Role: "healer", Sub: "ch_cleric", Count: 2},
+		{Role: "tank", Sub: "defensive", Count: 1},
+	}})
+	rep, err := Split(splitLeaves(t), enc, SplitRequest{
+		Preference: SplitTrinity, Shapes: []string{"healstack"},
+	}, cohortRoster())
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	// 12 members / size 6: the shape claims group 1 (3 seats), the trinity
+	// pass fills groups 2–3 with the 9 remaining members.
+	if len(rep.Groups) != 3 {
+		t.Fatalf("want 3 groups, got %d", len(rep.Groups))
+	}
+	g1 := rep.Groups[0]
+	if g1.Number != 1 || g1.Shape != "healstack" {
+		t.Errorf("group1 = #%d shape %q, want #1 healstack (shapes claim the first numbers)", g1.Number, g1.Shape)
+	}
+	if len(g1.Slots) != 3 { // 2 clerics + 1 tank; open seats NOT topped up
+		t.Errorf("shape group has %d slots, want 3", len(g1.Slots))
+	}
+	if g := findGroup(rep, 2); g == nil || g.Shape != "" {
+		t.Errorf("group 2 should be a plain trinity group, got %+v", g)
+	}
+	// Coverage attribution works the same as in cohort mode: the shape's 2
+	// clerics credit ch_cleric MIN, and the trinity pass seats the 2
+	// remaining clerics into its own MIN slots (4 placed of need 2).
+	for _, row := range rep.Min {
+		switch row.Path {
+		case "healer.ch_cleric":
+			if row.Placed != 4 {
+				t.Errorf("ch_cleric MIN placed = %d, want 4 (2 shape credits + 2 trinity)", row.Placed)
+			}
+		case "tank.defensive":
+			if row.Placed != 2 {
+				t.Errorf("tank.defensive MIN placed = %d, want 2 (1 shape credit + 1 trinity)", row.Placed)
+			}
 		}
 	}
 }

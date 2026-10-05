@@ -32,8 +32,9 @@ export default function RaidSplitPage(): React.ReactElement {
   const [plan, setPlan] = useState<SplitPlanReport | null>(null)
   // Group-shape templates (docs/raid-group-compositions-plan.md): explicit
   // opt-in per generate — checked ids travel with the request, unchecked
-  // (the default) means pure trinity. Cohort mode only (shapes are a
-  // multi-raid feature; the backend 400s otherwise).
+  // (the default) means pure trinity. Works for single-raid and cohort
+  // proposals alike; the placement select is cohort-only (it has no
+  // meaning for one raid).
   const [shapeIds, setShapeIds] = useState<Set<string>>(new Set())
   const [shapeDist, setShapeDist] = useState<'replicate' | 'distribute'>('replicate')
   const [busy, setBusy] = useState(false)
@@ -80,14 +81,15 @@ export default function RaidSplitPage(): React.ReactElement {
     setBusy(true)
     setSplitError('')
     try {
-      const withShapes = cohorts > 1 && shapeIds.size > 0
+      const withShapes = shapeIds.size > 0
       const rep = await splitRaidComp({
         encounter_id: selectedId,
         group_size: groupSize,
         respect_existing_groups: respectGroups,
         cohorts: cohorts > 1 ? cohorts : undefined,
         shapes: withShapes ? Array.from(shapeIds) : undefined,
-        shape_distribution: withShapes ? shapeDist : undefined,
+        // Placement only means something when splitting into multiple raids.
+        shape_distribution: withShapes && cohorts > 1 ? shapeDist : undefined,
       })
       setReport(rep)
       setAdjusted(false)
@@ -204,7 +206,7 @@ export default function RaidSplitPage(): React.ReactElement {
           Trinity seating: tank + healer + support first in every group, damage fills the rest.
         </p>
 
-        {cohorts > 1 && (selectedEncounter?.shapes?.length ?? 0) > 0 ? (
+        {(selectedEncounter?.shapes?.length ?? 0) > 0 ? (
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
               group compositions
@@ -231,22 +233,24 @@ export default function RaidSplitPage(): React.ReactElement {
                 {sh.shape_id}
               </label>
             ))}
-            <label
-              className="flex items-center gap-1.5 text-sm"
-              style={{ color: 'var(--color-muted-foreground)' }}
-              title="replicate — every raid fields every enabled shape · distribute — shape 1 to raid 1, shape 2 to raid 2 (shapes beyond the raid count are ignored)"
-            >
-              placement
-              <select
-                className={selectCls}
-                style={selectStyle}
-                value={shapeDist}
-                onChange={(e) => setShapeDist(e.target.value as 'replicate' | 'distribute')}
+            {cohorts > 1 ? (
+              <label
+                className="flex items-center gap-1.5 text-sm"
+                style={{ color: 'var(--color-muted-foreground)' }}
+                title="replicate — every raid fields every enabled shape · distribute — shape 1 to raid 1, shape 2 to raid 2 (shapes beyond the raid count are ignored)"
               >
-                <option value="replicate">replicate</option>
-                <option value="distribute">distribute</option>
-              </select>
-            </label>
+                placement
+                <select
+                  className={selectCls}
+                  style={selectStyle}
+                  value={shapeDist}
+                  onChange={(e) => setShapeDist(e.target.value as 'replicate' | 'distribute')}
+                >
+                  <option value="replicate">replicate</option>
+                  <option value="distribute">distribute</option>
+                </select>
+              </label>
+            ) : null}
           </div>
         ) : null}
 

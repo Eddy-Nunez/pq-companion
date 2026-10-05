@@ -257,12 +257,20 @@ func TestRaidSplit_ShapesAPI(t *testing.T) {
 		{"name": "Dps1", "class": "rog"},
 		{"name": "Dps2", "class": "rog"},
 	}
-	// Shapes with a single-raid request → 400.
-	code, _ := doSplit(t, r, map[string]any{
+	// Single-raid proposals weave shapes too (the cohort-only constraint
+	// was lifted): first group carries the shape badge.
+	code, out := doSplit(t, r, map[string]any{
 		"encounter_id": "split-test", "preference": "trinity", "shapes": []string{"healstack"}, "roster": roster,
 	})
-	if code != http.StatusBadRequest {
-		t.Errorf("shapes + cohorts<=1: want 400, got %d", code)
+	if code != http.StatusOK {
+		t.Fatalf("single-raid shapes: want 200, got %d: %v", code, out)
+	}
+	groups := out["groups"].([]any)
+	if len(groups) == 0 {
+		t.Fatalf("single-raid shapes: no groups: %v", out)
+	}
+	if got := groups[0].(map[string]any)["shape_id"]; got != "healstack" {
+		t.Errorf("single-raid first group shape_id = %v, want healstack", got)
 	}
 	// Unknown shape id → 400.
 	code, _ = doSplit(t, r, map[string]any{
@@ -281,7 +289,7 @@ func TestRaidSplit_ShapesAPI(t *testing.T) {
 		t.Errorf("bad shape_distribution: want 400, got %d", code)
 	}
 	// Happy path: replicate puts the shape group on raid 1 AND raid 2.
-	code, out := doSplit(t, r, map[string]any{
+	code, out = doSplit(t, r, map[string]any{
 		"encounter_id": "split-test", "preference": "trinity", "cohorts": 2,
 		"shapes": []string{"healstack"}, "roster": roster,
 	})

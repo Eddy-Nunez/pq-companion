@@ -11,6 +11,13 @@ beyond the cohort count are ignored with a warning. Shape group claims are
 based on the picked (not declared) seat count, so an under-filled shape
 never wastes group room; open seats in a claimed group stay open (the
 trinity pass skips shape-reserved groups via `groupTracker.reserve`).
+
+UPDATE 2026-10-05 (user): the cohort-only constraint (§4/§7/§8.3) is LIFTED —
+shapes also weave into single-raid proposals (shapes claim the first group
+numbers of the one raid, pins checked against the raid's own group budget,
+coverage attribution unchanged). `shape_distribution` is ignored for
+single-raid requests; the proposal UI shows the shape toggles whenever the
+encounter has shapes, with the placement select hidden outside cohort mode.
 Supersedes: the removed `focused` / `curated` preferences and the wildcard
 pin/cap machinery (deleted in `14e85fed`). Trinity weaving is the baseline;
 group-shape templates are the sanctioned way to hand-shape specific groups
@@ -97,10 +104,10 @@ type ShapeRow struct {
 - **Proposal**: `POST /api/raids/split` gains
   `shapes: []string` — the enabled shape ids (empty = trinity only, i.e.
   today's behavior) and `shape_distribution: "replicate" | "distribute"`
-  (default `replicate`). **Shapes require cohort mode**: a request with
-  `shapes` and `cohorts <= 1` is a 400. The engine loads the encounter's
-  shapes, filters by id, and errors on unknown ids (loud, like the
-  wildcards-400 precedent).
+  (default `replicate`). ~~Shapes require cohort mode~~ (SUPERSEDED
+  2026-10-05: single-raid proposals weave shapes too). The engine loads
+  the encounter's shapes, filters by id, and errors on unknown ids (loud,
+  like the wildcards-400 precedent).
 
 ## 5. Weave integration (the core)
 
@@ -165,7 +172,8 @@ buttons + remove-shape. Shapes save with the encounter (no new save flow).
 ## 7. Edge cases
 
 - Encounter defines shapes but none enabled → pure trinity (today).
-- `shapes` sent with `cohorts <= 1` → 400 (shapes are a multi-raid feature).
+- ~~`shapes` sent with `cohorts <= 1` → 400~~ (SUPERSEDED 2026-10-05:
+  single-raid proposals accept shapes; the cohort gate is gone).
 - Shape ids in the request that don't exist on the encounter → 400.
 - Roster too small to fill a shape → warnings per under-filled row; rest of
   the raid weaves as usual.
@@ -185,8 +193,9 @@ buttons + remove-shape. Shapes save with the encounter (no new save flow).
    include the healers the leader wants. No family/class rows needed.
 2. **Distribution: both modes supported** (`replicate` default,
    `distribute` for small templates), §5.
-3. **Cohort-only.** Shapes apply only when cohorts > 1; the proposal UI
-   shows the toggles only in cohort mode.
+3. ~~**Cohort-only.**~~ (SUPERSEDED 2026-10-05 by the user: shapes apply
+   to single-raid proposals too; the proposal UI shows the toggles whenever
+   the encounter has shapes. Placement select remains cohort-only.)
 4. **Opt-in per generate.** Unchecked by default; checked ids travel with
    the Generate request only.
 5. **Optional group pinning** via `group_number` (0 = auto), collisions

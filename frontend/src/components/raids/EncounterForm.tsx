@@ -701,8 +701,8 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
       <div>
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
-            Group compositions — named group templates for multi-raid (cohort) proposals: the weave seats a
-            shape's rows into whole groups (best-effort; shortfalls warn on the proposal)
+            Group compositions — named group templates the proposal weave seats into whole groups
+            (best-effort; shortfalls warn on the proposal). Aimed at multi-raid (cohort) splits, but works for single raids too — check the shapes on the Group Proposal page.
           </span>
         </div>
         <div className="flex flex-col gap-2">

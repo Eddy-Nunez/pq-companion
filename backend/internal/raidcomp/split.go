@@ -40,14 +40,14 @@ type SplitRequest struct {
 	Cohorts int `json:"cohorts,omitempty"`
 	// Shapes lists the enabled group-shape template ids (encounter shapes,
 	// docs/raid-group-compositions-plan.md): named role multisets the weave
-	// seats into whole groups BEFORE the trinity pass. Requires cohort mode
-	// (cohorts >= 2); unknown ids are a request error.
+	// seats into whole groups BEFORE the trinity pass. Works for single-raid
+	// and cohort proposals alike; unknown ids are a request error.
 	Shapes []string `json:"shapes,omitempty"`
 	// ShapeDistribution controls per-raid shape placement in cohort mode:
 	// "replicate" (default) — every raid fields every enabled shape;
 	// "distribute" — shape i applies to raid i, shapes beyond the raid
 	// count are ignored with a warning (small templates slot into one raid
-	// without unbalancing the others).
+	// without unbalancing the others). Ignored for single-raid requests.
 	ShapeDistribution string `json:"shape_distribution,omitempty"`
 }
 
@@ -311,11 +311,9 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 	if req.ShapeDistribution != ShapeDistributionReplicate && req.ShapeDistribution != ShapeDistributionDistribute {
 		return nil, fmt.Errorf("raidcomp: invalid shape_distribution %q (want replicate|distribute)", req.ShapeDistribution)
 	}
-	// Shapes are a multi-raid feature (user-confirmed decision, plan §8.3):
-	// single-raid proposals weave trinity only.
-	if len(req.Shapes) > 0 && req.Cohorts <= 1 {
-		return nil, fmt.Errorf("raidcomp: shapes require cohort mode (cohorts >= 2)")
-	}
+	// Shape ids must exist on the encounter (loud 400, the wildcards
+	// precedent); works for single-raid and cohort proposals alike (the
+	// original cohort-only constraint was lifted by the user 2026-10-05).
 	if _, err := resolveShapes(enc, req.Shapes); err != nil {
 		return nil, err
 	}
@@ -366,13 +364,57 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 
 	groups := newGroupTracker(size)
 
+	// Shape groups seat first (docs/raid-group-compositions-plan.md §5):
+	// pick members, claim + reserve their group numbers, then let the
+	// trinity pass fill everything else around them. Cohort-agnostic since
+	// the cohort-only constraint was lifted (2026-10-05).
+	shapeCredits := map[string]int{}
+	claimed := map[int]string{}
+	if enabled, _ := resolveShapes(enc, req.Shapes); len(enabled) > 0 {
+		leafByPath := make(map[string]RoleLeaf, len(leaves))
+		for _, l := range leaves {
+			leafByPath[l.Path()] = l
+		}
+		budget := (len(ms) + size - 1) / size // groups this raid can field
+		var shapeWarnings []string
+		for _, sh := range enabled {
+			members, credits, warns := seatShape(sh, leafByPath, ms, 0, "")
+			for path, n := range credits {
+				shapeCredits[path] += n
+			}
+			shapeWarnings = append(shapeWarnings, warns...)
+			if len(members) == 0 {
+				continue
+			}
+			grps := claimShapeGroups(sh, len(members), budget, size, "", claimed, &shapeWarnings)
+			for _, g := range grps {
+				claimed[g] = sh.ID
+				groups.reserve(g)
+			}
+			mi := 0
+			for _, g := range grps {
+				for groups.count[g] < size && mi < len(members) {
+					m := members[mi]
+					mi++
+					groups.seat(g)
+					m.group = g
+				}
+			}
+		}
+		rep.Warnings = append(rep.Warnings, shapeWarnings...)
+	}
+
 	fillSlotsInGroups(slots, ms, groups, req, rep)
 	seatRemaining(ms, groups, req.RespectExistingGroups, rep)
 
 	rep.Groups = assembleGroups(ms, 0, size)
+	for gi := range rep.Groups {
+		rep.Groups[gi].Shape = claimed[rep.Groups[gi].Number]
+	}
 	// buildCoverage returns empty (non-nil) slices so min/rec are [] not
 	// null even when the encounter has no comps.
 	rep.Min, rep.Rec = buildCoverage(ordered, slots)
+	applyShapeCoverage(ordered, shapeCredits, rep.Min, rep.Rec)
 	if rep.Min == nil {
 		rep.Min = []Coverage{}
 	}
@@ -694,16 +736,22 @@ func shapesForCohorts(enabled []Shape, K int, dist string) (map[int][]Shape, []s
 // cohort when unaffiliated. Rows short of their count return warnings —
 // best-effort, never silent (plan §5.5). A row whose role left the taxonomy
 // fills nobody (storage validates rows at save time; this is the
-// taxonomy-changed-under-us safety net).
-func seatShape(sh Shape, leafByPath map[string]RoleLeaf, ms []splitMember, cohort int) ([]*splitMember, map[string]int, []string) {
+// taxonomy-changed-under-us safety net). label prefixes the warnings
+// ("raid 2" in cohort mode; empty for single-raid).
+func seatShape(sh Shape, leafByPath map[string]RoleLeaf, ms []splitMember, cohort int, label string) ([]*splitMember, map[string]int, []string) {
+	prefix := ""
+	if label != "" {
+		prefix = label + ": "
+	}
+	warn := func(format string, args ...any) string { return prefix + fmt.Sprintf(format, args...) }
 	var members []*splitMember
 	credits := map[string]int{}
 	var warnings []string
 	for _, r := range sh.Rows {
 		leaf, ok := leafByPath[r.Path()]
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf(
-				"raid %d: shape %q: %s 0/%d (role not in taxonomy)", cohort, sh.ID, r.Path(), r.Count))
+			warnings = append(warnings, warn(
+				"shape %q: %s 0/%d (role not in taxonomy)", sh.ID, r.Path(), r.Count))
 			continue
 		}
 		placed := 0
@@ -725,8 +773,8 @@ func seatShape(sh Shape, leafByPath map[string]RoleLeaf, ms []splitMember, cohor
 			placed++
 		}
 		if placed < r.Count {
-			warnings = append(warnings, fmt.Sprintf(
-				"raid %d: shape %q: %s %d/%d", cohort, sh.ID, r.Path(), placed, r.Count))
+			warnings = append(warnings, warn(
+				"shape %q: %s %d/%d", sh.ID, r.Path(), placed, r.Count))
 		}
 	}
 	return members, credits, warnings
@@ -764,14 +812,19 @@ func pickShapeMember(classes ClassSet, ms []splitMember, cohort int) *splitMembe
 	return best
 }
 
-// claimShapeGroups claims group numbers for one shape in a cohort's layout:
-// a pinned shape takes its group number when within the cohort's group
+// claimShapeGroups claims group numbers for one shape in a raid's layout:
+// a pinned shape takes its group number when within the raid's group
 // budget and unclaimed — otherwise it falls back to the first free number
 // with a warning (plan §5); unpinned shapes take the first free numbers.
 // A shape needing more than `size` seats spills into the next free numbers,
 // tagged with the same shape id. Claims are based on the PICKED count, so
 // an under-filled shape never wastes group room on seats it could not fill.
-func claimShapeGroups(sh Shape, picked, budget, size, cohort int, taken map[int]string, warnings *[]string) []int {
+// label prefixes the warnings ("raid 2" in cohort mode; empty single-raid).
+func claimShapeGroups(sh Shape, picked, budget, size int, label string, taken map[int]string, warnings *[]string) []int {
+	prefix := ""
+	if label != "" {
+		prefix = label + ": "
+	}
 	need := (picked + size - 1) / size
 	take := func(from int) int {
 		for g := from; g <= maxSplitGroups; g++ {
@@ -789,16 +842,16 @@ func claimShapeGroups(sh Shape, picked, budget, size, cohort int, taken map[int]
 		} else {
 			base = take(1)
 			*warnings = append(*warnings, fmt.Sprintf(
-				"raid %d: shape %q pinned to group %d is unavailable (collision or beyond this raid's %d groups) — using group %d",
-				cohort, sh.ID, sh.GroupNumber, budget, base))
+				"%sshape %q pinned to group %d is unavailable (collision or beyond this raid's %d groups) — using group %d",
+				prefix, sh.ID, sh.GroupNumber, budget, base))
 		}
 	} else {
 		base = take(1)
 	}
 	if base == 0 {
 		*warnings = append(*warnings, fmt.Sprintf(
-			"raid %d: shape %q could not claim a group (all %d taken) — its members weave into free groups",
-			cohort, sh.ID, maxSplitGroups))
+			"%sshape %q could not claim a group (all %d taken) — its members weave into free groups",
+			prefix, sh.ID, maxSplitGroups))
 		return nil
 	}
 	grps := []int{base}
@@ -957,7 +1010,7 @@ func splitCohorts(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members [
 	for c := 1; c <= K; c++ {
 		shapeCredits[c] = map[string]int{}
 		for _, sh := range perCohortShapes[c] {
-			members, credits, warns := seatShape(sh, leafByPath, ms, c)
+			members, credits, warns := seatShape(sh, leafByPath, ms, c, fmt.Sprintf("raid %d", c))
 			claims[c] = append(claims[c], shapeClaim{shape: sh, members: members})
 			for path, n := range credits {
 				shapeCredits[c][path] += n
@@ -1058,7 +1111,7 @@ func splitCohorts(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members [
 			if len(cl.members) == 0 {
 				continue
 			}
-			grps := claimShapeGroups(cl.shape, len(cl.members), budget, size, c, claimed, &cr.Warnings)
+			grps := claimShapeGroups(cl.shape, len(cl.members), budget, size, fmt.Sprintf("raid %d", c), claimed, &cr.Warnings)
 			for _, g := range grps {
 				claimed[g] = cl.shape.ID
 				tracker.reserve(g)
