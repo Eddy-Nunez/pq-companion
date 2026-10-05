@@ -9,6 +9,25 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.26.0 — 2026-10-04
+
+Spell Modifiers now tells you which focus effects you're missing and what you could wear instead, alongside a round of Planes of Power fixes from user reports: bard song instruments, the spell shopping route, stat caps above 255, and more.
+
+### Highlights
+- **Spell Modifiers shows missing focus types and upgrades** — a "Missing focus types" list shows the spell focuses your class could wear but you have nothing equipped for (Spell Haste, Affliction Efficiency, Extended Range, and so on). Click one — or the new Upgrades button on any worn focus — to see every item your class and level can use for it, best first, with worn items, true upgrades and items already owned on any character marked. Damage foci are split by resist school (fire, cold, magic, poison, disease), and focus level caps count as hard limits, so a level-65 caster is shown Spell Haste IV over a higher-percent III that stops at level 60.
+- **Pass on spells you'll never buy** — an eye icon on a missing spell removes it from the missing count, your selection and the shopping route, so full spellbooks and unusable scrolls like the cleric Imbue spells stop nagging. A new "Passed" filter lists them so you can reverse the decision.
+- **Planes of Power stat caps** — Planar Power and Innate Enlightenment now raise the attribute caps in Character Info and Gear Upgrade Finder scoring (for example Wisdom past the old 255), and Flowing Thought shows how far over the cap of 15 you are, like `+5 20/15`.
+- **Mute or hide individual detrimental timers** — a bell and an eye button on each Detrimental timer row silence the fading-soon alert for that spell or stop showing it altogether (handy for Tashanian). The full list lives in Settings → Overlays → Detrimental timer alerts.
+- **Pinned respawns no longer jump to the wrong mob** — handing a pin to the next kill at the same spot was a position guess that misfired on placeholder camps, so it's now off by default (Settings → Overlays → "Auto-hand off pinned respawns") and a pin stays on its timer until you unpin it. Pinned rows also get a short click-to-edit label like "named PH".
+- **Pages remember their last tab** — PoP Flag Tracker, Character Info, Triggers, Key Tracker, Trader Tracker, Gear Upgrade Finder, Settings, Combat and Raids reopen on the sub-page you were last using instead of the first one.
+- **Charm Pet Finder uses your real Charisma** — the field now defaults to your active character's CHA from gear and AAs rather than the bare base stat, stays editable, and has a reset button.
+
+### Fixes
+- **Bard songs showed the wrong instrument** — Tuyen's Chant of Flame and the rest of the percussion songs were labelled Wind Instruments because the skill labels were shifted by one. The Resist Calculator's instrument modifier used the same wrong mapping and now applies the right instrument bonus.
+- **Spell shopping route ignored your starting city** — choosing Plane of Knowledge still credited its spells to other towns whenever those towns were the only source of some other spell. The route now shops everything the starting city sells first, and credits each spell to the earliest stop that sells it (item routes too).
+- **Unobtainable Beastlord spells no longer show as missing** — Summon Warder, Malaria and Bond of the Wild have no scroll in the game data.
+- **Raid-target respawns aren't shortened** — spawnpoints the server never reduces in the open world (for example A Dark Master in Umbral) showed an 8:00 timer instead of their real timer. The FAST/NORMAL toggle's wording now matches the server: ordinary guild instances use reduced respawns like the open world, and only the PvP instance uses the raw timer.
+
 ## v0.25.1 — 2026-09-30
 
 Fixes from Monday's Vex Thal raid — duplicate buff timers, the second Kaas Thox loot table, Piper TTS in one ear, and trigger timer names — plus nested task lists with import/export.
