@@ -2139,7 +2139,7 @@ name-based path when a field is nil, so older Zeal is unaffected.
   handoff is anchored to the player's position rather than the mob's,
   so a pin can mis-handoff if you're not near the camp when it pops —
   see LIMITATIONS.md. As of v0.26.0 handoff is opt-in (Settings →
-  Overlays → "Auto-hand off pinned respawns") and pinned rows take a
+  Spell Timers → "Auto-hand off pinned respawns") and pinned rows take a
   short click-to-edit label.
 
 ## Unreleased — Zeal Target Descriptors (NPC overlay)
