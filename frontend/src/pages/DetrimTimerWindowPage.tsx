@@ -22,6 +22,9 @@ import { DETRIM_TIMER_ALERTS_KEY } from '../lib/overlayAlertMute'
 import { clearTimers, getTimerState, removeTimer } from '../services/api'
 import { SpellIcon } from '../components/Icon'
 import { fmtRemaining } from '../lib/timeFormat'
+import { DetrimSpellControls } from '../components/overlays/DetrimSpellControls'
+import { useDetrimSpellOverrides } from '../hooks/useDetrimSpellOverrides'
+import type { DetrimOverrideMode, DetrimOverrides } from '../lib/detrimOverrides'
 import type { ActiveTimer, TimerCategory, TimerState } from '../types/timer'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -68,11 +71,15 @@ function TimerRow({
   activePlayer,
   appearance,
   showRemove,
+  overrides,
+  setOverride,
 }: {
   timer: ActiveTimer
   activePlayer: string
   appearance: TimerAppearance
   showRemove: boolean
+  overrides: DetrimOverrides
+  setOverride: (spellName: string, mode: DetrimOverrideMode | null) => Promise<void>
 }): React.ReactElement {
   const pct =
     timer.duration_seconds > 0
@@ -183,6 +190,15 @@ function TimerRow({
           {fmtRemaining(timer.remaining_seconds, appearance.showSeconds)}
         </span>
         {showRemove && (
+          <DetrimSpellControls
+            timerId={timer.id}
+            spellName={timer.spell_name}
+            overrides={overrides}
+            setOverride={setOverride}
+            color="rgba(255,255,255,0.55)"
+          />
+        )}
+        {showRemove && (
           <button
             onClick={() => removeTimer(timer.id).catch(() => {})}
             title="Remove this timer"
@@ -219,6 +235,7 @@ export default function DetrimTimerWindowPage(): React.ReactElement {
   const thresholds = useDisplayThresholds()
   const appearance = useTimerAppearance()
   const [alertsEnabled, toggleAlerts] = useOverlayAlertMute(DETRIM_TIMER_ALERTS_KEY)
+  const { overrides, setOverride } = useDetrimSpellOverrides()
 
   useEffect(() => {
     getTimerState().then(setState).catch(() => {})
@@ -379,6 +396,8 @@ export default function DetrimTimerWindowPage(): React.ReactElement {
               activePlayer={activePlayer}
               appearance={appearance}
               showRemove={rowsInteractive}
+              overrides={overrides}
+              setOverride={setOverride}
             />
           ))
         )}

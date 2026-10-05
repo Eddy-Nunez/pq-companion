@@ -751,6 +751,9 @@ func main() {
 		s := cfgMgr.Get().CHChain
 		return s.Enabled && s.PossibleMissEnabled
 	})
+	timerEngine.SetHiddenDetrimProvider(func(spellName string) bool {
+		return cfgMgr.Get().Preferences.DetrimSpellOverride(spellName) == config.DetrimOverrideHide
+	})
 	go timerEngine.Start(context.Background())
 
 	// CH-chain matcher: watches raid chat for chain-call lines and creates

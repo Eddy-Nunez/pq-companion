@@ -195,6 +195,10 @@ export interface Preferences {
   // the same spot (proximity via the Zeal pipe, else same name). Off by
   // default — the match is a guess and can pin the wrong mob.
   respawn_pin_handoff?: boolean
+  // Per-spell overrides for native Detrimental timers, keyed by spell name:
+  // "mute" skips the default fading-soon alert for that spell, "hide" never
+  // shows its timer. See lib/detrimOverrides.
+  detrim_spell_overrides?: Record<string, 'mute' | 'hide'>
   // Default fading-soon alert applied to every auto-detected Detrimental
   // timer (debuff/dot/mez/stun) that has no per-trigger alert of its own —
   // i.e. native spell-timer timers on any mob, raid or not. Trigger-driven

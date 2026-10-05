@@ -40,6 +40,7 @@ import {
   DETRIM_TIMER_ALERTS_KEY,
   loadAlertsEnabled,
 } from '../lib/overlayAlertMute'
+import { overrideFor, type DetrimOverrides } from '../lib/detrimOverrides'
 import type { TimerAlertPref } from '../types/config'
 import type { TimerCategory, TimerState } from '../types/timer'
 
@@ -55,12 +56,17 @@ export function useTimerAlerts(): void {
   // Global fallback alert for native (non-trigger) Detrimental timers, read
   // live so a Settings change takes effect without remounting this hook.
   const detrimPrefRef = useRef<TimerAlertPref | undefined>(undefined)
+  // Spells the user muted/hid from the default detrimental alert (by name).
+  const detrimOverridesRef = useRef<DetrimOverrides>({})
+
+  const applyConfig = useCallback((c: Awaited<ReturnType<typeof getConfig>>) => {
+    detrimPrefRef.current = c.preferences?.detrim_timer_alert
+    detrimOverridesRef.current = (c.preferences?.detrim_spell_overrides ?? {}) as DetrimOverrides
+  }, [])
 
   useEffect(() => {
-    getConfig()
-      .then((c) => { detrimPrefRef.current = c.preferences?.detrim_timer_alert })
-      .catch(() => {})
-  }, [])
+    getConfig().then(applyConfig).catch(() => {})
+  }, [applyConfig])
 
   useEffect(() => {
     const onStorage = (e: StorageEvent): void => {
@@ -74,9 +80,7 @@ export function useTimerAlerts(): void {
 
   const handleMessage = useCallback((msg: WsMessage) => {
     if (msg.type === WSEvent.ConfigUpdated) {
-      getConfig()
-        .then((c) => { detrimPrefRef.current = c.preferences?.detrim_timer_alert })
-        .catch(() => {})
+      getConfig().then(applyConfig).catch(() => {})
       return
     }
     if (msg.type !== WSEvent.OverlayTimers) return
@@ -126,7 +130,8 @@ export function useTimerAlerts(): void {
         }
       } else if (!muted && alerts.length === 0 && DETRIM_CATEGORIES.has(timer.category)) {
         const pref = detrimPrefRef.current
-        if (pref?.enabled) {
+        // A spell the user muted (or hid) gets no default alert.
+        if (pref?.enabled && !overrideFor(detrimOverridesRef.current, timer.spell_name)) {
           const threshold = Math.max(0, pref.seconds || 0)
           if (prev > threshold && timer.remaining_seconds <= threshold) {
             const spellName = timer.spell_name
@@ -161,7 +166,7 @@ export function useTimerAlerts(): void {
         prevRemaining.current.delete(id)
       }
     }
-  }, [])
+  }, [applyConfig])
 
   useWebSocket(handleMessage)
 }

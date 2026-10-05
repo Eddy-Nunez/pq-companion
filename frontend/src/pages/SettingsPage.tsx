@@ -10,6 +10,7 @@ import KokoroTtsSettings from '../components/settings/KokoroTtsSettings'
 import DiscordVoiceOverlaySettings from '../components/settings/DiscordVoiceOverlaySettings'
 import DiscordWebhookSettings from '../components/settings/DiscordWebhookSettings'
 import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
+import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, updateConfig, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
 import { renderChangelogBody } from '../components/WhatsNewModal'
@@ -2963,6 +2964,15 @@ export default function SettingsPage(): React.ReactElement {
               secondsUnit="s remaining"
               secondsHint="Fires when a timer crosses this many seconds left."
               ttsPlaceholder="{spell} fading soon"
+            />
+            <DetrimSpellOverridesEditor
+              value={config.preferences?.detrim_spell_overrides}
+              onChange={(next) =>
+                setConfig({
+                  ...config,
+                  preferences: { ...config.preferences, detrim_spell_overrides: next },
+                })
+              }
             />
           </div>
 

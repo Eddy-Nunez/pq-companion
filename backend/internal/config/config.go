@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
@@ -487,6 +488,15 @@ type Preferences struct {
 	// TimerAlerts and are unaffected. Nil/omitted by default: native timers
 	// stay silent as before. Pointer for the same reason as CustomTimerAlert.
 	DetrimTimerAlert *TimerAlertPref `yaml:"detrim_timer_alert,omitempty" json:"detrim_timer_alert,omitempty"`
+
+	// DetrimSpellOverrides lists detrimental spells (by name, case-insensitive)
+	// that should not behave like every other native Detrimental timer:
+	//   "mute" — keep the timer but skip the DetrimTimerAlert cue for it
+	//   "hide" — never create the timer at all (no bar, no alert)
+	// Keyed by name rather than id because a spell's rank variants share a name
+	// and the log only gives us the name. Trigger-driven timers are unaffected —
+	// a trigger's own alerts are the user's explicit choice.
+	DetrimSpellOverrides map[string]string `yaml:"detrim_spell_overrides,omitempty" json:"detrim_spell_overrides,omitempty"`
 
 	// MetronomeStartAlert fires an audio cue when the CH Metronome's personal
 	// countdown starts (the watched chain slot ahead of you calls its cast).
@@ -1508,4 +1518,21 @@ func defaultPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".pq-companion", "config.yaml"), nil
+}
+
+// Detrimental spell override modes (see Preferences.DetrimSpellOverrides).
+const (
+	DetrimOverrideMute = "mute"
+	DetrimOverrideHide = "hide"
+)
+
+// DetrimSpellOverride returns the override mode ("mute", "hide", or "" for none)
+// configured for a detrimental spell name, matched case-insensitively.
+func (p Preferences) DetrimSpellOverride(spellName string) string {
+	for name, mode := range p.DetrimSpellOverrides {
+		if strings.EqualFold(name, spellName) {
+			return mode
+		}
+	}
+	return ""
 }

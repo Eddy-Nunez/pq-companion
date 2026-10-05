@@ -523,3 +523,29 @@ preferences:
 		t.Error("explicit Distance=false was overridden on reload")
 	}
 }
+
+func TestDetrimSpellOverride(t *testing.T) {
+	p := Preferences{DetrimSpellOverrides: map[string]string{
+		"Tashanian": DetrimOverrideMute,
+		"Mesmerize": DetrimOverrideHide,
+		"Enstill":   "", // blank = no override
+	}}
+	tests := []struct {
+		spell string
+		want  string
+	}{
+		{"Tashanian", DetrimOverrideMute},
+		{"tashanian", DetrimOverrideMute}, // case-insensitive
+		{"Mesmerize", DetrimOverrideHide},
+		{"Enstill", ""},
+		{"Slow", ""},
+	}
+	for _, tt := range tests {
+		if got := p.DetrimSpellOverride(tt.spell); got != tt.want {
+			t.Errorf("DetrimSpellOverride(%q) = %q, want %q", tt.spell, got, tt.want)
+		}
+	}
+	if got := (Preferences{}).DetrimSpellOverride("Tashanian"); got != "" {
+		t.Errorf("nil map override = %q, want empty", got)
+	}
+}

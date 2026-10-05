@@ -469,6 +469,9 @@ type Engine struct {
 	modeFn        ModeProvider
 	keepExpiredFn KeepExpiredProvider
 	chChainMissFn CHChainMissProvider
+	// hiddenDetrimFn reports whether a detrimental spell should never get a
+	// timer (user's per-spell "hide" override). nil = nothing hidden.
+	hiddenDetrimFn func(spellName string) bool
 
 	mu     sync.Mutex
 	timers map[string]*ActiveTimer // keyed by timerKey(spell, target)
@@ -621,6 +624,15 @@ type Engine struct {
 	// monotonically increasing suffix regardless of how many land in the
 	// same log second.
 	nextStackIndex map[string]uint64
+}
+
+// SetHiddenDetrimProvider wires the user's per-spell "hide" override for
+// detrimental timers (config Preferences.DetrimSpellOverrides). Spells it
+// reports true for never get a timer. nil (the default) hides nothing.
+func (e *Engine) SetHiddenDetrimProvider(fn func(spellName string) bool) {
+	e.mu.Lock()
+	e.hiddenDetrimFn = fn
+	e.mu.Unlock()
 }
 
 // NewEngine returns an initialised Engine ready to receive log events.
@@ -1674,6 +1686,14 @@ func (e *Engine) onSpellLanded(landedAt time.Time, data logparser.SpellLandedDat
 				"spell", spellName, "target", target, "category", cat, "class_idx", classIdx)
 			return
 		}
+	}
+
+	// Per-spell "hide" override (Settings > Overlays > Detrimental timer
+	// alerts): the user doesn't want this detrimental on the overlay at all.
+	if cat != CategoryBuff && e.hiddenDetrimFn != nil && e.hiddenDetrimFn(spellName) {
+		slog.Debug("timer-debug: spell-landed skipped (hidden detrimental)",
+			"spell", spellName, "target", target, "category", cat)
+		return
 	}
 
 	durationTicks := SpellDurationTicks(spell, defaultCasterLevel)

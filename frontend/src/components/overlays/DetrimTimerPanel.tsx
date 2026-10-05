@@ -11,6 +11,9 @@ import CreateTriggerModal from '../CreateTriggerModal'
 import SpellSearchPicker from '../SpellSearchPicker'
 import { buildSpellTriggerPrefill } from '../../lib/spellHelpers'
 import { fmtRemaining } from '../../lib/timeFormat'
+import { DetrimSpellControls } from './DetrimSpellControls'
+import { useDetrimSpellOverrides } from '../../hooks/useDetrimSpellOverrides'
+import type { DetrimOverrideMode, DetrimOverrides } from '../../lib/detrimOverrides'
 import type { ActiveTimer, TimerCategory, TimerState } from '../../types/timer'
 import type { LogTailerStatus } from '../../types/logEvent'
 import type { Spell } from '../../types/spell'
@@ -57,7 +60,13 @@ function barColor(remaining: number, total: number, category: TimerCategory): st
   return remaining / total > 0.2 ? CATEGORY_COLORS[category] : '#ef4444'
 }
 
-function DetrimRow({ timer, activePlayer, appearance }: { timer: ActiveTimer; activePlayer: string; appearance: TimerAppearance }): React.ReactElement {
+function DetrimRow({ timer, activePlayer, appearance, overrides, setOverride }: {
+  timer: ActiveTimer
+  activePlayer: string
+  appearance: TimerAppearance
+  overrides: DetrimOverrides
+  setOverride: (spellName: string, mode: DetrimOverrideMode | null) => Promise<void>
+}): React.ReactElement {
   // A kept-expired effect lingers as an overdue reminder: remaining_seconds is
   // negative, so show a full red bar and a count-up "+Xs" label.
   const expired = timer.expired === true
@@ -118,6 +127,13 @@ function DetrimRow({ timer, activePlayer, appearance }: { timer: ActiveTimer; ac
         >
           {expired ? fmtOverdue(overdue) : fmtRemaining(timer.remaining_seconds, appearance.showSeconds)}
         </span>
+        <DetrimSpellControls
+          timerId={timer.id}
+          spellName={timer.spell_name}
+          overrides={overrides}
+          setOverride={setOverride}
+          color="var(--color-muted)"
+        />
         <button
           onClick={() => removeTimer(timer.id).catch(() => {})}
           title="Remove this timer"
@@ -169,6 +185,7 @@ export default function DetrimTimerPanel({
   const thresholds = useDisplayThresholds()
   const hideOtherCharacters = useHideOtherCharacterTimers()
   const appearance = useTimerAppearance()
+  const { overrides, setOverride } = useDetrimSpellOverrides()
 
   useEffect(() => {
     getTimerState().then(setTimerState).catch(() => {})
@@ -245,7 +262,16 @@ export default function DetrimTimerPanel({
               <p style={{ fontSize: 12, margin: 0 }}>No active detrimentals</p>
             </div>
           ) : (
-            detrims.map((t) => <DetrimRow key={t.id} timer={t} activePlayer={activePlayer} appearance={appearance} />)
+            detrims.map((t) => (
+              <DetrimRow
+                key={t.id}
+                timer={t}
+                activePlayer={activePlayer}
+                appearance={appearance}
+                overrides={overrides}
+                setOverride={setOverride}
+              />
+            ))
           )}
         </div>
       </OverlayWindow>

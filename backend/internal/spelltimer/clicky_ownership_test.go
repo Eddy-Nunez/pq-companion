@@ -212,3 +212,33 @@ func TestOnSpellLanded_ScopeCastByMe_StillDropsUnmatchedDetrimental(t *testing.T
 		t.Error("scope=cast_by_me without a recent local cast should still drop another caster's Tashanian")
 	}
 }
+
+// A detrimental the user marked "hide" must never get a timer, while other
+// detrimentals still do.
+func TestOnSpellLanded_HiddenDetrimentalSkipped(t *testing.T) {
+	database, err := db.Open("../../data/quarm.db")
+	if err != nil {
+		t.Skipf("quarm.db not available: %v", err)
+	}
+	t.Cleanup(func() { database.Close() })
+	charCtx := func() (string, string, int) { return "/eq", "Osui", -1 }
+	e := NewEngine(ws.NewHub(), database, charCtx,
+		func() string { return scopeAnyone }, nil, nil, nil, nil, nil)
+	e.SetHiddenDetrimProvider(func(name string) bool { return name == "Tashanian" })
+
+	land := func(spell string) {
+		e.onSpellLanded(time.Now(), logparser.SpellLandedData{
+			Kind:       logparser.SpellLandedKindOther,
+			SpellName:  spell,
+			TargetName: "a gnoll",
+		})
+	}
+	land("Tashanian")
+	if _, ok := e.timers[timerKey("Tashanian", "a gnoll")]; ok {
+		t.Error("hidden detrimental should not create a timer")
+	}
+	land("Slow")
+	if _, ok := e.timers[timerKey("Slow", "a gnoll")]; !ok {
+		t.Error("a detrimental that isn't hidden should still create a timer")
+	}
+}
