@@ -10,7 +10,7 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
-import { Users, UserX, AlertTriangle, ShieldCheck, Crown, GripVertical } from 'lucide-react'
+import { Users, UserX, AlertTriangle, ShieldCheck, Crown, GripVertical, Copy, Check } from 'lucide-react'
 import type {
   CohortReport,
   CompLevelFill,
@@ -85,6 +85,42 @@ function parseDragId(id: string): DragRef | DropRef | null {
 }
 
 // ── cohort normalization (legacy single-raid reports) ───────────────────────
+
+// raidMoveLines builds the per-group in-game move script (raid-move.txt):
+// one `#raidmove <member> <group>` command per seated member, so the raid
+// leader can paste the proposal's formation straight into EQ. Members in
+// slot order; the group number is the proposal's per-raid local number
+// (cohort groups are numbered within their own raid, which is what the
+// in-game raid sees once that cohort's raid is formed).
+export function raidMoveLines(group: { number: number; slots: SplitSlot[] }): string[] {
+  return group.slots.map((s) => `#raidmove ${s.member} ${group.number}`)
+}
+
+// CopyRaidMoveButton copies the group's #raidmove script to the clipboard
+// (house clipboard pattern: writeText + transient check mark).
+function CopyRaidMoveButton({ group }: { group: { number: number; slots: SplitSlot[] } }): React.ReactElement {
+  const [copied, setCopied] = useState(false)
+  const lines = raidMoveLines(group)
+  function handleCopy(): void {
+    if (lines.length === 0) return
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={lines.length === 0}
+      title={lines.length > 0 ? `Copy ${lines.length} #raidmove command${lines.length === 1 ? '' : 's'} — one per member, moving them into group ${group.number}` : 'No seated members to move'}
+      className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded"
+      style={{ backgroundColor: 'var(--color-surface)', color: copied ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : '#raidmove'}
+    </button>
+  )
+}
 
 // cohortsOf returns the report's cohorts, synthesizing one entry from the
 // legacy flat fields when an older response omits them.
@@ -501,6 +537,7 @@ function GroupCard({ title, cohort, group, interactive, classNames }: {
             shape: {group.shape_id}
           </span>
         ) : null}
+        <CopyRaidMoveButton group={group} />
         {shape.length > 0 ? (
           <span className="ml-auto flex items-center gap-1.5 text-[11px]">
             {shape.map(({ fam, n }) => (
