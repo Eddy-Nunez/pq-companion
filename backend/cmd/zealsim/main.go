@@ -39,10 +39,16 @@ import (
 // discovers the simulator first even while the live client is running.
 const defaultPipe = `\\.\pipe\zeal_000999`
 
-// demoMix is the class mix the generated roster cycles through, in Zeal
-// 1-indexed class ids: warriors, clerics, SK, druid, monk, bard, rogue,
-// shaman, enchanter, rangers, wizard, magician, necromancer, beastlord,
-// paladin — enough tanks/healers/support for trinity grouping plus damage.
+// demoClasses is the class mix the generated roster cycles through, in Zeal
+// 1-indexed class ids. The ids are the canonical EQ class ids — the single
+// source of truth is zealClassIDsByName in zealpipe/events.go (and
+// raidcomp.zealClassIDs in raidcomp/taxonomy.go): 1=Warrior, 2=Cleric,
+// 3=Paladin, 4=Ranger, 5=Shadow Knight, 6=Druid, 7=Monk, 8=Bard, 9=Rogue,
+// 10=Shaman, 11=Necromancer, 12=Wizard, 13=Magician, 14=Enchanter,
+// 15=Beastlord. Scenario files (-scenario) must use the same ids. The array
+// below decodes to war, war, clr, clr, clr, shd, dru, mnk, brd, rog, shm,
+// nec, wiz, mag, enc, bst, pal, rng — enough tanks/healers/support for
+// trinity grouping plus damage.
 var demoClasses = []int{1, 1, 2, 2, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 3, 4}
 
 func main() {

@@ -112,3 +112,24 @@ comps.
 - Per-cohort coverage math; legacy fields for cohorts ≤ 1; `cohorts` never
   null; curated/focused + cohorts → 400.
 - Determinism: identical input → identical report, twice.
+
+## Weave priority (decided 2026-10-04, live-verified)
+
+Order of operations in the interleaved allocation is **achieve MIN, then role
+balance, then REC**:
+
+- Single-raid trinity: `minBeforeRec(slots)` stably partitions the woven slot
+  list so every MIN seat precedes every REC seat (weave order preserved
+  within each level).
+- Cohort mode: the round-robin interleave runs in two passes, all MIN slots
+  of every cohort first, then REC — killing the bucket-drain bug where
+  `slower.REC` claimed an enchanter that `debuffer.slows.MIN` needed
+  (live-caught: debuffer.slows seated 0 at K≥3; post-fix it seats its
+  natives, e.g. K3 [1,1,0]).
+- Measured on the 51-member bot-agnarr roster: MIN shortfall units drop at
+  every K (2: 11→10, 3: 30→27, 4: 52→50, 5: 74→72). Role balance is
+  unchanged — counts still track native-eligible per cohort, round-robin
+  per slot index.
+- Open question: coalescing cross-cohort MIN achievement (importing a spare
+  member into an empty MIN seat when a cohort has no native) would break
+  live-group coherence; deliberately NOT done in v1.
