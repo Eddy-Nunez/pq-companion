@@ -104,12 +104,13 @@ func TestResistDebuffsCarryBardSkill(t *testing.T) {
 		byID[rd.ID] = rd
 	}
 
-	const skillWind = 70
-	if rd := byID[occlusionOfSoundID]; rd.BardSkill != skillWind {
-		t.Errorf("Occlusion of Sound bard_skill = %d, want %d", rd.BardSkill, skillWind)
+	// spells_new.skill 70 = Percussion (EQEmu skills.h).
+	const skillPercussion = 70
+	if rd := byID[occlusionOfSoundID]; rd.BardSkill != skillPercussion {
+		t.Errorf("Occlusion of Sound bard_skill = %d, want %d", rd.BardSkill, skillPercussion)
 	}
-	if rd := byID[tuyensChantOfFrostID]; rd.BardSkill != skillWind {
-		t.Errorf("Tuyen's Chant of Frost bard_skill = %d, want %d", rd.BardSkill, skillWind)
+	if rd := byID[tuyensChantOfFrostID]; rd.BardSkill != skillPercussion {
+		t.Errorf("Tuyen's Chant of Frost bard_skill = %d, want %d", rd.BardSkill, skillPercussion)
 	}
 
 	// A non-bard debuff line (Tashani/Malo, etc.) must not be tagged.

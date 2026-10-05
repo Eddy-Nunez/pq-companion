@@ -5,14 +5,14 @@ import (
 	"strings"
 )
 
-// Bard song instrument skills (spells_new.skill), EQMacEmu/Mac-era numbering.
+// Bard song instrument skills (spells_new.skill), EQEmu skills.h numbering.
 // A bard song scales off whichever of these its skill column names.
 const (
-	skillPercussionInst = 12
-	skillBrassInst      = 41
-	skillSinging        = 49
-	skillStringedInst   = 54
-	skillWindInst       = 70
+	skillBrassInst      = 12
+	skillSinging        = 41
+	skillStringedInst   = 49
+	skillWindInst       = 54
+	skillPercussionInst = 70
 )
 
 // Item instrument types (items.bardtype), EQMacEmu common/item_data.h. bardvalue

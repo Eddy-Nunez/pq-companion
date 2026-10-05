@@ -1041,8 +1041,8 @@ export interface ResistDebuff {
   id: number
   name: string
   mods: ResistMod[]
-  // bard_skill is the song's instrument skill (spells_new.skill: 70=wind,
-  // 54=stringed, 41=brass, 12=percussion, 49=singing) when the debuff is a
+  // bard_skill is the song's instrument skill (spells_new.skill: 54=wind,
+  // 49=stringed, 12=brass, 70=percussion, 41=singing) when the debuff is a
   // bard song, else 0. Used to apply the bard instrument modifier.
   bard_skill: number
 }

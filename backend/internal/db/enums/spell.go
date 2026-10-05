@@ -396,21 +396,23 @@ var SpellTargetsAudit = AuditDef{
 // label. Bard "skills" reuse this column to mark which instrument the
 // song scales off of (Brass/Wind/Stringed/Percussion/Singing).
 //
-// Source: EQEmu `common/skills.h` `EQ::skills::*Skill*` enum.
+// Source: EQEmu `common/skills.h` `EQ::skills::*Skill*` enum. Instrument
+// numbering verified against quarm.db (e.g. Tuyen's Chant of Flame = 70 =
+// Percussion, Aria of Eagles = 54 = Wind).
 var spellSkills = map[int]string{
 	4:  "Abjuration",
 	5:  "Alteration",
-	12: "Percussion Instruments",
+	12: "Brass Instruments",
 	14: "Conjuration",
-	15: "Discipline",
+	15: "Defense",
 	18: "Divination",
 	24: "Evocation",
-	33: "Discipline",
-	41: "Brass Instruments",
-	49: "Singing",
-	52: "Channeling",
-	54: "Stringed Instruments",
-	70: "Wind Instruments",
+	33: "Offense",
+	41: "Singing",
+	49: "Stringed Instruments",
+	52: "Tiger Claw",
+	54: "Wind Instruments",
+	70: "Percussion Instruments",
 }
 
 // SpellSkillName returns the spell-school label, or "" for unknown /

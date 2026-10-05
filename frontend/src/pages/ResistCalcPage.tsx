@@ -166,11 +166,11 @@ export default function ResistCalcPage(): React.ReactElement {
     if (!instrumentMods || !d.bard_skill) return 1
     const m = instrumentMods
     const eff =
-      d.bard_skill === 70 ? m.wind :
-      d.bard_skill === 54 ? m.stringed :
-      d.bard_skill === 41 ? m.brass :
-      d.bard_skill === 12 ? m.percussion :
-      d.bard_skill === 49 ? m.singing : 10
+      d.bard_skill === 54 ? m.wind :
+      d.bard_skill === 49 ? m.stringed :
+      d.bard_skill === 12 ? m.brass :
+      d.bard_skill === 70 ? m.percussion :
+      d.bard_skill === 41 ? m.singing : 10
     return eff / 10
   }
   // effectiveMod prefers a manual override, else the auto (instrument) value.
