@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, PawPrint, Search } from 'lucide-react'
 import {
   getCharmPets,
+  getCharacterDerivedStats,
   getCharmSpells,
   listCharacters,
   searchZones,
@@ -58,6 +59,8 @@ export default function CharmPetFinderPage(): React.ReactElement {
   const [classIdx, setClassIdx] = useState(ENCHANTER)
   const [level, setLevel] = useState(60)
   const [casterCHA, setCasterCHA] = useState(75)
+  // The active character's real CHA (base + gear + AAs), for the reset button.
+  const [charCHA, setCharCHA] = useState<{ name: string; value: number } | null>(null)
 
   const [zone, setZone] = useState<{ short: string; long: string } | null>(null)
   const [zoneQuery, setZoneQuery] = useState('')
@@ -84,7 +87,20 @@ export default function CharmPetFinderPage(): React.ReactElement {
         if (!active) return
         if (active.level > 0) setLevel(active.level)
         if (CHARM_CLASSES.some((c) => c.idx === active.class)) setClassIdx(active.class)
-        if (active.base_cha > 0) setCasterCHA(active.base_cha)
+        if (active.base_cha > 0) {
+          setCasterCHA(active.base_cha)
+          setCharCHA({ name: active.name, value: active.base_cha })
+        }
+        // Prefer the full Equipped-layer CHA (base + worn items + AAs) over the
+        // bare base stat; keep base_cha if the stats can't be derived.
+        getCharacterDerivedStats(active.id, [], [])
+          .then((d) => {
+            if (d.equipped.cha > 0) {
+              setCasterCHA(d.equipped.cha)
+              setCharCHA({ name: active.name, value: d.equipped.cha })
+            }
+          })
+          .catch(() => {})
       })
       .catch(() => {})
   }, [])
@@ -360,8 +376,24 @@ export default function CharmPetFinderPage(): React.ReactElement {
             <span style={{ color: 'var(--color-muted)' }}>
               Charisma <span style={{ color: 'var(--color-muted)' }}>(charm resist)</span>
             </span>
-            <NumberField value={casterCHA} onChange={setCasterCHA} min={1} max={500} />
+            <div className="flex items-center gap-2">
+              <NumberField value={casterCHA} onChange={setCasterCHA} min={1} max={500} />
+              {charCHA && casterCHA !== charCHA.value && (
+                <button
+                  type="button"
+                  onClick={() => setCasterCHA(charCHA.value)}
+                  className="shrink-0 rounded border px-1.5 py-1 text-[10px]"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                  title={`Reset to ${charCHA.name}'s CHA from gear + AAs (${charCHA.value})`}
+                >
+                  ↺ {charCHA.name}
+                </button>
+              )}
+            </div>
             <span className="text-[10px]" style={{ color: 'var(--color-muted)' }}>
+              {charCHA
+                ? `Defaults to ${charCHA.name}'s CHA from gear + AAs; edit to try another value. `
+                : ''}
               Modest on Quarm — ~2% better land per 30 CHA, Enchanter only.
             </span>
           </label>
