@@ -2333,6 +2333,9 @@ export interface SpellModifier {
   source_aa_rank?: number
   focus_spell_id?: number
   focus_spell_name?: string
+  // category is the named focus kind (e.g. "affliction_haste"); absent for
+  // single-spell foci. Keys the upgrade browser.
+  category?: string
   spa: number // focus SPA: 124 damage, 125 heal, 126 resist, 127 cast time,
   // 128 duration, 129 range, 130 hate, 131 reagent, 132 mana cost
   percent: number
@@ -2363,6 +2366,48 @@ export interface SpellModifiersResponse {
   character: string
   contributors: SpellModifier[]
   resolution?: SpellModifierResolution
+  // Focus categories the character could use but has nothing worn for.
+  missing_categories?: MissingFocusCategory[]
+}
+
+export interface MissingFocusCategory {
+  id: string
+  label: string
+  blurb: string
+  item_count: number
+}
+
+export interface FocusUpgradeItem {
+  item_id: number
+  name: string
+  icon: number
+  req_level: number
+  no_drop: boolean
+  focus_spell_id: number
+  focus_name: string
+  percent: number
+  limits: SpellModifierLimits
+  equipped: boolean
+  is_upgrade: boolean
+}
+
+export interface FocusUpgradesResponse {
+  category: string
+  label: string
+  blurb: string
+  spa: number
+  current: SpellModifier[]
+  current_percent: number
+  items: FocusUpgradeItem[]
+}
+
+export function getCharacterFocusUpgrades(
+  id: number,
+  category: string,
+): Promise<FocusUpgradesResponse> {
+  return get<FocusUpgradesResponse>(
+    `/api/characters/${id}/focus-upgrades?category=${encodeURIComponent(category)}`,
+  )
 }
 
 export function getCharacterSpellModifiers(

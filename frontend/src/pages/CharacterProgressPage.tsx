@@ -16,9 +16,10 @@ import type { ActiveTimer, TimerState } from '../types/timer'
 import type {
   QuarmyData, CharacterAA, AAInfo, Character,
   SpellModifier, SpellModifierResolution, StatBlock,
-  SpellStatDeltaEntry, DerivedStats, SourceSplit, StatCaps,
+  SpellStatDeltaEntry, DerivedStats, SourceSplit, StatCaps, MissingFocusCategory,
 } from '../services/api'
 import type { Spell } from '../types/spell'
+import FocusUpgradesCard from '../components/FocusUpgradesCard'
 import type { Item } from '../types/item'
 import type { SkillView, TradeskillView } from '../types/skill'
 import { DEV_SKILLS } from '../lib/devFlags'
@@ -183,6 +184,7 @@ export default function CharacterProgressPage(): React.ReactElement {
   const [unspentAA, setUnspentAA] = useState<number>(-1)
   const [unspentAAAt, setUnspentAAAt] = useState<number>(0)
   const [modifiers, setModifiers] = useState<SpellModifier[] | null>(null)
+  const [missingFocus, setMissingFocus] = useState<MissingFocusCategory[]>([])
   const [activeChar, setActiveChar] = useState<Character | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -229,9 +231,11 @@ export default function CharacterProgressPage(): React.ReactElement {
         try {
           const modResp = await getCharacterSpellModifiers(found.id)
           setModifiers(modResp.contributors ?? [])
+          setMissingFocus(modResp.missing_categories ?? [])
         } catch {
           // Quarmy export not available — modifiers panel will show its own empty state
           setModifiers(null)
+          setMissingFocus([])
         }
       } else {
         setTrainedAAs([])
@@ -239,6 +243,7 @@ export default function CharacterProgressPage(): React.ReactElement {
         setUnspentAA(-1)
         setUnspentAAAt(0)
         setModifiers(null)
+        setMissingFocus([])
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -409,6 +414,7 @@ export default function CharacterProgressPage(): React.ReactElement {
                   <SpellModifiersPanel
                     characterID={activeChar?.id ?? null}
                     contributors={modifiers}
+                    missingCategories={missingFocus}
                   />
                 </ErrorBoundary>
               )}
@@ -1731,9 +1737,12 @@ function spellTypeLabel(type: number): string {
 interface SpellModifiersPanelProps {
   characterID: number | null
   contributors: SpellModifier[] | null
+  missingCategories: MissingFocusCategory[]
 }
 
-function SpellModifiersPanel({ characterID, contributors }: SpellModifiersPanelProps): React.ReactElement {
+function SpellModifiersPanel({ characterID, contributors, missingCategories }: SpellModifiersPanelProps): React.ReactElement {
+  // Focus category whose "items you can use" list is open (null = closed).
+  const [upgradeCategory, setUpgradeCategory] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Spell[]>([])
   const [resolution, setResolution] = useState<SpellModifierResolution | null>(null)
@@ -1786,7 +1795,7 @@ function SpellModifiersPanel({ characterID, contributors }: SpellModifiersPanelP
       />
     )
   }
-  if (contributors.length === 0) {
+  if (contributors.length === 0 && missingCategories.length === 0) {
     return (
       <EmptyState
         message="No focus modifiers detected"
@@ -1800,7 +1809,51 @@ function SpellModifiersPanel({ characterID, contributors }: SpellModifiersPanelP
 
   return (
     <div className="space-y-5">
+      {/* Missing focus types */}
+      {missingCategories.length > 0 && characterID !== null && (
+        <div
+          className="rounded-lg p-4"
+          style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+        >
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted)' }}>
+            Missing focus types ({missingCategories.length})
+          </p>
+          <p className="mb-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+            Focus effects your class could wear but you have nothing equipped for. Click one to see
+            the items.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {missingCategories.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setUpgradeCategory(upgradeCategory === c.id ? null : c.id)}
+                title={`${c.blurb} (${c.item_count} item${c.item_count === 1 ? '' : 's'} you can use)`}
+                className="rounded px-2 py-1 text-xs"
+                style={{
+                  backgroundColor: upgradeCategory === c.id ? 'var(--color-surface-3)' : 'var(--color-surface-2)',
+                  border: `1px solid ${upgradeCategory === c.id ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  color: 'var(--color-foreground)',
+                  cursor: 'pointer',
+                }}
+              >
+                {c.label}
+                <span style={{ color: 'var(--color-muted)' }}> · {c.item_count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {upgradeCategory && characterID !== null && (
+        <FocusUpgradesCard
+          characterID={characterID}
+          category={upgradeCategory}
+          onClose={() => setUpgradeCategory(null)}
+        />
+      )}
+
       {/* Contributors */}
+      {contributors.length > 0 && (
       <div
         className="rounded-lg p-4"
         style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
@@ -1815,7 +1868,7 @@ function SpellModifiersPanel({ characterID, contributors }: SpellModifiersPanelP
             </p>
             <div className="space-y-1.5">
               {items.map((m, i) => (
-                <ModifierRow key={`item-${i}`} m={m} />
+                <ModifierRow key={`item-${i}`} m={m} onShowUpgrades={characterID !== null ? setUpgradeCategory : undefined} />
               ))}
             </div>
           </div>
@@ -1827,12 +1880,13 @@ function SpellModifiersPanel({ characterID, contributors }: SpellModifiersPanelP
             </p>
             <div className="space-y-1.5">
               {aas.map((m, i) => (
-                <ModifierRow key={`aa-${i}`} m={m} />
+                <ModifierRow key={`aa-${i}`} m={m} onShowUpgrades={characterID !== null ? setUpgradeCategory : undefined} />
               ))}
             </div>
           </div>
         )}
       </div>
+      )}
 
       {/* Test Resolution */}
       <div
@@ -1904,7 +1958,7 @@ function SpellModifiersPanel({ characterID, contributors }: SpellModifiersPanelP
   )
 }
 
-function ModifierRow({ m }: { m: SpellModifier }): React.ReactElement {
+function ModifierRow({ m, onShowUpgrades }: { m: SpellModifier; onShowUpgrades?: (category: string) => void }): React.ReactElement {
   const navigate = useNavigate()
   const sign = spaSign(m.spa)
   // The source is an item (has a database page) or an AA (no DB page → plain
@@ -1954,8 +2008,20 @@ function ModifierRow({ m }: { m: SpellModifier }): React.ReactElement {
             </span>
           ) : null}
         </span>
-        <span className="font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>
-          {sign}{m.percent}% {spaLabel(m.spa)}
+        <span className="flex shrink-0 items-center gap-2">
+          {m.category && onShowUpgrades && (
+            <button
+              onClick={() => onShowUpgrades(m.category as string)}
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+              style={{ backgroundColor: 'var(--color-surface-3)', color: 'var(--color-muted-foreground)', cursor: 'pointer' }}
+              title="See items that give this focus, including better versions"
+            >
+              Upgrades
+            </button>
+          )}
+          <span className="font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>
+            {sign}{m.percent}% {spaLabel(m.spa)}
+          </span>
         </span>
       </div>
       <div className="mt-1 flex flex-wrap gap-1">

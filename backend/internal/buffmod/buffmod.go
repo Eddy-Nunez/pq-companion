@@ -145,6 +145,9 @@ type Modifier struct {
 	SPA            int    `json:"spa"`     // focus SPA: 124–132 (see const block)
 	Percent        int    `json:"percent"` // positive = extension/reduction magnitude
 	Limits         Limits `json:"limits"`
+	// Category is the named focus kind this contribution belongs to (see
+	// Categories); "" for single-spell foci. Set by Compute / FocusModifiers.
+	Category string `json:"category,omitempty"`
 }
 
 // aaFocus describes a hardcoded AA's per-rank focus contribution.
@@ -232,7 +235,7 @@ func Compute(eqPath, charName string, gameDB *db.DB) (*Result, error) {
 		if err != nil || focus == nil {
 			continue
 		}
-		for _, m := range parseFocusSpell(focus) {
+		for _, m := range FocusModifiers(focus) {
 			m.Source = "item"
 			m.SourceItemID = item.ID
 			m.SourceItemName = item.Name
@@ -257,6 +260,7 @@ func Compute(eqPath, charName string, gameDB *db.DB) (*Result, error) {
 			SPA:          entry.SPA,
 			Percent:      entry.PerRank[aa.Rank-1],
 			Limits:       Limits{SpellType: entry.SpellType},
+			Category:     CategoryOf(entry.SPA, Limits{SpellType: entry.SpellType}),
 		})
 	}
 

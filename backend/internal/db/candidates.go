@@ -126,6 +126,7 @@ type CandidateFilter struct {
 	ExcludePoP     bool // drop Planes-of-Power-gated items (not yet obtainable)
 	ExcludeCrafted bool // drop tradeskill-made items (results of a recipe combine)
 	ExcludeNoDrop  bool // drop NO DROP items (can't be traded for)
+	FocusOnly      bool // keep only items that carry a focus effect
 }
 
 // UpgradeCandidates returns every equippable item that fits the slot and is
@@ -165,6 +166,9 @@ func (db *DB) UpgradeCandidates(f CandidateFilter) ([]UpgradeCandidate, error) {
 		// component or container). The item_id index keeps this subquery cheap.
 		where += " AND NOT EXISTS (SELECT 1 FROM tradeskill_recipe_entries tre" +
 			" WHERE tre.item_id = i.id AND tre.successcount > 0)"
+	}
+	if f.FocusOnly {
+		where += " AND i.focuseffect > 0"
 	}
 	if f.ExcludeNoDrop {
 		// nodrop = 0 marks a NO DROP (untradeable) item in this dataset, same
