@@ -64,12 +64,13 @@ function WildcardRow({
       )}
       <input
         className="rounded px-2 py-1 text-sm outline-none border w-16"
-        style={selectStyle}
+        style={{ ...selectStyle, opacity: wc.kind === 'member' ? 1 : 0.5 }}
         type="number"
         min={0}
         max={12}
         placeholder="grp"
-        title="Pin to group number (0 = any)"
+        disabled={wc.kind !== 'member'}
+        title={wc.kind === 'member' ? 'Pin to group number (0 = any)' : 'Only member pins honor a group — class/role caps are global'}
         value={wc.group ?? 0}
         onChange={(e) => onChange({ group: Number(e.target.value) || 0 })}
       />
@@ -292,9 +293,9 @@ export default function RaidSplitPage(): React.ReactElement {
               }
             </select>
           </label>
-          <label className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--color-foreground)' }} title="Seat members into their live Zeal groups where possible">
-            <input type="checkbox" checked={respectGroups} onChange={(e) => setRespectGroups(e.target.checked)} />
-            keep live groups together
+          <label className="flex items-center gap-1.5 text-sm" style={{ color: cohorts > 1 ? 'var(--color-muted-foreground)' : 'var(--color-foreground)' }} title={cohorts > 1 ? 'Always on when splitting into multiple raids — each raid keeps its live groups intact' : 'Seat members into their live Zeal groups where possible'}>
+            <input type="checkbox" checked={cohorts > 1 ? true : respectGroups} disabled={cohorts > 1} onChange={(e) => setRespectGroups(e.target.checked)} />
+            keep live groups together{cohorts > 1 ? ' (always)' : ''}
           </label>
         </div>
         {prefHint ? (
