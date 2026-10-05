@@ -1753,9 +1753,10 @@ hardening — no new features, but a broad sweep of reliability fixes.
   distinguish them from ordinary debuffs.
 - **Manual Fast/Normal respawn-timer toggle** — the Respawns overlay
   (dashboard card and popped-out window) can force newly-started
-  timers to skip Quarm's fast-respawn reduction, for guild/raid-locked
-  instances that run with the reduction disabled server-side but can't
-  be automatically detected (see `LIMITATIONS.md` §4.1).
+  timers to skip Quarm's fast-respawn reduction. As of the Oct 2026
+  server patch that matches only the Guild-1 PvP instance (open world
+  and ordinary guild instances both use the reduction), which can't be
+  automatically detected (see `LIMITATIONS.md` §4.1–4.2).
 - **Spell Checklist flags owned-but-unscribed scrolls** —
   cross-references the viewed character's Zeal inventory export (all
   characters' bags and bank) against `items.scrolleffect`; hovering the
@@ -2013,6 +2014,46 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.26.0 — Focus Upgrades, Spell Pass, PoP Stat Caps
+
+- **Spell Modifiers: missing focus types and upgrade browser** — every
+  worn focus is classified into a named category (Spell Haste,
+  Affliction/Enhancement/Summoning/Reanimation Haste, Mana Preservation
+  and the Efficiency lines, Extended Enhancement/Affliction, Extended
+  Range, Reagent Conservation, Improved Healing/Damage, Spell Aggro
+  Reduction), with damage foci split by resist school (SPA 135). The
+  panel lists categories the class could use with nothing worn; each
+  category and each contributor's Upgrades button opens the items the
+  class and level can wear for it (`GET /api/characters/{id}/focus-upgrades`),
+  marking worn items, true upgrades, and items owned on any character.
+  Focus max-level caps are treated as hard limits against the
+  character's top spell level (65), and `missing_categories` is added to
+  `/spell-modifiers`. Categories live in `buffmod/categories.go`.
+- **Spell Checklist "Pass"** — per-character `character_spell_pass`
+  table with `GET/PUT/DELETE /api/characters/{id}/spell-pass`; passed
+  spells leave the missing list, selection and shopping route and sit
+  under a reversible "Passed" filter.
+- **PoP stat caps and Flowing Thought overage** — `SE_RaiseStatCap`
+  (262) AAs (Planar Power, Innate Enlightenment) raise per-stat caps
+  (`stat_caps` on derived stats, used by the stat bars and gear-upgrade
+  scoring); worn FT keeps its pre-cap total (`ft_raw`) and shows
+  `+N raw/15`.
+- **Per-spell Detrimental timer overrides** — `detrim_spell_overrides`
+  (mute or hide by spell name), set from bell/eye buttons on timer rows
+  or the Settings list; hidden spells are never created by the spell
+  timer engine.
+- **Opt-in pin handoff and pin labels** — `respawn_pin_handoff`
+  preference (default off) and `PUT /api/overlay/respawns/{id}/label`.
+- **Last-used sub-tab memory** — `usePersistentState` plus a sidebar
+  resolver for the route-based Combat and Raids sections.
+- **Charm Pet Finder CHA** — defaults to the character's Equipped-layer
+  CHA with a reset button.
+- Fixes: bard song instrument skill mapping (12 Brass, 41 Singing, 49
+  Stringed, 54 Wind, 70 Percussion) including the instrument-mod
+  constants; shopping routes honor the starting city and consolidate
+  credits; unobtainable Beastlord spells excluded from the checklist;
+  raid-target spawnpoints are no longer fast-respawn reduced.
+
 ## Unreleased — Raid Composition
 
 - **Raid Composition** — a new **Raids** section: a user-editable role
@@ -2097,7 +2138,9 @@ name-based path when a field is nil, so older Zeal is unaffected.
   users. Note: pins and timers don't survive an app restart, and
   handoff is anchored to the player's position rather than the mob's,
   so a pin can mis-handoff if you're not near the camp when it pops —
-  see LIMITATIONS.md.
+  see LIMITATIONS.md. As of v0.26.0 handoff is opt-in (Settings →
+  Overlays → "Auto-hand off pinned respawns") and pinned rows take a
+  short click-to-edit label.
 
 ## Unreleased — Zeal Target Descriptors (NPC overlay)
 
