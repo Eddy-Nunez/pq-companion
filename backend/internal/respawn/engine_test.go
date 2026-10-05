@@ -710,3 +710,48 @@ func TestPinLabel_SurvivesHandoff(t *testing.T) {
 		t.Fatalf("want one pinned timer labeled %q, got %+v", "camp 2", st.Timers)
 	}
 }
+
+// TestApplyReduction covers the fast-respawn reduction in isolation: a normal
+// dungeon spawn drops to the 8:00 bound, a raid-target spawnpoint keeps its raw
+// timer (the server never reduces those in the open world), and an unflagged
+// zone leaves everything alone.
+func TestApplyReduction(t *testing.T) {
+	const dungeonMid = 1754 // inside the 900-2400s dungeon reduction range
+	tests := []struct {
+		name             string
+		reduced, dungeon bool
+		in               db.RespawnInfo
+		want             int
+	}{
+		{"dungeon trash is reduced", true, true, db.RespawnInfo{RespawnTime: dungeonMid, Level: 50}, 480},
+		{"raid spawnpoint keeps raw timer", true, true, db.RespawnInfo{RespawnTime: dungeonMid, Level: 60, RaidTarget: true}, dungeonMid},
+		{"unflagged zone is untouched", false, true, db.RespawnInfo{RespawnTime: dungeonMid, Level: 50}, dungeonMid},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			infos := []db.RespawnInfo{tc.in}
+			applyReduction(infos, tc.reduced, tc.dungeon)
+			if infos[0].RespawnTime != tc.want {
+				t.Errorf("respawn = %d, want %d", infos[0].RespawnTime, tc.want)
+			}
+		})
+	}
+}
+
+// TestGetRespawnTimesInZone_RaidFlag checks the real DB: A Dark Master's spawn
+// points in umbral are raid-target spawnpoints.
+func TestGetRespawnTimesInZone_RaidFlag(t *testing.T) {
+	d := openTestDB(t)
+	infos, err := d.GetRespawnTimesInZone("A_Dark_Master", "umbral")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(infos) == 0 {
+		t.Skip("A_Dark_Master not in test DB")
+	}
+	for _, ri := range infos {
+		if !ri.RaidTarget {
+			t.Errorf("A Dark Master spawnpoint should be flagged raid_target_spawnpoint: %+v", ri)
+		}
+	}
+}

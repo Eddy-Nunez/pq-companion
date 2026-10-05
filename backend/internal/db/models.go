@@ -513,6 +513,9 @@ type RespawnInfo struct {
 	RespawnTime int // spawn2.respawntime, seconds
 	Variance    int // spawn2.variance, seconds
 	Level       int // npc_types.level, used by the fast-respawn reduction
+	// RaidTarget is spawn2.raid_target_spawnpoint: the server never applies the
+	// fast-respawn reduction to these in the open world.
+	RaidTarget bool
 }
 
 // NPCSpellEntry is one castable spell on an NPC's spell list. Spells_new

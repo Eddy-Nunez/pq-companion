@@ -281,12 +281,7 @@ func (e *Engine) onKill(displayName string, diedAt time.Time) {
 	if reduced && instanceMode {
 		reduced = false
 	}
-	if reduced {
-		for i := range infos {
-			infos[i].RespawnTime = reduceRespawnTime(
-				infos[i].RespawnTime, infos[i].Level, reduced, dungeon)
-		}
-	}
+	applyReduction(infos, reduced, dungeon)
 
 	estimate, ambiguous, minS, maxS, npcID := summarize(infos)
 	if estimate <= 0 {
@@ -339,6 +334,24 @@ func (e *Engine) onKill(displayName string, diedAt time.Time) {
 		slog.Info("respawn: pin handed off", "from", handoffFrom, "to", id, "npc", displayName, "zone", zoneShort)
 	}
 	e.hub.Broadcast(ws.Event{Type: WSEventRespawns, Data: snap})
+}
+
+// applyReduction rewrites each row's RespawnTime with Quarm's fast-respawn
+// reduction when the zone is flagged for it. Raid-target spawnpoints are skipped:
+// the server never reduces them in the open world (Spawn2::resetTimer excludes
+// raid_target_spawnpoint outside guild instances, which the app can't detect —
+// see LIMITATIONS.md §4.2), so the raw timer is the right default.
+func applyReduction(infos []db.RespawnInfo, reduced, dungeon bool) {
+	if !reduced {
+		return
+	}
+	for i := range infos {
+		if infos[i].RaidTarget {
+			continue
+		}
+		infos[i].RespawnTime = reduceRespawnTime(
+			infos[i].RespawnTime, infos[i].Level, reduced, dungeon)
+	}
 }
 
 // summarize reduces the set of spawn rows for a name+zone into a single
