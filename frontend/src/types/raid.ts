@@ -46,6 +46,8 @@ export interface RaidEncounter {
   trigger?: string
   reqs?: string[]
   strategy?: Record<string, string>
+  // Named group-composition templates (docs/raid-group-compositions-plan.md).
+  shapes?: RaidShape[]
   source?: string
   notes?: string
   comps: RaidCompRow[]
@@ -54,6 +56,18 @@ export interface RaidEncounter {
 }
 
 /** One raw taxonomy row as stored in user.db (used by the taxonomy editor). */
+export interface RaidShapeRow {
+  role: string
+  sub_role?: string
+  count: number
+}
+
+export interface RaidShape {
+  shape_id: string
+  group_number?: number
+  rows: RaidShapeRow[]
+}
+
 export interface RaidRole {
   role: string
   sub_role?: string

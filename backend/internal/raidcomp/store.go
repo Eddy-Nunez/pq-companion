@@ -45,6 +45,33 @@ func (r CompRow) Path() string {
 	return r.Role + "." + r.Sub
 }
 
+// Shape is one named group-composition template: a role multiset filled
+// best-effort by the weave from taxonomy-eligible members (see
+// docs/raid-group-compositions-plan.md).
+type Shape struct {
+	ID string `json:"shape_id"`
+	// GroupNumber optionally pins the shape to a specific group number
+	// (0 = auto: shapes claim the first free group numbers per raid in
+	// declaration order).
+	GroupNumber int        `json:"group_number,omitempty"`
+	Rows        []ShapeRow `json:"rows"`
+}
+
+// ShapeRow is one role + count inside a Shape.
+type ShapeRow struct {
+	Role  string `json:"role"`
+	Sub   string `json:"sub_role,omitempty"`
+	Count int    `json:"count"`
+}
+
+// Path returns the dotted leaf key, mirroring CompRow.Path.
+func (r ShapeRow) Path() string {
+	if r.Sub == "" {
+		return r.Role
+	}
+	return r.Role + "." + r.Sub
+}
+
 // Encounter is one raid encounter in the knowledge base. Comps are stored
 // normalized (one raid_encounter_comps row per leaf per level); Reqs and
 // Strategy are child tables. ZoneID is the EQ zoneidnumber (what the Zeal
@@ -58,16 +85,20 @@ type Encounter struct {
 	// the checker page can pull resists / HP / special abilities / signature
 	// spells straight from the game database instead of duplicating them.
 	// 0 = not linked.
-	NPCID     int               `json:"npc_id,omitempty"`
-	Status    Status            `json:"status"`
-	Trigger   string            `json:"trigger,omitempty"`
-	Reqs      []string          `json:"reqs,omitempty"`
-	Strategy  map[string]string `json:"strategy,omitempty"` // section -> text (StrategyOrder keys)
-	Source    string            `json:"source,omitempty"`
-	Notes     string            `json:"notes,omitempty"`
-	Comps     []CompRow         `json:"comps"`
-	CreatedAt int64             `json:"created_at"`
-	UpdatedAt int64             `json:"updated_at"`
+	NPCID    int               `json:"npc_id,omitempty"`
+	Status   Status            `json:"status"`
+	Trigger  string            `json:"trigger,omitempty"`
+	Reqs     []string          `json:"reqs,omitempty"`
+	Strategy map[string]string `json:"strategy,omitempty"` // section -> text (StrategyOrder keys)
+	Source   string            `json:"source,omitempty"`
+	Notes    string            `json:"notes,omitempty"`
+	Comps    []CompRow         `json:"comps"`
+	// Shapes are named group-composition templates for this encounter
+	// (docs/raid-group-compositions-plan.md); never null — empty means
+	// trinity-only proposals.
+	Shapes    []Shape `json:"shapes"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
 }
 
 // StrategyOrder lists the fixed strategy sections an encounter can carry,
@@ -106,6 +137,30 @@ func (e *Encounter) Validate() error {
 	for section := range e.Strategy {
 		if !validStrategy[section] {
 			return fmt.Errorf("raidcomp: unknown strategy section %q", section)
+		}
+	}
+	seenShape := map[string]bool{}
+	for _, sh := range e.Shapes {
+		if strings.TrimSpace(sh.ID) == "" {
+			return errors.New("raidcomp: shape id required")
+		}
+		if seenShape[sh.ID] {
+			return fmt.Errorf("raidcomp: duplicate shape id %q", sh.ID)
+		}
+		seenShape[sh.ID] = true
+		if len(sh.Rows) == 0 {
+			return fmt.Errorf("raidcomp: shape %q has no rows", sh.ID)
+		}
+		if sh.GroupNumber < 0 || sh.GroupNumber > maxSplitGroups {
+			return fmt.Errorf("raidcomp: shape %q group_number %d out of range 0..%d", sh.ID, sh.GroupNumber, maxSplitGroups)
+		}
+		for _, r := range sh.Rows {
+			if strings.TrimSpace(r.Role) == "" {
+				return fmt.Errorf("raidcomp: shape %q has a row without a role", sh.ID)
+			}
+			if r.Count < 1 {
+				return fmt.Errorf("raidcomp: shape %q row %q count must be >= 1", sh.ID, r.Path())
+			}
 		}
 	}
 	for _, c := range e.Comps {
@@ -182,6 +237,18 @@ func (s *Store) migrate() error {
 			PRIMARY KEY (encounter_id, comp_level, role, sub_role)
 		)`,
 		`CREATE INDEX IF NOT EXISTS raid_encounter_comps_encounter ON raid_encounter_comps(encounter_id)`,
+		`CREATE TABLE IF NOT EXISTS raid_group_shapes (
+			encounter_id TEXT    NOT NULL,
+			position     INTEGER NOT NULL,
+			shape_id     TEXT    NOT NULL,
+			group_number INTEGER NOT NULL DEFAULT 0,
+			row_index    INTEGER NOT NULL,
+			role         TEXT    NOT NULL,
+			sub_role     TEXT,
+			count        INTEGER NOT NULL DEFAULT 1,
+			PRIMARY KEY (encounter_id, position, row_index)
+		)`,
+		`CREATE INDEX IF NOT EXISTS raid_group_shapes_encounter ON raid_group_shapes(encounter_id)`,
 		`CREATE TABLE IF NOT EXISTS raid_encounter_reqs (
 			encounter_id TEXT    NOT NULL,
 			position     INTEGER NOT NULL,
@@ -535,6 +602,13 @@ func (s *Store) SaveEncounter(e *Encounter) error {
 			return fmt.Errorf("raidcomp: comp role %q not in taxonomy", c.Path())
 		}
 	}
+	for _, sh := range e.Shapes {
+		for _, r := range sh.Rows {
+			if !allowed[r.Path()] {
+				return fmt.Errorf("raidcomp: shape %q role %q not in taxonomy", sh.ID, r.Path())
+			}
+		}
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -560,7 +634,7 @@ func (s *Store) SaveEncounter(e *Encounter) error {
 		return fmt.Errorf("insert encounter %q: %w", e.ID, err)
 	}
 
-	for _, t := range []string{"raid_encounter_comps", "raid_encounter_reqs", "raid_encounter_strategy"} {
+	for _, t := range []string{"raid_encounter_comps", "raid_encounter_reqs", "raid_encounter_strategy", "raid_group_shapes"} {
 		if _, err := tx.Exec(`DELETE FROM `+t+` WHERE encounter_id = ?`, e.ID); err != nil {
 			return err
 		}
@@ -581,6 +655,20 @@ func (s *Store) SaveEncounter(e *Encounter) error {
 				VALUES (?, ?, ?, ?, ?)
 			`, e.ID, string(level), c.Role, sub, n); err != nil {
 				return err
+			}
+		}
+	}
+	for pos, sh := range e.Shapes {
+		for ri, r := range sh.Rows {
+			sub := sql.NullString{}
+			if r.Sub != "" {
+				sub = sql.NullString{String: r.Sub, Valid: true}
+			}
+			if _, err := tx.Exec(`
+				INSERT INTO raid_group_shapes (encounter_id, position, shape_id, group_number, row_index, role, sub_role, count)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`, e.ID, pos+1, sh.ID, sh.GroupNumber, ri+1, r.Role, sub, r.Count); err != nil {
+				return fmt.Errorf("insert shape %q row %d: %w", sh.ID, ri, err)
 			}
 		}
 	}
@@ -608,10 +696,12 @@ func (s *Store) SaveEncounter(e *Encounter) error {
 }
 
 type encounterRow struct {
-	e        Encounter
-	comps    []CompRow
-	reqs     []string
-	strategy map[string]string
+	e              Encounter
+	comps          []CompRow
+	shapes         []Shape
+	shapePositions []int
+	reqs           []string
+	strategy       map[string]string
 }
 
 // ListEncounters returns all encounters with full children, ordered by id.
@@ -643,6 +733,10 @@ func (s *Store) ListEncounters() ([]Encounter, error) {
 		er.e.Comps = er.comps
 		er.e.Reqs = er.reqs
 		er.e.Strategy = er.strategy
+		er.e.Shapes = er.shapes
+		if er.e.Shapes == nil {
+			er.e.Shapes = []Shape{}
+		}
 		encs[i] = er.e
 	}
 	return encs, nil
@@ -721,6 +815,40 @@ func (s *Store) loadChildren(rows []encounterRow) error {
 		rows[i].comps = mergedRows
 	}
 
+	shapeRows, err := s.db.Query(`
+		SELECT encounter_id, position, shape_id, group_number, row_index, role, sub_role, count
+		FROM raid_group_shapes ORDER BY encounter_id, position, row_index`)
+	if err != nil {
+		return err
+	}
+	defer shapeRows.Close()
+	for shapeRows.Next() {
+		var encID, shapeID, role string
+		var sub sql.NullString
+		var position, groupNumber, rowIndex, count int
+		if err := shapeRows.Scan(&encID, &position, &shapeID, &groupNumber, &rowIndex, &role, &sub, &count); err != nil {
+			return err
+		}
+		i, ok := idxByID[encID]
+		if !ok {
+			continue // orphan rows (defensive; deletions clear children explicitly)
+		}
+		last := len(rows[i].shapes) - 1
+		if last < 0 || rows[i].shapePositions[last] != position {
+			rows[i].shapes = append(rows[i].shapes, Shape{ID: shapeID, GroupNumber: groupNumber})
+			rows[i].shapePositions = append(rows[i].shapePositions, position)
+			last = len(rows[i].shapes) - 1
+		}
+		subStr := ""
+		if sub.Valid {
+			subStr = sub.String
+		}
+		rows[i].shapes[last].Rows = append(rows[i].shapes[last].Rows, ShapeRow{Role: role, Sub: subStr, Count: count})
+	}
+	if err := shapeRows.Err(); err != nil {
+		return err
+	}
+
 	reqRows, err := s.db.Query(`
 		SELECT encounter_id, position, text FROM raid_encounter_reqs ORDER BY encounter_id, position`)
 	if err != nil {
@@ -785,7 +913,7 @@ func (s *Store) DeleteEncounter(id string) error {
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck
-	for _, table := range []string{"raid_encounter_comps", "raid_encounter_reqs", "raid_encounter_strategy"} {
+	for _, table := range []string{"raid_encounter_comps", "raid_encounter_reqs", "raid_encounter_strategy", "raid_group_shapes"} {
 		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE encounter_id = ?`, id); err != nil {
 			return err
 		}

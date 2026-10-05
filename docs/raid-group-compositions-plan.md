@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS raid_group_shapes (
   encounter_id TEXT NOT NULL,
   position     INTEGER NOT NULL,                 -- shape order / display order
   shape_id     TEXT    NOT NULL,                 -- identifier, e.g. 'healstack'
+  group_number INTEGER NOT NULL DEFAULT 0,       -- 0 = auto (first free per raid)
   row_index    INTEGER NOT NULL,                 -- order within the shape
   role         TEXT    NOT NULL,                 -- taxonomy role
   sub_role     TEXT,
@@ -47,7 +48,8 @@ CREATE TABLE IF NOT EXISTS raid_group_shapes (
 ```
 
 - `shape_id` is a stable, user-editable identifier (slug-ish; rendered on
-  proposal groups and used to reference the shape in requests).
+  proposal groups and used to reference the shape in requests). Ids must be
+  **unique per encounter** (they're the request reference).
 - Roles must exist in the live taxonomy (same validation `SaveEncounter`
   already applies to comp rows — roles are validated against `Leaves()`).
 - An encounter may define any number of shapes; a shape may be any number of
@@ -59,8 +61,9 @@ CREATE TABLE IF NOT EXISTS raid_group_shapes (
 
 ```go
 type Shape struct {
-    ID    string      `json:"shape_id"`
-    Rows  []ShapeRow  `json:"rows"`
+    ID          string     `json:"shape_id"`
+    GroupNumber int        `json:"group_number,omitempty"` // 0 = auto
+    Rows        []ShapeRow `json:"rows"`
 }
 type ShapeRow struct {
     Role  string `json:"role"`
@@ -83,21 +86,32 @@ type ShapeRow struct {
   `GET /api/raids/encounters`. Roster-shape editing is a pure DOM exercise.
 - **Proposal**: `POST /api/raids/split` gains
   `shapes: []string` — the enabled shape ids (empty = trinity only, i.e.
-  today's behavior). The engine loads the encounter's shapes, filters by
-  id, and errors on unknown ids (loud, like the wildcards-400 precedent).
-  Validation: `shapes` is cohort-agnostic (works for 1-raid and K-raids).
+  today's behavior) and `shape_distribution: "replicate" | "distribute"`
+  (default `replicate`). **Shapes require cohort mode**: a request with
+  `shapes` and `cohorts <= 1` is a 400. The engine loads the encounter's
+  shapes, filters by id, and errors on unknown ids (loud, like the
+  wildcards-400 precedent).
 
 ## 5. Weave integration (the core)
 
 Priority ordering (stacking on the MIN-first rule from `38b4c201`):
 
 1. **Shape groups seat first.** For each enabled shape, in declaration
-   order — per cohort, shape groups claim the first group numbers
-   (cohort 1 → groups 1..N, cohort 2 → groups 1..N, etc.). Seats are
-   assigned from eligible members by the existing picker (same-cohort
-   preference, name tie-break), which already runs MIN-agnostic.
-   Overflow rows (shape needs more than `group_size`) spill into the next
-   group number, tagged with the same shape id.
+   order. **Distribution** (per `shape_distribution`):
+   - `replicate` (default) — every cohort gets every enabled shape; shape
+     groups claim the first group numbers of each raid.
+   - `distribute` — shape i applies to cohort `((i-1) mod K)+1`, so a
+     2-raid split of [HealStack, CasterStack] gives raid 1 the heal stack
+     and raid 2 the caster stack. Small templates (1–3 members) are the
+     point of distribute: they slot into one raid without unbalancing it.
+   **Group pinning**: a shape with `group_number != 0` lands on that group
+   number (per-raid local numbering) instead of the auto first-free slot.
+   Collisions at weave time (two enabled shapes pinned to the same number,
+   or a pinned number beyond the raid's group budget) → the later shape
+   falls back to first-free plus a warning. Seats are assigned from
+   eligible members by the existing picker (same-cohort preference, name
+   tie-break). Overflow rows (shape needs more than `group_size`) spill
+   into the next group number, tagged with the same shape id.
 2. **Then the trinity MIN-first weave** fills the remaining members and
    groups exactly as today (deadline ordering unchanged).
 3. **Coverage attribution:** shape-group seats count toward the encounter
@@ -128,10 +142,10 @@ buttons + remove-shape. Shapes save with the encounter (no new save flow).
 
 ### Group Proposal (`RaidSplitPage` / `GroupProposal`)
 
-- Toggle list of the encounter's shapes above Generate
-  ("include group compositions"), default **off** → behavior identical to
-  today unless a leader opts in. Matches the "toggleable option to include
-  in the weave output" requirement.
+- Toggle list of the encounter's shapes shown **only when cohorts > 1**
+  (the respect-groups checkbox pattern); every checkbox starts **unchecked**
+  and only the checked ids travel with the Generate request — shapes are an
+  explicit opt-in per generate, never a silent default.
 - Report: shape groups render their identifier in the group header (the
   existing per-group card + family summary at GroupProposal.tsx:467 is the
   natural home); open seats where a shape row under-filled.
@@ -141,35 +155,32 @@ buttons + remove-shape. Shapes save with the encounter (no new save flow).
 ## 7. Edge cases
 
 - Encounter defines shapes but none enabled → pure trinity (today).
+- `shapes` sent with `cohorts <= 1` → 400 (shapes are a multi-raid feature).
 - Shape ids in the request that don't exist on the encounter → 400.
 - Roster too small to fill a shape → warnings per under-filled row; rest of
   the raid weaves as usual.
-- K cohorts: each cohort replicates every enabled shape (see §8 Q2 — the
-  distribution question).
+- Pinned-group collisions or out-of-range pins → fallback to first-free
+  plus a warning.
+- K cohorts with `distribute`: cohorts beyond the shape count weave
+  trinity-only; shapes beyond the cohort count are ignored with a warning.
 - Legacy reports (pre-cohorts normalization) — unaffected; shapes only
   appear via fresh requests.
 - No-null rule: `shapes` in the encounter DTO and any shape arrays in the
   report must marshal `[]`, never null (the c05c19b5 lesson).
 
-## 8. Decisions needed from the user (recommended defaults in bold)
+## 8. Decisions (confirmed 2026-10-04 by the user)
 
-1. **Row kind — role paths only, or also role families / classes?**
-   **Default: role paths only** (`healer.ch_cleric`, `damage`), matching the
-   taxonomy and comp rows. "5 healers of any kind" would need family rows —
-   a v1.1 extension if wanted.
-2. **Cohort distribution — every cohort replicates all enabled shapes, or
-   shapes are distributed across cohorts (shape i → cohort i mod K)?**
-   **Default: replicate per cohort** ("each raid gets a HealStack + CasterStack").
-   The distributed variant is lower-latency to add later (a round-robin over
-   cohort indices) if tower-splits want one stack per raid.
-3. **Single-raid mode — do shapes apply there too, or only when cohorts > 1?**
-   **Default: apply whenever enabled** (the >1-raid framing is the primary
-   use case, not a hard gate).
-4. **Toggle default — shapes off unless toggled (Q: confirm) or on when
-   defined?** **Default: off** (keeps current behavior the default).
-5. **Group numbering — shapes occupy the first groups of each raid.**
-   Confirm, or prefer shapes keep the user's own group numbers modulo the
-   raid (only meaningful when one shape per raid)?
+1. **Row kind: role paths only.** The taxonomy already lets any role carry
+   any class mix (Taxonomy Editor), so "5 healers" is a role whose classes
+   include the healers the leader wants. No family/class rows needed.
+2. **Distribution: both modes supported** (`replicate` default,
+   `distribute` for small templates), §5.
+3. **Cohort-only.** Shapes apply only when cohorts > 1; the proposal UI
+   shows the toggles only in cohort mode.
+4. **Opt-in per generate.** Unchecked by default; checked ids travel with
+   the Generate request only.
+5. **Optional group pinning** via `group_number` (0 = auto), collisions
+   degrade to first-free + warning.
 
 ## 9. Test plan
 

@@ -202,6 +202,13 @@ func raidImportErrors(enc raidcomp.Encounter) []string {
 		}
 		seen[c.Path()] = true
 	}
+	seenShapes := map[string]bool{}
+	for _, sh := range enc.Shapes {
+		if seenShapes[sh.ID] {
+			errs = append(errs, fmt.Sprintf("raidcomp: duplicate shape id %q", sh.ID))
+		}
+		seenShapes[sh.ID] = true
+	}
 	return errs
 }
 
@@ -218,6 +225,14 @@ func missingRolePaths(leaves []raidcomp.RoleLeaf, enc raidcomp.Encounter) []stri
 		if !allowed[c.Path()] && !seen[c.Path()] {
 			missing = append(missing, c.Path())
 			seen[c.Path()] = true
+		}
+	}
+	for _, sh := range enc.Shapes {
+		for _, r := range sh.Rows {
+			if !allowed[r.Path()] && !seen[r.Path()] {
+				missing = append(missing, r.Path())
+				seen[r.Path()] = true
+			}
 		}
 	}
 	return missing
