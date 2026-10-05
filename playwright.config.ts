@@ -25,6 +25,12 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   reporter: [['list']],
+  // Serial workers: multiple smoke specs WRITE against one shared live
+  // backend/db (probe encounters, config toggles) — parallel workers race
+  // on that state (editor-shapes vs split-shapes both create/delete
+  // encounters and flip the same config keys). One worker keeps the
+  // describe.serial guarantees file-local AND file-to-file.
+  workers: 1,
   use: {
     trace: 'retain-on-failure',
   },
