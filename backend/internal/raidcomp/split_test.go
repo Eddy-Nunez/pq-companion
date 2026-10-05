@@ -449,6 +449,53 @@ func TestSplit_Cohorts_ShortfallWarnsHonestly(t *testing.T) {
 	}
 }
 
+func TestSplit_MinSeatsBeforeSiblingRecSeats(t *testing.T) {
+	// Regression for the weave priority (MIN, then role balance, then REC):
+	// slower and debuffer.slows share the util bucket, so the old drain
+	// order was slower.MIN → slower.REC → debuffer.MIN. With a shaman and
+	// an enchanter in the raid, slower.REC claimed the enchanter and
+	// debuffer.slows.MIN sat empty (live-caught 2026-10-04: bot-agnarr
+	// debuffer 0/1 while every enchanter sat slower.REC). Name tie-break:
+	// "Ack" < "Bee", so Ack must take slower.MIN and Bee debuffer.MIN.
+	leaves := []RoleLeaf{
+		{Position: 1, Role: "slower", Label: "Slower", Classes: []ClassCode{CodeShaman, CodeEnchanter}},
+		{Position: 2, Role: "debuffer", Sub: "slows", Label: "Debuff Slows", Classes: []ClassCode{CodeEnchanter}},
+		{Position: 3, Role: "damage", Label: "Damage", Classes: []ClassCode{CodeRogue}},
+	}
+	enc := &Encounter{ID: "sib", Name: "Sibling", Zone: "kael", Status: StatusActive,
+		Comps: []CompRow{
+			{Role: "slower", Min: 1, Rec: 1},
+			{Role: "debuffer", Sub: "slows", Min: 1},
+			{Role: "damage", Min: 1},
+		},
+	}
+	members := []RosterMember{
+		{Name: "Ack", Class: CodeShaman},
+		{Name: "Bee", Class: CodeEnchanter},
+		{Name: "Rogue1", Class: CodeRogue},
+		{Name: "Rogue2", Class: CodeRogue},
+		{Name: "Rogue3", Class: CodeRogue},
+	}
+	rep, err := Split(leaves, enc, SplitRequest{Preference: SplitTrinity}, members)
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	placed := map[string]string{}
+	for _, g := range rep.Groups {
+		for _, s := range g.Slots {
+			if s.Path != "" {
+				placed[s.Path] = s.Member
+			}
+		}
+	}
+	if got := placed["debuffer.slows"]; got != "Bee" {
+		t.Errorf("debuffer.slows.MIN = %q, want Bee seated before slower.REC can claim her", got)
+	}
+	if got := placed["slower"]; got != "Ack" {
+		t.Errorf("slower = %q, want Ack on the MIN seat (Bee must not be hogged by slower.REC)", got)
+	}
+}
+
 func TestSplit_Cohorts_EveryoneSeated(t *testing.T) {
 	rep, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 2}, cohortRoster())
 	if err != nil {

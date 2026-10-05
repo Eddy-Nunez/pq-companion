@@ -262,6 +262,28 @@ func weave(slots []splitSlot) []splitSlot {
 	}
 }
 
+// minBeforeRec stably partitions slots so every MIN seat precedes every REC
+// seat, preserving the woven order within each level. Weave priority is:
+// achieve MIN, then role balance (the interleave), then REC extras. Without
+// it a REC seat drained from a bucket queue before a sibling's MIN seat can
+// claim the only eligible member and strand the MIN seat (live-caught
+// 2026-10-04: slower.REC hogged an enchanter that debuffer.slows.MIN
+// needed, leaving debuffer 0/1).
+func minBeforeRec(slots []splitSlot) []splitSlot {
+	out := make([]splitSlot, 0, len(slots))
+	for _, s := range slots {
+		if s.level == CompMin {
+			out = append(out, s)
+		}
+	}
+	for _, s := range slots {
+		if s.level != CompMin {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // eligible reports whether m may fill s's slot: unroled, classed, and
 // class-eligible for the leaf.
 func (m *splitMember) eligible(s *splitSlot) bool {
@@ -333,6 +355,7 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 	slots := buildSplitSlots(ordered)
 	if req.Preference == SplitTrinity {
 		slots = weave(slots)
+		slots = minBeforeRec(slots)
 	}
 
 	// Resolve members; index by name for curated rules.
@@ -989,25 +1012,31 @@ func splitCohorts(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members [
 	// Interleaved allocation: walk the cohorts round-robin per slot index so
 	// scarce classes alternate between cohorts instead of cohort 1 hoarding
 	// them. Seeded members prefer their own cohort's slots; ties by name.
+	// Priority is MIN first, then role balance, then REC — every cohort's
+	// MIN seats are decided before any REC seat may claim a candidate, so a
+	// REC seat can never strand a sibling MIN seat (live-caught 2026-10-04:
+	// slower.REC hogged an enchanter that debuffer.slows.MIN needed).
 	maxLen := 0
 	for c := 1; c <= K; c++ {
 		if len(cohortSlots[c]) > maxLen {
 			maxLen = len(cohortSlots[c])
 		}
 	}
-	for i := 0; i < maxLen; i++ {
-		for c := 1; c <= K; c++ {
-			if i >= len(cohortSlots[c]) {
-				continue
+	for _, level := range []CompLevel{CompMin, CompRec} {
+		for i := 0; i < maxLen; i++ {
+			for c := 1; c <= K; c++ {
+				if i >= len(cohortSlots[c]) || cohortSlots[c][i].level != level {
+					continue
+				}
+				s := &cohortSlots[c][i]
+				m := pickCohortMember(s, ms)
+				if m == nil {
+					continue
+				}
+				m.slot = s
+				s.filled = true
+				s.member = m
 			}
-			s := &cohortSlots[c][i]
-			m := pickCohortMember(s, ms)
-			if m == nil {
-				continue
-			}
-			m.slot = s
-			s.filled = true
-			s.member = m
 		}
 	}
 
