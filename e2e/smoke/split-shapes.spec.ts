@@ -4,7 +4,9 @@
 //
 // Writes a throwaway "e2e-split-shapes" encounter with two shapes via the
 // API, then:
-//   - shape toggles are HIDDEN in single-raid mode, visible in cohort mode
+//   - shape toggles are visible whenever the encounter has shapes (the
+//     cohort-only constraint was lifted: single raids weave shapes too);
+//     the placement select stays cohort-only
 //   - checking a shape + generate renders "shape: <id>" badges on the
 //     shape-formed group cards (replicate: one per raid)
 //   - unchecked shapes generate a pure trinity proposal (no badges)
@@ -83,20 +85,22 @@ test.describe.serial('Group Proposal — group compositions', () => {
     }
   })
 
-  test('toggles hidden in single-raid mode, visible in cohort mode', async ({ page }) => {
+  test('toggles visible for any raid count; placement select cohort-only', async ({ page }) => {
     await page.goto('/#/raids/split', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { name: 'Group Composition Proposal' })).toBeVisible()
     await pickEncounter(page)
-    await expect(page.getByText('group compositions')).toHaveCount(0)
-
-    await page.getByLabel('split into').selectOption('2')
+    // Single raid (default): toggles show, placement select does not.
     await expect(page.getByText('group compositions')).toBeVisible()
     await expect(page.getByText('healstack', { exact: true })).toBeVisible()
     await expect(page.getByText('caststack', { exact: true })).toBeVisible()
-    // Opt-in per generate: both start unchecked, placement defaults to replicate.
-    await expect(page.getByLabel('placement')).toHaveValue('replicate')
+    await expect(page.getByLabel('placement')).toHaveCount(0)
+    // Opt-in per generate: unchecked by default.
     const heal = page.locator('label', { hasText: 'healstack' }).locator('input[type=checkbox]')
     await expect(heal).not.toBeChecked()
+
+    await page.getByLabel('split into').selectOption('2')
+    await expect(page.getByLabel('placement')).toBeVisible()
+    await expect(page.getByLabel('placement')).toHaveValue('replicate')
   })
 
   test('checking a shape renders shape-badged group cards in both raids', async ({ page }) => {
@@ -111,6 +115,16 @@ test.describe.serial('Group Proposal — group compositions', () => {
     // worth of seats (2 CH clerics + 1 defensive tank) with open seats left
     // open — the trinity pass never tops a shape group up.
     await expect(page.getByText('shape: healstack')).toHaveCount(2)
+  })
+
+  test('single-raid generate with a shape renders one shape-badged group', async ({ page }) => {
+    await page.goto('/#/raids/split', { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { name: 'Group Composition Proposal' })).toBeVisible()
+    await pickEncounter(page)
+    // Leave 'split into' at the default 1 raid.
+    await page.locator('label', { hasText: 'healstack' }).locator('input[type=checkbox]').check()
+    await page.getByRole('button', { name: 'Generate proposal' }).click()
+    await expect(page.getByText('shape: healstack')).toHaveCount(1)
   })
 
   test('unchecked shapes generate a pure trinity proposal (no badges)', async ({ page }) => {

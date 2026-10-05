@@ -5,7 +5,8 @@
 //
 // Covered:
 //   - shapes persist through the encounter API (save → load round trip)
-//   - split rejects shapes with cohorts<=1, unknown ids, bad distribution
+//   - split rejects unknown ids and bad distribution
+//   - single-raid proposals weave shapes too (cohort-only lifted 2026-10-05)
 //   - replicate: every raid fields the shape; group cards carry shape_id
 //   - distribute: shape i applies to raid i
 import { expect, test } from '@playwright/test'
@@ -83,12 +84,17 @@ test.describe.serial('POST /api/raids/split — group-composition shapes', () =>
     ])
   })
 
-  test('rejects shapes with a single-raid request (400)', async ({ request }) => {
+  test('single-raid proposals weave shapes (cohort-only lifted)', async ({ request }) => {
     const res = await request.post('/api/raids/split', {
       data: splitBody({ cohorts: 1, shapes: ['e2e-healstack'] }),
     })
-    expect(res.status()).toBe(400)
-    expect((await res.json()).error).toContain('cohorts >= 2')
+    expect(res.status()).toBe(200)
+    const rep = await res.json()
+    const g1 = rep.groups[0]
+    expect(g1.shape_id).toBe('e2e-healstack')
+    expect(g1.slots).toHaveLength(3)
+    const cleric = rep.min.find((c: { path: string }) => c.path === 'healer.ch_cleric')
+    expect(cleric.placed).toBeGreaterThanOrEqual(2)
   })
 
   test('rejects an unknown shape id (400)', async ({ request }) => {
