@@ -78,6 +78,7 @@ function EncounterList({
             <div className="flex items-center gap-1.5 flex-wrap">
               {asChip(e.zone)}
               {asChip(`${e.comps.length} comp${e.comps.length === 1 ? '' : 's'}`)}
+              {(e.shapes?.length ?? 0) > 0 ? asChip(`${e.shapes!.length} shape${e.shapes!.length === 1 ? '' : 's'}`) : null}
               {e.reqs && e.reqs.length > 0 ? asChip(`${e.reqs.length} req${e.reqs.length === 1 ? '' : 's'}`) : null}
               {e.source ? asChip(e.source) : null}
             </div>

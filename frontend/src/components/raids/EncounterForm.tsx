@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Save, X, ChevronDown } from 'lucide-react'
+import { Save, X, ChevronDown, Plus, Trash2 } from 'lucide-react'
 import type { RaidEncounter, RaidStatus, RaidTaxonomy } from '../../types/raid'
 import type { Zone } from '../../types/zone'
 import type { NPC } from '../../types/npc'
@@ -23,6 +23,20 @@ interface CompDraft {
   include: boolean
   min: string
   rec: string
+}
+
+// ShapeDraft keeps one group-composition template editable in string form
+// (docs/raid-group-compositions-plan.md §6). Rows are taxonomy-leaf picks so
+// a saved shape can never reference a role the taxonomy doesn't have.
+interface ShapeRowDraft {
+  leafKey: string // taxonomy leaf key ('' = not picked yet)
+  count: string
+}
+interface ShapeDraft {
+  key: string // stable react key, independent of the (editable) shape id
+  shape_id: string
+  group_number: string // '0' = auto
+  rows: ShapeRowDraft[]
 }
 
 interface Props {
@@ -315,6 +329,19 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
     })
   })
 
+  const [shapeDrafts, setShapeDrafts] = useState<ShapeDraft[]>(() =>
+    (encounter?.shapes ?? []).map((sh, i) => ({
+      key: `s${i}`,
+      shape_id: sh.shape_id,
+      group_number: String(sh.group_number ?? 0),
+      rows: sh.rows.map((r) => ({
+        leafKey: r.role + (r.sub_role ? '.' + r.sub_role : ''),
+        count: String(r.count),
+      })),
+    })),
+  )
+  const nextShapeKey = useRef((encounter?.shapes?.length ?? 0) + 1)
+
   const [error, setError] = useState('')
 
   // Focus target for the Min input when a row is toggled on; the input only
@@ -355,6 +382,38 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
     setDrafts((d) => d.map((row) => (row.key === key ? { ...row, ...patch } : row)))
   }
 
+  // ── shape drafts (Group compositions) ─────────────────────────────
+  function addShape(): void {
+    setShapeDrafts((d) => [
+      ...d,
+      { key: `s${nextShapeKey.current++}`, shape_id: '', group_number: '0', rows: [{ leafKey: '', count: '1' }] },
+    ])
+  }
+
+  function updateShape(key: string, patch: Partial<ShapeDraft>): void {
+    setShapeDrafts((d) => d.map((sh) => (sh.key === key ? { ...sh, ...patch } : sh)))
+  }
+
+  function removeShape(key: string): void {
+    setShapeDrafts((d) => d.filter((sh) => sh.key !== key))
+  }
+
+  function updateShapeRow(shapeKey: string, rowIdx: number, patch: Partial<ShapeRowDraft>): void {
+    setShapeDrafts((d) =>
+      d.map((sh) =>
+        sh.key !== shapeKey ? sh : { ...sh, rows: sh.rows.map((r, i) => (i === rowIdx ? { ...r, ...patch } : r)) },
+      ),
+    )
+  }
+
+  function addShapeRow(shapeKey: string): void {
+    setShapeDrafts((d) => d.map((sh) => (sh.key === shapeKey ? { ...sh, rows: [...sh.rows, { leafKey: '', count: '1' }] } : sh)))
+  }
+
+  function removeShapeRow(shapeKey: string, rowIdx: number): void {
+    setShapeDrafts((d) => d.map((sh) => (sh.key === shapeKey ? { ...sh, rows: sh.rows.filter((_, i) => i !== rowIdx) } : sh)))
+  }
+
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
     setError('')
@@ -380,6 +439,45 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
         return
       }
     }
+    const leafByKey = new Map(leaves.map((l) => [l.key, l]))
+    const seenShapeIds = new Set<string>()
+    const shapes = []
+    for (const d of shapeDrafts) {
+      const sid = d.shape_id.trim()
+      if (!sid) {
+        setError('Group composition id is required')
+        return
+      }
+      if (seenShapeIds.has(sid)) {
+        setError(`Duplicate group composition id "${sid}"`)
+        return
+      }
+      seenShapeIds.add(sid)
+      if (d.rows.length === 0) {
+        setError(`Group composition "${sid}" has no rows`)
+        return
+      }
+      const rows = []
+      for (const r of d.rows) {
+        const leaf = leafByKey.get(r.leafKey)
+        if (!leaf) {
+          setError(`Group composition "${sid}" has a row without a role`)
+          return
+        }
+        const count = Math.max(0, parseInt(r.count, 10) || 0)
+        if (count < 1) {
+          setError(`Group composition "${sid}": ${leaf.label} count must be at least 1`)
+          return
+        }
+        rows.push({ role: leaf.role, sub_role: leaf.sub, count })
+      }
+      const gn = Math.max(0, parseInt(d.group_number, 10) || 0)
+      if (gn > 12) {
+        setError(`Group composition "${sid}": group pin must be 0–12 (0 = auto)`)
+        return
+      }
+      shapes.push({ shape_id: sid, group_number: gn || undefined, rows })
+    }
     const enc: RaidEncounter = {
       id: id.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       name: name.trim(),
@@ -395,6 +493,7 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
         taxonomy.strategy_order.map((s) => [s, (strategy[s] ?? '').trim()]).filter(([, v]) => v),
       ),
       comps,
+      shapes,
       created_at: encounter?.created_at ?? 0,
       updated_at: encounter?.updated_at ?? 0,
     }
@@ -596,6 +695,111 @@ export default function EncounterForm({ taxonomy, zones, encounter, onSubmit, on
               />
             </div>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1.5 flex items-baseline justify-between">
+          <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+            Group compositions — named group templates for multi-raid (cohort) proposals: the weave seats a
+            shape's rows into whole groups (best-effort; shortfalls warn on the proposal)
+          </span>
+        </div>
+        <div className="flex flex-col gap-2">
+          {shapeDrafts.map((sh) => (
+            <div
+              key={sh.key}
+              className="rounded-lg p-3 flex flex-col gap-2"
+              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)' }}
+            >
+              <div className="grid grid-cols-[1fr_88px_auto] gap-2 items-center">
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  value={sh.shape_id}
+                  onChange={(e) => updateShape(sh.key, { shape_id: e.target.value })}
+                  placeholder="identifier, e.g. healstack"
+                  aria-label="shape identifier"
+                />
+                <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                  <span title="0 = auto: the shape claims the first free group number in each raid. A pin (1–12) places it on that group, falling back to the first free one on collision.">group pin</span>
+                  <input
+                    className={numCls}
+                    style={numStyle}
+                    type="number"
+                    min={0}
+                    max={12}
+                    value={sh.group_number}
+                    onChange={(e) => updateShape(sh.key, { group_number: e.target.value })}
+                    aria-label="shape group pin"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeShape(sh.key)}
+                  title="Remove this group composition"
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs rounded"
+                  style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              {sh.rows.map((r, ri) => (
+                <div key={ri} className="grid grid-cols-[1fr_64px_auto] gap-2 items-center">
+                  <select
+                    className={inputCls}
+                    style={inputStyle}
+                    value={r.leafKey}
+                    onChange={(e) => updateShapeRow(sh.key, ri, { leafKey: e.target.value })}
+                    aria-label="shape row role"
+                  >
+                    <option value="">pick role…</option>
+                    {leaves.map((l) => (
+                      <option key={l.key} value={l.key}>
+                        {l.label || roleLabel(l.role)}
+                        {l.sub && !l.label ? ` / ${subLabel(l.sub)}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className={numCls}
+                    style={numStyle}
+                    type="number"
+                    min={1}
+                    value={r.count}
+                    title="How many seats of this role the shape asks for"
+                    onChange={(e) => updateShapeRow(sh.key, ri, { count: e.target.value })}
+                    aria-label="shape row count"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeShapeRow(sh.key, ri)}
+                    title="Remove row"
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs rounded"
+                    style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => addShapeRow(sh.key)}
+                className="flex items-center gap-1 self-start px-2 py-1 text-xs rounded"
+                style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+              >
+                <Plus size={13} /> add row
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addShape}
+            className="flex items-center gap-1.5 self-start px-3 py-1.5 text-sm rounded"
+            style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
+          >
+            <Plus size={14} /> Add group composition
+          </button>
         </div>
       </div>
 
