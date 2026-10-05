@@ -221,7 +221,10 @@ func (h *charactersHandler) upgrades(w http.ResponseWriter, r *http.Request) {
 			weights = override
 		}
 	}
-	ctx := upgrade.Context{Level: char.Level, Current: statLineFromBlock(h.currentTotals(char))}
+	ctx := upgrade.Context{
+		Level: char.Level, Current: statLineFromBlock(h.currentTotals(char)),
+		StatCapMod: h.statCapMods(char),
+	}
 
 	byLoc, hasGear := h.loadEquipped(cfg.EQPath, char.Name)
 	worn := h.resolveWornItems(byLoc)
@@ -364,7 +367,10 @@ func (h *charactersHandler) upgradesOverview(w http.ResponseWriter, r *http.Requ
 			weights = override
 		}
 	}
-	ctx := upgrade.Context{Level: char.Level, Current: statLineFromBlock(h.currentTotals(char))}
+	ctx := upgrade.Context{
+		Level: char.Level, Current: statLineFromBlock(h.currentTotals(char)),
+		StatCapMod: h.statCapMods(char),
+	}
 	byLoc, hasGear := h.loadEquipped(cfg.EQPath, char.Name)
 	worn := h.resolveWornItems(byLoc)
 	prioritySet := h.priorityFocusSet(id)
@@ -889,6 +895,23 @@ func (h *charactersHandler) currentTotals(char character.Character) statBlock {
 	skills := skillCaps{defense: defenseSkill, offense: offenseSkill, weapon: weaponSkill}
 	itemBlock, itemHaste := h.sumEquipment(cfg.EQPath, char.Name)
 	return h.deriveBlock(char, aa, spellHasteSplit{}, skills, itemBlock, itemHaste, nil)
+}
+
+// statCapMods returns the per-attribute cap raises from the character's trained
+// SE_RaiseStatCap AAs (Planar Power, Innate Enlightenment), as a StatLine whose
+// attribute fields hold the extra cap.
+func (h *charactersHandler) statCapMods(char character.Character) upgrade.StatLine {
+	trained, err := h.store.ListAAs(char.ID)
+	if err != nil {
+		return upgrade.StatLine{}
+	}
+	conv := make([]db.TrainedAA, 0, len(trained))
+	for _, t := range trained {
+		conv = append(conv, db.TrainedAA{AAID: t.AAID, Rank: t.Rank})
+	}
+	aa, _ := h.db.AAStatBonuses(conv)
+	c := aa.StatCap
+	return upgrade.StatLine{STR: c.STR, STA: c.STA, AGI: c.AGI, DEX: c.DEX, WIS: c.WIS, INT: c.INT, CHA: c.CHA}
 }
 
 // loadEquipped parses the character's Quarmy export once into a location →

@@ -15,7 +15,7 @@ import type { ActiveTimer, TimerState } from '../types/timer'
 import type {
   QuarmyData, CharacterAA, AAInfo, Character,
   SpellModifier, SpellModifierResolution, StatBlock,
-  SpellStatDeltaEntry, DerivedStats, SourceSplit,
+  SpellStatDeltaEntry, DerivedStats, SourceSplit, StatCaps,
 } from '../services/api'
 import type { Spell } from '../types/spell'
 import type { Item } from '../types/item'
@@ -454,6 +454,16 @@ const DEFAULT_PRESET_IDS: number[] = [
 // EQ caps individual attribute stats at 255. Anything above the cap is wasted.
 const STAT_CAP = 255
 
+// Item Flowing Thought is capped at 15; gear past it is wasted.
+const FT_CAP = 15
+
+// ftLabel renders worn FT as "N/15", or "+over raw/15" when gear exceeds the cap
+// (mirrors the over-cap display on the attribute bars).
+function ftLabel(block: StatBlock): string {
+  const raw = block.ft_raw ?? block.ft
+  return raw > FT_CAP ? `+${raw - FT_CAP} ${raw}/${FT_CAP}` : `${block.ft}/${FT_CAP}`
+}
+
 // StatDelta covers every dimension a buff or gear set might touch. Optional
 // fields keep buff definitions readable.
 interface StatDelta {
@@ -784,7 +794,11 @@ function StatsPanel({ stats, hasStats, characterID, characterName }: StatsPanelP
   const showMana = derived == null || ![0, 6, 7, 8].includes(derived.class)
 
   const statCap = derived?.stat_cap ?? STAT_CAP
-  const capped = (v: number) => Math.min(statCap, v)
+  // Per-stat caps: PoP AAs (Planar Power, Innate Enlightenment) raise some or
+  // all attribute caps past the level cap.
+  const caps = derived?.stat_caps
+  const capFor = (k: keyof StatCaps) => caps?.[k] ?? statCap
+  const capped = (v: number, k: keyof StatCaps) => Math.min(capFor(k), v)
   const gearMissing = includesGear && !derived
 
   return (
@@ -869,13 +883,13 @@ function StatsPanel({ stats, hasStats, characterID, characterName }: StatsPanelP
         <div className="space-y-3">
           {/* Green "+N" AA bonus is shown in the Base view only; +Equipment /
               +Buffs show combined totals for readability and comparison. */}
-          <StatBar label="STR" value={capped(block.str)} base={mode === 'base' ? stats.base_str : undefined} max={statCap} raw={block.str_raw} />
-          <StatBar label="STA" value={capped(block.sta)} base={mode === 'base' ? stats.base_sta : undefined} max={statCap} raw={block.sta_raw} />
-          <StatBar label="AGI" value={capped(block.agi)} base={mode === 'base' ? stats.base_agi : undefined} max={statCap} raw={block.agi_raw} />
-          <StatBar label="DEX" value={capped(block.dex)} base={mode === 'base' ? stats.base_dex : undefined} max={statCap} raw={block.dex_raw} />
-          <StatBar label="WIS" value={capped(block.wis)} base={mode === 'base' ? stats.base_wis : undefined} max={statCap} raw={block.wis_raw} />
-          <StatBar label="INT" value={capped(block.int)} base={mode === 'base' ? stats.base_int : undefined} max={statCap} raw={block.int_raw} />
-          <StatBar label="CHA" value={capped(block.cha)} base={mode === 'base' ? stats.base_cha : undefined} max={statCap} raw={block.cha_raw} />
+          <StatBar label="STR" value={capped(block.str, 'str')} base={mode === 'base' ? stats.base_str : undefined} max={capFor('str')} raw={block.str_raw} />
+          <StatBar label="STA" value={capped(block.sta, 'sta')} base={mode === 'base' ? stats.base_sta : undefined} max={capFor('sta')} raw={block.sta_raw} />
+          <StatBar label="AGI" value={capped(block.agi, 'agi')} base={mode === 'base' ? stats.base_agi : undefined} max={capFor('agi')} raw={block.agi_raw} />
+          <StatBar label="DEX" value={capped(block.dex, 'dex')} base={mode === 'base' ? stats.base_dex : undefined} max={capFor('dex')} raw={block.dex_raw} />
+          <StatBar label="WIS" value={capped(block.wis, 'wis')} base={mode === 'base' ? stats.base_wis : undefined} max={capFor('wis')} raw={block.wis_raw} />
+          <StatBar label="INT" value={capped(block.int, 'int')} base={mode === 'base' ? stats.base_int : undefined} max={capFor('int')} raw={block.int_raw} />
+          <StatBar label="CHA" value={capped(block.cha, 'cha')} base={mode === 'base' ? stats.base_cha : undefined} max={capFor('cha')} raw={block.cha_raw} />
         </div>
 
         <div className="mt-4 grid grid-cols-5 gap-2">
@@ -896,7 +910,7 @@ function StatsPanel({ stats, hasStats, characterID, characterName }: StatsPanelP
               <BreakdownRow label="Spell Haste"     value={`${block.spell_haste}%`}    split={block.breakdown.spell_haste} note="Hard-capped at 50% per Project Quarm rules" />
               <BreakdownRow label="Worn ATK"        value={`+${block.attack}`}        split={block.breakdown.attack} />
               <BreakdownRow label="HP Regen"        value={`+${block.regen}/tick`}    split={block.breakdown.regen} note="Natural is the standing rate; sitting and feign-death regen more in-game." />
-              <BreakdownRow label="Flowing Thought" value={`${block.ft}/15`}          split={block.breakdown.ft} includeAA={false} />
+              <BreakdownRow label="Flowing Thought" value={ftLabel(block)}          split={block.breakdown.ft} includeAA={false} />
               <BreakdownRow label="Mana Regen"      value={`+${block.mana_regen}/tick`} split={block.breakdown.mana_regen} />
               <BreakdownRow label="Damage Shield"   value={`${block.dmg_shield}`}     split={block.breakdown.dmg_shield} includeAA={false} />
             </div>

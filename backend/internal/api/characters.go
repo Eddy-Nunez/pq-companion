@@ -1096,7 +1096,10 @@ type statBlock struct {
 	Regen      int `json:"regen"`
 	ManaRegen  int `json:"mana_regen"`
 	FT         int `json:"ft"`
-	DmgShield  int `json:"dmg_shield"`
+	// FTRaw is the uncapped worn Flowing Thought total (FT is clamped to
+	// itemFTCap), so the UI can show how far over the cap gear pushes it.
+	FTRaw     int `json:"ft_raw"`
+	DmgShield int `json:"dmg_shield"`
 	// ATKRating is the EQ inventory-window Attack rating (offense + to-hit),
 	// distinct from Attack above (the raw worn/AA/buff SE_ATK bonus that feeds
 	// into it). Zero on the base layer until skills are known.
@@ -1445,7 +1448,9 @@ func (h *charactersHandler) sumEquipment(eqPath, charName string) (block statBlo
 	// drink item it finds in general inventory (see addEdibleBonuses).
 	h.addEdibleBonuses(q.Inventory, &block)
 	block.Haste = bestHaste
-	// Item Flowing Thought is capped at 15 per EQ's worn-mana-regen rule.
+	// Item Flowing Thought is capped at 15 per EQ's worn-mana-regen rule; the
+	// pre-cap total is kept so the UI can show the excess.
+	block.FTRaw = block.FT
 	if block.FT > itemFTCap {
 		block.FT = itemFTCap
 	}
@@ -1576,6 +1581,32 @@ type derivedStatsResponse struct {
 	// across all four layers today. Surfaced so the UI can compare it against
 	// each layer's ...Raw fields to show how far over cap gear pushes a stat.
 	StatCap int `json:"stat_cap"`
+	// StatCaps is the per-attribute cap including SE_RaiseStatCap AAs (Planar
+	// Power, Innate Enlightenment), which raise some or all attributes past
+	// StatCap. Prefer it over StatCap when present.
+	StatCaps statCaps `json:"stat_caps"`
+}
+
+// statCaps is the effective attribute cap for each of the seven stats.
+type statCaps struct {
+	STR int `json:"str"`
+	STA int `json:"sta"`
+	AGI int `json:"agi"`
+	DEX int `json:"dex"`
+	WIS int `json:"wis"`
+	INT int `json:"int"`
+	CHA int `json:"cha"`
+}
+
+// statCapsFor builds the per-stat cap table: the level cap plus each
+// attribute's AA cap raise.
+func statCapsFor(level int, m db.StatCaps) statCaps {
+	return statCaps{
+		STR: eqstat.MaxStat(level, m.STR), STA: eqstat.MaxStat(level, m.STA),
+		AGI: eqstat.MaxStat(level, m.AGI), DEX: eqstat.MaxStat(level, m.DEX),
+		WIS: eqstat.MaxStat(level, m.WIS), INT: eqstat.MaxStat(level, m.INT),
+		CHA: eqstat.MaxStat(level, m.CHA),
+	}
 }
 
 // derivedStats computes the character's HP, Mana, AC, attributes, resists, and
@@ -1645,6 +1676,7 @@ func (h *charactersHandler) derivedStats(w http.ResponseWriter, r *http.Request)
 		Buffed:    h.deriveBlock(char, aa, spellHaste, skills, itemBlock, itemHaste, presetBuffs),
 		Live:      h.deriveBlock(char, aa, spellHaste, skills, itemBlock, itemHaste, liveBuffs),
 		StatCap:   eqstat.MaxStat(char.Level, 0),
+		StatCaps:  statCapsFor(char.Level, aa.StatCap),
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -1705,6 +1737,7 @@ func (h *charactersHandler) deriveBlock(
 	regen := naturalRegen + item.Regen + aa.HPRegen
 	manaRegen := item.ManaRegen + aa.ManaRegen
 	ft := item.FT
+	ftRaw := item.FTRaw
 	dmgShield := item.DmgShield
 	spellHaste := spellHasteSrc.item + spellHasteSrc.aa
 
@@ -1769,13 +1802,13 @@ func (h *charactersHandler) deriveBlock(
 	rawWIS := char.BaseWIS + addWIS
 	rawINT := char.BaseINT + addINT
 	rawCHA := char.BaseCHA + addCHA
-	totSTR := eqstat.CapAttribute(rawSTR, level, 0)
-	totSTA := eqstat.CapAttribute(rawSTA, level, 0)
-	totAGI := eqstat.CapAttribute(rawAGI, level, 0)
-	totDEX := eqstat.CapAttribute(rawDEX, level, 0)
-	totWIS := eqstat.CapAttribute(rawWIS, level, 0)
-	totINT := eqstat.CapAttribute(rawINT, level, 0)
-	totCHA := eqstat.CapAttribute(rawCHA, level, 0)
+	totSTR := eqstat.CapAttribute(rawSTR, level, aa.StatCap.STR)
+	totSTA := eqstat.CapAttribute(rawSTA, level, aa.StatCap.STA)
+	totAGI := eqstat.CapAttribute(rawAGI, level, aa.StatCap.AGI)
+	totDEX := eqstat.CapAttribute(rawDEX, level, aa.StatCap.DEX)
+	totWIS := eqstat.CapAttribute(rawWIS, level, aa.StatCap.WIS)
+	totINT := eqstat.CapAttribute(rawINT, level, aa.StatCap.INT)
+	totCHA := eqstat.CapAttribute(rawCHA, level, aa.StatCap.CHA)
 
 	res := eqstat.Resistance(class, level, race, addRes, eqstat.Resists{})
 
@@ -1830,6 +1863,7 @@ func (h *charactersHandler) deriveBlock(
 		Regen:        regen,
 		ManaRegen:    manaRegen,
 		FT:           ft,
+		FTRaw:        ftRaw,
 		DmgShield:    dmgShield,
 		ATKRating:    eqstat.DisplayedATK(class, level, totSTR, attack, skills.offense, skills.weapon),
 		Breakdown: statBreakdown{

@@ -38,6 +38,16 @@ type AABonuses struct {
 	// SE_CombatStability AAs (Combat Stability). It multiplies the class AC
 	// mitigation softcap, so more raw mitigation survives the diminishing returns.
 	CombatStabilityPct int
+	// StatCap is the per-attribute cap raise from SE_RaiseStatCap AAs (Planar
+	// Power: +5/rank to every stat; Innate Enlightenment: +10/rank to INT and
+	// WIS). It lifts the level-based 255 attribute cap, so gear/AAs can count
+	// past it.
+	StatCap StatCaps
+}
+
+// StatCaps is a per-attribute amount added to the attribute cap.
+type StatCaps struct {
+	STR, STA, AGI, DEX, WIS, INT, CHA int
 }
 
 // aa_effects effectid (SE_*) codes we translate into stat bonuses. These match
@@ -62,7 +72,39 @@ const (
 	seSpellHateMod  = 130 // SE_SpellHateMod — signed hate-generation modifier %
 	seAvoidMelee    = 172 // SE_AvoidMeleeChance — Combat Agility / Lightning Reflexes, avoidance %
 	seCombatStab    = 259 // SE_CombatStability — Combat Stability, mitigation-softcap %
+	seRaiseStatCap  = 262 // SE_RaiseStatCap — base1 = amount, base2 = stat index
 )
+
+// SE_RaiseStatCap base2 stat indexes (EQEmu bonuses.cpp).
+const (
+	statIdxSTR = 0
+	statIdxSTA = 1
+	statIdxAGI = 2
+	statIdxDEX = 3
+	statIdxINT = 4
+	statIdxWIS = 5
+	statIdxCHA = 6
+)
+
+// add folds one SE_RaiseStatCap effect row into the matching attribute.
+func (c *StatCaps) add(statIdx, amount int) {
+	switch statIdx {
+	case statIdxSTR:
+		c.STR += amount
+	case statIdxSTA:
+		c.STA += amount
+	case statIdxAGI:
+		c.AGI += amount
+	case statIdxDEX:
+		c.DEX += amount
+	case statIdxINT:
+		c.INT += amount
+	case statIdxWIS:
+		c.WIS += amount
+	case statIdxCHA:
+		c.CHA += amount
+	}
+}
 
 // AAStatBonuses resolves a character's trained AAs into their aggregate passive
 // stat bonuses.
@@ -165,15 +207,15 @@ func (db *DB) AAStatBonuses(trained []TrainedAA) (AABonuses, error) {
 	}
 	effPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(effIDs)), ",")
 	erows, err := db.Query(
-		`SELECT effectid, base1 FROM aa_effects WHERE aaid IN (`+effPlaceholders+`)`,
+		`SELECT effectid, base1, base2 FROM aa_effects WHERE aaid IN (`+effPlaceholders+`)`,
 		effIDs...)
 	if err != nil {
 		return b, fmt.Errorf("load aa effects: %w", err)
 	}
 	defer erows.Close()
 	for erows.Next() {
-		var effectid, base1 int
-		if err := erows.Scan(&effectid, &base1); err != nil {
+		var effectid, base1, base2 int
+		if err := erows.Scan(&effectid, &base1, &base2); err != nil {
 			return b, fmt.Errorf("scan aa effect: %w", err)
 		}
 		switch effectid {
@@ -213,6 +255,8 @@ func (db *DB) AAStatBonuses(trained []TrainedAA) (AABonuses, error) {
 			b.AvoidMeleePct += base1
 		case seCombatStab:
 			b.CombatStabilityPct += base1
+		case seRaiseStatCap:
+			b.StatCap.add(base2, base1)
 		}
 	}
 	return b, erows.Err()

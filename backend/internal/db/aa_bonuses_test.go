@@ -82,3 +82,27 @@ func TestAAStatBonuses_Empty(t *testing.T) {
 		t.Errorf("empty bonuses = %+v, want zero", b)
 	}
 }
+
+// TestAAStatBonuses_StatCap verifies SE_RaiseStatCap (262) resolution: Planar
+// Power (eqmacid 142) raises every attribute cap by 5 per rank, and Innate
+// Enlightenment (eqmacid 144) raises only INT and WIS by 10 per rank.
+func TestAAStatBonuses_StatCap(t *testing.T) {
+	d := openTestDB(t)
+
+	pp, err := d.AAStatBonuses([]db.TrainedAA{{AAID: 142, Rank: 3}})
+	if err != nil {
+		t.Fatalf("AAStatBonuses: %v", err)
+	}
+	if want := (db.StatCaps{STR: 15, STA: 15, AGI: 15, DEX: 15, WIS: 15, INT: 15, CHA: 15}); pp.StatCap != want {
+		t.Errorf("Planar Power rank 3 StatCap = %+v, want %+v", pp.StatCap, want)
+	}
+
+	both, err := d.AAStatBonuses([]db.TrainedAA{{AAID: 142, Rank: 2}, {AAID: 144, Rank: 3}})
+	if err != nil {
+		t.Fatalf("AAStatBonuses: %v", err)
+	}
+	want := db.StatCaps{STR: 10, STA: 10, AGI: 10, DEX: 10, WIS: 40, INT: 40, CHA: 10}
+	if both.StatCap != want {
+		t.Errorf("Planar Power 2 + Innate Enlightenment 3 StatCap = %+v, want %+v", both.StatCap, want)
+	}
+}

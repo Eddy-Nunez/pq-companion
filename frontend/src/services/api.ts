@@ -2515,6 +2515,8 @@ export interface StatBlock {
   pr: number; mr: number; dr: number; fr: number; cr: number
   attack: number; haste: number; spell_haste: number; regen: number
   mana_regen: number; ft: number; dmg_shield: number
+  // ft_raw is the uncapped worn Flowing Thought total (ft is capped at 15).
+  ft_raw?: number
   // atk_rating is the EQ inventory-window Attack rating (offense + to-hit),
   // distinct from `attack` (the raw worn/AA/buff +ATK bonus that feeds it).
   atk_rating: number
@@ -2549,6 +2551,14 @@ export interface DerivedStats {
   // stat_cap is the level's attribute cap (255, +5/level past 60) — the same
   // across all four layers today.
   stat_cap: number
+  // stat_caps is the per-attribute cap including AA cap raises (Planar Power,
+  // Innate Enlightenment) — prefer it over stat_cap.
+  stat_caps?: StatCaps
+}
+
+export interface StatCaps {
+  str: number; sta: number; agi: number; dex: number
+  wis: number; int: number; cha: number
 }
 
 export function getCharacterDerivedStats(

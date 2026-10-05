@@ -136,6 +136,9 @@ type Context struct {
 	Level int
 	// CapMod is an AA stat-cap raise (SE_RaiseStatCap); 0 for the common case.
 	CapMod int
+	// StatCapMod is a per-attribute cap raise on top of CapMod (Planar Power,
+	// Innate Enlightenment); only the seven attribute fields are read.
+	StatCapMod StatLine
 	// Current is the character's full current attribute/resist totals
 	// (base + all worn items + AA + buffs). It is the reference for how much
 	// headroom remains under each cap. HP/mana/AC are not read from here.
@@ -227,7 +230,7 @@ func clamp(v, lo, hi int) int {
 func (d statDef) effective(ctx Context, base, itemVal int) (eff int, capped bool) {
 	switch d.kind {
 	case attrCapped:
-		cap := eqstat.MaxStat(ctx.Level, ctx.CapMod)
+		cap := eqstat.MaxStat(ctx.Level, ctx.CapMod+d.get(ctx.StatCapMod))
 		eff = clamp(base+itemVal, 0, cap) - clamp(base, 0, cap)
 	case resistCap:
 		cap := eqstat.ResistCap
