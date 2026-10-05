@@ -2011,6 +2011,12 @@ var checklistExcludedSpellIDs = map[int]string{
 	// the level-60 cap. Reported via Discord 2026-08-06.
 	3681: "Aria of Innocence",
 	3682: "Aria of Asceticism",
+	// Beastlord spells with a class/level but no scroll item anywhere in the
+	// dump (checked under every same-name variant), so they can't be bought,
+	// dropped, or scribed. Reported via Discord 2026-10-01.
+	2632: "Summon Warder",
+	3689: "Malaria",
+	3690: "Bond of the Wild",
 }
 
 // GetSpellsByClass returns all spells castable by the given class index (0-based:
