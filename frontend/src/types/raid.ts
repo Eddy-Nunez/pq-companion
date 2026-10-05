@@ -198,6 +198,13 @@ export interface SplitRequest {
   // Cohort mode: split the roster into N smaller raids (2..6), each staffed
   // against the full template. Omitted = single raid.
   cohorts?: number
+  // Group-shape templates (docs/raid-group-compositions-plan.md): the
+  // enabled shape ids (must exist on the encounter). Requires cohorts >= 2;
+  // empty/omitted = pure trinity.
+  shapes?: string[]
+  // Per-raid shape placement in cohort mode: replicate (default) — every
+  // raid fields every enabled shape; distribute — shape i applies to raid i.
+  shape_distribution?: 'replicate' | 'distribute'
   roster?: CheckRosterInput[]
 }
 
@@ -217,6 +224,9 @@ export interface ProposedGroup {
   number: number
   size: number
   slots: SplitSlot[]
+  // Group-shape identifier this group was formed from (cohort mode with
+  // enabled shapes); absent for trinity-formed groups.
+  shape_id?: string
 }
 
 export interface SplitUnassigned {

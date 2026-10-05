@@ -1,6 +1,16 @@
 # Group-Composition Templates ("Group compositions") — plan
 
-Status: **SPEC — awaiting user confirmation on the decisions in §8.**
+Status: **stage 2 (weave integration) SHIPPED** on `feat/raid-comp-split` —
+storage (stage 1) + engine/API (stage 2) landed; stages 3 (Raid Editor CRUD
+UI) and 4 (proposal toggles + shape labels) remain. §8 decisions were
+confirmed 2026-10-04.
+
+Implementation note (stage 2): for `distribute`, the §7 edge case wins over
+§5's literal mod formula — shape i applies to raid i with NO wrap; shapes
+beyond the cohort count are ignored with a warning. Shape group claims are
+based on the picked (not declared) seat count, so an under-filled shape
+never wastes group room; open seats in a claimed group stay open (the
+trinity pass skips shape-reserved groups via `groupTracker.reserve`).
 Supersedes: the removed `focused` / `curated` preferences and the wildcard
 pin/cap machinery (deleted in `14e85fed`). Trinity weaving is the baseline;
 group-shape templates are the sanctioned way to hand-shape specific groups
@@ -168,7 +178,7 @@ buttons + remove-shape. Shapes save with the encounter (no new save flow).
 - No-null rule: `shapes` in the encounter DTO and any shape arrays in the
   report must marshal `[]`, never null (the c05c19b5 lesson).
 
-## 8. Decisions (confirmed 2026-10-04 by the user)
+## 8. Decisions (confirmed 2026-10-04 by the user — stage 2 implements all five)
 
 1. **Row kind: role paths only.** The taxonomy already lets any role carry
    any class mix (Taxonomy Editor), so "5 healers" is a role whose classes

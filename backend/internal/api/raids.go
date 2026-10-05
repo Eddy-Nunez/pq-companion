@@ -289,8 +289,14 @@ type splitRequest struct {
 	RespectExistingGroups bool   `json:"respect_existing_groups,omitempty"`
 	// Cohorts (2..raidcomp.MaxSplitCohorts) splits the roster into N smaller
 	// raids, each targeting the full template — see the engine's docs.
-	Cohorts int                `json:"cohorts,omitempty"`
-	Roster  []splitRosterInput `json:"roster,omitempty"`
+	Cohorts int `json:"cohorts,omitempty"`
+	// Shapes opts the proposal into the encounter's group-shape templates
+	// (docs/raid-group-compositions-plan.md): ids must exist on the
+	// encounter; requires cohorts >= 2. shape_distribution is replicate
+	// (default) or distribute.
+	Shapes            []string           `json:"shapes,omitempty"`
+	ShapeDistribution string             `json:"shape_distribution,omitempty"`
+	Roster            []splitRosterInput `json:"roster,omitempty"`
 }
 
 // checkCompRequest asks for a composition check. roster is optional: when
@@ -408,6 +414,8 @@ func (h *raidsHandler) splitComp(w http.ResponseWriter, r *http.Request) {
 		GroupSize:             req.GroupSize,
 		RespectExistingGroups: req.RespectExistingGroups,
 		Cohorts:               req.Cohorts,
+		Shapes:                req.Shapes,
+		ShapeDistribution:     req.ShapeDistribution,
 	}, members)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

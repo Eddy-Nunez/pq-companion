@@ -241,6 +241,68 @@ func TestRaidSplit_CohortsPassthrough(t *testing.T) {
 	}
 }
 
+func TestRaidSplit_ShapesAPI(t *testing.T) {
+	_, r, s := newRaidSplitTestRouter(t)
+	enc := validSplitEncounter()
+	enc.Shapes = []raidcomp.Shape{
+		{ID: "healstack", Rows: []raidcomp.ShapeRow{{Role: "healer", Sub: "ch_cleric", Count: 1}}},
+	}
+	if err := s.SaveEncounter(enc); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	roster := []map[string]any{
+		{"name": "Tank", "class": "war"},
+		{"name": "Heal", "class": "clr"},
+		{"name": "Heal2", "class": "clr"},
+		{"name": "Dps1", "class": "rog"},
+		{"name": "Dps2", "class": "rog"},
+	}
+	// Shapes with a single-raid request → 400.
+	code, _ := doSplit(t, r, map[string]any{
+		"encounter_id": "split-test", "preference": "trinity", "shapes": []string{"healstack"}, "roster": roster,
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("shapes + cohorts<=1: want 400, got %d", code)
+	}
+	// Unknown shape id → 400.
+	code, _ = doSplit(t, r, map[string]any{
+		"encounter_id": "split-test", "preference": "trinity", "cohorts": 2,
+		"shapes": []string{"nope"}, "roster": roster,
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("unknown shape: want 400, got %d", code)
+	}
+	// Bad distribution → 400.
+	code, _ = doSplit(t, r, map[string]any{
+		"encounter_id": "split-test", "preference": "trinity", "cohorts": 2,
+		"shapes": []string{"healstack"}, "shape_distribution": "zigzag", "roster": roster,
+	})
+	if code != http.StatusBadRequest {
+		t.Errorf("bad shape_distribution: want 400, got %d", code)
+	}
+	// Happy path: replicate puts the shape group on raid 1 AND raid 2.
+	code, out := doSplit(t, r, map[string]any{
+		"encounter_id": "split-test", "preference": "trinity", "cohorts": 2,
+		"shapes": []string{"healstack"}, "roster": roster,
+	})
+	if code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %v", code, out)
+	}
+	cohorts := out["cohorts"].([]any)
+	if len(cohorts) != 2 {
+		t.Fatalf("want 2 cohorts, got %v", cohorts)
+	}
+	for i, c := range cohorts {
+		groups := c.(map[string]any)["groups"].([]any)
+		if len(groups) == 0 {
+			t.Fatalf("raid %d has no groups", i+1)
+		}
+		if got := groups[0].(map[string]any)["shape_id"]; got != "healstack" {
+			t.Errorf("raid %d first group shape_id = %v, want healstack", i+1, got)
+		}
+	}
+}
+
 func TestRaidSplitPlan_Endpoint(t *testing.T) {
 	h, r, s := newRaidSplitTestRouter(t)
 	if err := s.SaveEncounter(validSplitEncounter()); err != nil {
