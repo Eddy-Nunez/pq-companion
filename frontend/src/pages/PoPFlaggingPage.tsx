@@ -8,6 +8,7 @@ import type { PoPFlagStatus, PoPResolved } from '../types/popflag'
 import { STEP_KIND_META, STEP_KIND_ORDER, ROLE_META } from '../lib/popFlagKind'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { usePersistentState } from '../hooks/usePersistentState'
 import CharacterSubTabs from '../components/CharacterSubTabs'
 import ImportSeerModal from '../components/ImportSeerModal'
 import { PopFlagRow } from '../components/PopFlagRow'
@@ -200,7 +201,9 @@ export default function PoPFlaggingPage(): React.ReactElement {
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [showImport, setShowImport] = useState(false)
-  const [view, setView] = useState<'checklist' | 'flow'>('checklist')
+  const [view, setView] = usePersistentState<'checklist' | 'flow'>(
+    'pq-tab:pop-flags', 'checklist', ['checklist', 'flow'],
+  )
 
   // Default the viewed character to the active character once known.
   useEffect(() => {

@@ -11,6 +11,7 @@ import {
 import { useWebSocket, type WsMessage } from '../hooks/useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
 import { useActivePlayerName } from '../hooks/useActivePlayerName'
+import { usePersistentState } from '../hooks/usePersistentState'
 import type { ActiveTimer, TimerState } from '../types/timer'
 import type {
   QuarmyData, CharacterAA, AAInfo, Character,
@@ -170,7 +171,10 @@ export default function CharacterProgressPage(): React.ReactElement {
     if (!viewedCharacter && activeCharacter) setViewedCharacter(activeCharacter)
   }, [activeCharacter, viewedCharacter])
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('recap')
+  const [tab, setTab] = usePersistentState<Tab>(
+    'pq-tab:character-info', 'recap',
+    ['recap', 'stats', 'statsnaps', 'gear', 'aas', 'modifiers', 'tradeskills', ...(DEV_SKILLS ? ['skills' as const] : [])],
+  )
   const [quarmy, setQuarmy] = useState<QuarmyData | null>(null)
   const [trainedAAs, setTrainedAAs] = useState<CharacterAA[]>([])
   const [availableAAs, setAvailableAAs] = useState<AAInfo[]>([])

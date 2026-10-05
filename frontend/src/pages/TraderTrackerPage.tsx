@@ -19,6 +19,7 @@ import {
   deleteTraderSnapshot,
 } from '../services/api'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { usePersistentState } from '../hooks/usePersistentState'
 import type {
   TraderCharacter,
   TraderListing,
@@ -63,7 +64,7 @@ type Tab = 'sales' | 'listings' | 'snapshots'
 export default function TraderTrackerPage(): React.ReactElement {
   const [chars, setChars] = useState<TraderCharacter[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('sales')
+  const [tab, setTab] = usePersistentState<Tab>('pq-tab:trader-tracker', 'sales', ['sales', 'listings', 'snapshots'])
 
   const [sessions, setSessions] = useState<TraderSession[]>([])
   const [listings, setListings] = useState<TraderListing[]>([])

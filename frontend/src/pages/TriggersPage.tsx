@@ -51,6 +51,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { useVoices } from '../hooks/useVoices'
+import { usePersistentState } from '../hooks/usePersistentState'
 import { useTTSVoices } from '../hooks/usePiperStatus'
 import { useDiscordWebhooks } from '../hooks/useDiscordWebhooks'
 import NotificationActionEditor, { NotificationTypeSelect } from '../components/NotificationActionEditor'
@@ -3190,7 +3191,7 @@ function DeleteCategoryModal({
 
 export default function TriggersPage(): React.ReactElement {
   const activePlayer = useActivePlayerName()
-  const [tab, setTab] = useState<Tab>('triggers')
+  const [tab, setTab] = usePersistentState<Tab>('pq-tab:triggers', 'triggers', ['triggers', 'history', 'packs', 'tester'])
   const [triggers, setTriggers] = useState<Trigger[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

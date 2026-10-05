@@ -5,6 +5,7 @@ import { getKeys, getKeysProgress } from '../services/api'
 import type { KeyDef, KeysProgressResponse, CharacterKeyProgress } from '../types/keys'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
 import CharacterSubTabs from '../components/CharacterSubTabs'
+import { usePersistentState } from '../hooks/usePersistentState'
 import KeyringSection from '../components/KeyringSection'
 
 // ── Tab + filter types ─────────────────────────────────────────────────────────
@@ -539,7 +540,7 @@ function KeyCard({ keyDef, chars, defaultOpen = false }: KeyCardProps): React.Re
 
 export default function KeyTrackerPage(): React.ReactElement {
   const { active } = useActiveCharacter()
-  const [tab, setTab] = useState<Tab>('keyring')
+  const [tab, setTab] = usePersistentState<Tab>('pq-tab:key-tracker', 'keyring', ['tracker', 'keyring'])
   const [viewedCharacter, setViewedCharacter] = useState('')
   const [keyDefs, setKeyDefs] = useState<KeyDef[]>([])
   const [progress, setProgress] = useState<KeysProgressResponse | null>(null)

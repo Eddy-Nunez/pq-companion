@@ -6,6 +6,7 @@ import { ItemIcon } from '../components/Icon'
 import { SourceNPCLink, formatNPCName } from '../components/SourceNPCLink'
 import ItemDetailModal from '../components/ItemDetailModal'
 import SpellHoverCard from '../components/SpellHoverCard'
+import { usePersistentState } from '../hooks/usePersistentState'
 import {
   listCharacters,
   getItem,
@@ -190,7 +191,9 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
 
   const [modalItem, setModalItem] = useState<Item | null>(null)
 
-  const [mode, setMode] = useState<'slot' | 'overview'>('slot')
+  const [mode, setMode] = usePersistentState<'slot' | 'overview'>(
+    'pq-tab:gear-upgrades', 'slot', ['slot', 'overview'],
+  )
   const [overview, setOverview] = useState<UpgradesOverviewResponse | null>(null)
   const [overviewLoading, setOverviewLoading] = useState(false)
   // Overview column sorting is hoisted here so it survives OverviewView's

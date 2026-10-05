@@ -1,6 +1,7 @@
-import React from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Users, ShieldCheck, PencilRuler } from 'lucide-react'
+import { rememberSubRoute } from '../lib/lastSubRoute'
 
 interface RaidTab {
   to: string
@@ -15,6 +16,8 @@ const TABS: RaidTab[] = [
 ]
 
 export default function RaidsLayout(): React.ReactElement {
+  const { pathname } = useLocation()
+  useEffect(() => rememberSubRoute(pathname), [pathname])
   return (
     <div className="flex h-full flex-col">
       <div

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { Settings, Search, ChevronLeft, ChevronRight, ChevronDown, Star } from 'lucide-react'
 import { getLogStatus } from '../services/api'
 import CharacterSwitcher from './CharacterSwitcher'
@@ -7,11 +7,15 @@ import { useHistoryNav } from '../hooks/useHistoryNav'
 import { useWindowDrag } from '../hooks/useWindowDrag'
 import { visibleNavSections, orderItems, favoriteItems, type NavItem } from '../lib/sidebarNav'
 import { useSidebarPrefs } from '../hooks/useSidebarPrefs'
+import { resolveRememberedRoute } from '../lib/lastSubRoute'
 
 function SidebarLink({ to, label, icon, end }: NavItem): React.ReactElement {
+  // Subscribe to navigation so the remembered sub-page (Combat/Raids) is
+  // re-resolved after every route change, not just when the sidebar re-renders.
+  useLocation()
   return (
     <NavLink
-      to={to}
+      to={resolveRememberedRoute(to)}
       end={end}
       className={({ isActive }) =>
         [

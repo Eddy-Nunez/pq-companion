@@ -1,6 +1,7 @@
-import React from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ScrollText, Archive } from 'lucide-react'
+import { rememberSubRoute } from '../lib/lastSubRoute'
 
 interface CombatTab {
   to: string
@@ -14,6 +15,8 @@ const TABS: CombatTab[] = [
 ]
 
 export default function CombatLayout(): React.ReactElement {
+  const { pathname } = useLocation()
+  useEffect(() => rememberSubRoute(pathname), [pathname])
   return (
     <div className="flex h-full flex-col">
       <div

@@ -316,6 +316,8 @@ function EqwFileRow({ status }: { status: EqwStatus }): React.ReactElement {
   )
 }
 
+const SETTINGS_TAB_KEY = 'pq-tab:settings'
+
 export default function SettingsPage(): React.ReactElement {
   const [searchParams] = useSearchParams()
   // Allow deep-linking to a specific tab via ?tab= (e.g. links to the Logs tab
@@ -326,8 +328,25 @@ export default function SettingsPage(): React.ReactElement {
     // 'gamemaps' was its own tab until the two map tabs merged. Kept as an
     // alias so links written against the old name still land somewhere useful.
     if (t === 'gamemaps') return 'maps'
-    return (valid as string[]).includes(t) ? (t as Tab) : 'general'
+    if ((valid as string[]).includes(t)) return t as Tab
+    // No (valid) deep link: reopen the tab the user was last on. The hidden
+    // Developer tab is never restored — it only shows while dev mode is on.
+    try {
+      const stored = localStorage.getItem(SETTINGS_TAB_KEY) ?? ''
+      if (stored !== 'developer' && (valid as string[]).includes(stored)) return stored as Tab
+    } catch {
+      /* fall through */
+    }
+    return 'general'
   })
+  useEffect(() => {
+    if (tab === 'developer') return
+    try {
+      localStorage.setItem(SETTINGS_TAB_KEY, tab)
+    } catch {
+      /* noop */
+    }
+  }, [tab])
   const [config, setConfig] = useState<Config | null>(null)
   const [originalConfig, setOriginalConfig] = useState<Config | null>(null)
   // Latest config / last-saved config mirrored into refs so the unmount flush
