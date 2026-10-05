@@ -13,31 +13,49 @@ type CategoryDef struct {
 	Label string `json:"label"`
 	Blurb string `json:"blurb"`
 	SPA   int    `json:"spa"`
+	// NoMissingHint keeps a category out of the "missing focus types" list: it
+	// is real gear but not something a spellcaster is expected to want.
+	NoMissingHint bool `json:"-"`
+	// Rolls marks foci whose percent is a per-cast random roll of 1..N% rather
+	// than a fixed value (every focus but spell haste and range, per the wiki).
+	Rolls bool `json:"rolls"`
 }
 
 // Categories lists every category in display order. Derived from the focus
 // spells carried by items in quarm.db; single-spell foci (SPA 139 whitelist,
 // e.g. Chromosphere) belong to no category.
 var Categories = []CategoryDef{
-	{"spell_haste", "Spell Haste", "Faster casting for all spells with a long enough cast time.", SPACastTime},
-	{"affliction_haste", "Affliction Haste", "Faster casting for damage-over-time spells.", SPACastTime},
-	{"enhancement_haste", "Enhancement Haste", "Faster casting for long-duration beneficial spells.", SPACastTime},
-	{"summoning_haste", "Summoning Haste", "Faster casting for summoned pets.", SPACastTime},
-	{"reanimation_haste", "Reanimation Haste", "Faster casting for necromancer undead pets.", SPACastTime},
-	{"damage", "Spell Damage", "More damage from direct-damage spells.", SPAImprovedDamage},
-	{"dot_damage", "Affliction Damage", "More damage from damage-over-time spells.", SPAImprovedDamage},
-	{"healing", "Healing", "More healing from direct heals.", SPAImprovedHeal},
-	{"resist_reduction", "Resist Reduction", "Lowers the target's resist against your spells.", SPAResistReduction},
-	{"mana_preservation", "Mana Preservation", "Reduced mana cost.", SPAManaCost},
-	{"enhancement_efficiency", "Enhancement Efficiency", "Reduced mana cost for beneficial spells.", SPAManaCost},
-	{"affliction_efficiency", "Affliction Efficiency", "Reduced mana cost for damage-over-time spells.", SPAManaCost},
-	{"summoning_efficiency", "Summoning Efficiency", "Reduced mana cost for summoned pets.", SPAManaCost},
-	{"reanimation_efficiency", "Reanimation Efficiency", "Reduced mana cost for necromancer undead pets.", SPAManaCost},
-	{"extended_enhancement", "Extended Enhancement", "Longer duration for beneficial spells.", SPADuration},
-	{"extended_affliction", "Extended Affliction", "Longer duration for detrimental spells.", SPADuration},
-	{"extended_range", "Extended Range", "Longer spell range.", SPAIncreaseRange},
-	{"reagent_conservation", "Reagent Conservation", "Chance to not consume spell reagents.", SPAReagentConserve},
-	{"spell_hate", "Spell Hate", "Changes the hate your spells generate.", SPASpellHate},
+	{ID: "spell_haste", Label: "Spell Haste", Blurb: "Faster casting for all spells with a long enough cast time.", SPA: SPACastTime},
+	{ID: "affliction_haste", Label: "Affliction Haste", Blurb: "Faster casting for damage-over-time and debuff spells.", SPA: SPACastTime},
+	{ID: "enhancement_haste", Label: "Enhancement Haste", Blurb: "Faster casting for long-duration beneficial spells.", SPA: SPACastTime},
+	{ID: "summoning_haste", Label: "Summoning Haste", Blurb: "Faster casting for summoned pets.", SPA: SPACastTime},
+	{ID: "reanimation_haste", Label: "Reanimation Haste", Blurb: "Faster casting for necromancer undead pets.", SPA: SPACastTime},
+	{ID: "damage", Label: "Improved Damage", Blurb: "More damage from direct-damage spells of any resist type.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "damage_magic", Label: "Magic Damage", Blurb: "More damage from direct magic-resist spells.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "damage_fire", Label: "Fire Damage", Blurb: "More damage from direct fire spells.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "damage_cold", Label: "Cold Damage", Blurb: "More damage from direct cold spells.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "damage_poison", Label: "Poison Damage", Blurb: "More damage from direct poison spells.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "damage_disease", Label: "Disease Damage", Blurb: "More damage from direct disease spells.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "dot_damage", Label: "Affliction Damage", Blurb: "More damage from damage-over-time spells.", SPA: SPAImprovedDamage, Rolls: true},
+	{ID: "healing", Label: "Improved Healing", Blurb: "More healing from direct heals (complete heals excluded for clerics, druids and shamans).", SPA: SPAImprovedHeal, Rolls: true},
+	{ID: "resist_reduction", Label: "Resist Reduction", Blurb: "Lowers the target's resist against your spells.", SPA: SPAResistReduction},
+	{ID: "mana_preservation", Label: "Mana Preservation", Blurb: "Reduced mana cost.", SPA: SPAManaCost, Rolls: true},
+	{ID: "enhancement_efficiency", Label: "Enhancement Efficiency", Blurb: "Reduced mana cost for beneficial spells.", SPA: SPAManaCost, Rolls: true},
+	{ID: "affliction_efficiency", Label: "Affliction Efficiency", Blurb: "Reduced mana cost for damage-over-time spells.", SPA: SPAManaCost, Rolls: true},
+	{ID: "summoning_efficiency", Label: "Summoning Efficiency", Blurb: "Reduced mana cost for summoned pets.", SPA: SPAManaCost, Rolls: true},
+	{ID: "reanimation_efficiency", Label: "Reanimation Efficiency", Blurb: "Reduced mana cost for necromancer undead pets.", SPA: SPAManaCost, Rolls: true},
+	{ID: "extended_enhancement", Label: "Extended Enhancement", Blurb: "Longer duration for beneficial spells.", SPA: SPADuration, Rolls: true},
+	{ID: "extended_affliction", Label: "Extended Affliction", Blurb: "Longer duration for detrimental spells.", SPA: SPADuration, Rolls: true},
+	{ID: "extended_range", Label: "Extended Range", Blurb: "Longer spell range.", SPA: SPAIncreaseRange},
+	{ID: "reagent_conservation", Label: "Reagent Conservation", Blurb: "Chance to not consume spell reagents.", SPA: SPAReagentConserve, Rolls: true},
+	{ID: "aggro_reduction", Label: "Spell Aggro Reduction", Blurb: "Less hate from the spells you cast.", SPA: SPASpellHate},
+	{ID: "bash_hate", Label: "Bash Hate", Blurb: "More hate from shield bashes (tank gear).", SPA: SPASpellHate, NoMissingHint: true},
+}
+
+// damageResistCategory maps a SPA 135 resist type to its school-limited damage
+// category (the wiki's "Anger/Fury/Wrath of Ro/E`ci/Druzzil…" lines).
+var damageResistCategory = map[int]string{
+	1: "damage_magic", 2: "damage_fire", 3: "damage_cold", 4: "damage_poison", 5: "damage_disease",
 }
 
 // SPA 137 target/effect codes that scope a focus to a pet-summoning line.
@@ -49,11 +67,14 @@ const (
 
 // CategoryOf returns the category ID for a focus modifier (its SPA plus
 // limits), or "" when it is a single-spell focus or an unrecognised shape.
-func CategoryOf(spa int, l Limits) string {
+func CategoryOf(spa, percent int, l Limits) string {
 	switch spa {
 	case SPAImprovedDamage:
 		if !l.InstantOnly && l.MinDurationSec > 0 {
 			return "dot_damage"
+		}
+		if id, ok := damageResistCategory[l.ResistType]; ok {
+			return id
 		}
 		return "damage"
 	case SPAImprovedHeal:
@@ -80,7 +101,12 @@ func CategoryOf(spa int, l Limits) string {
 	case SPAIncreaseRange:
 		return "extended_range"
 	case SPASpellHate:
-		return "spell_hate"
+		// Negative = the real spell aggro reduction; positive foci in the data
+		// are the "Furious Bash" shield-bash hate line (warrior/paladin/SK).
+		if percent < 0 {
+			return "aggro_reduction"
+		}
+		return "bash_hate"
 	case SPAReagentConserve:
 		return "reagent_conservation"
 	case SPAManaCost:
@@ -101,6 +127,16 @@ func CategoryOf(spa int, l Limits) string {
 	return ""
 }
 
+// CategoryDefFor returns a category's definition and whether the id is known.
+func CategoryDefFor(id string) (CategoryDef, bool) {
+	for _, c := range Categories {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return CategoryDef{}, false
+}
+
 // CategoryLabel returns a category's display label ("" for an unknown id).
 func CategoryLabel(id string) string {
 	for _, c := range Categories {
@@ -117,7 +153,7 @@ func CategoryLabel(id string) string {
 func FocusModifiers(s *db.Spell) []Modifier {
 	mods := parseFocusSpell(s)
 	for i := range mods {
-		mods[i].Category = CategoryOf(mods[i].SPA, mods[i].Limits)
+		mods[i].Category = CategoryOf(mods[i].SPA, mods[i].Percent, mods[i].Limits)
 	}
 	return mods
 }

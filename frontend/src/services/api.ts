@@ -2314,6 +2314,7 @@ export interface SpellModifierLimits {
   max_level?: number
   min_level?: number
   spell_type: number // -1 unset, 0 detrimental, 1 beneficial, 2 any
+  resist_type?: number // 1 magic, 2 fire, 3 cold, 4 poison, 5 disease; absent = any
   min_duration_sec?: number
   min_cast_time_ms?: number
   instant_only?: boolean
@@ -2387,6 +2388,10 @@ export interface FocusUpgradeItem {
   focus_name: string
   percent: number
   limits: SpellModifierLimits
+  // covers_top: the focus still applies to the character's highest spells
+  // (focus level caps are hard limits — a "Max Level 60" focus does nothing on
+  // a level-61+ spell).
+  covers_top: boolean
   equipped: boolean
   is_upgrade: boolean
 }
@@ -2396,7 +2401,9 @@ export interface FocusUpgradesResponse {
   label: string
   blurb: string
   spa: number
-  current: SpellModifier[]
+  // rolls: the percent is a random 1..N% per cast rather than a fixed value.
+  rolls: boolean
+  current: (SpellModifier & { covers_top: boolean })[]
   current_percent: number
   items: FocusUpgradeItem[]
 }

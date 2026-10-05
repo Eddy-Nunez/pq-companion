@@ -10,6 +10,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/character"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db/enums"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/era"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/zeal"
 )
 
@@ -31,6 +32,11 @@ type focusItem struct {
 	FocusName    string         `json:"focus_name"`
 	Percent      int            `json:"percent"`
 	Limits       buffmod.Limits `json:"limits"`
+	// CoversTop is true when the focus still applies to the character's highest
+	// spells. Focus level caps are hard limits (a "Max Level 60" focus does
+	// nothing on a level-61+ spell), so a lower-percent focus that covers the
+	// top spells can beat a higher one that doesn't.
+	CoversTop bool `json:"covers_top"`
 	// Equipped is true when the character is wearing this item now.
 	Equipped bool `json:"equipped"`
 	// IsUpgrade is true when the item's focus beats the best one currently worn
@@ -45,6 +51,21 @@ type missingFocusCategory struct {
 	Label     string `json:"label"`
 	Blurb     string `json:"blurb"`
 	ItemCount int    `json:"item_count"`
+}
+
+// focusTopLevel is the highest spell level the character can be casting: their
+// level, capped at the server's level cap.
+func focusTopLevel(char character.Character) int {
+	if char.Level > era.PoPMaxLevel {
+		return era.PoPMaxLevel
+	}
+	return char.Level
+}
+
+// focusCoversTop reports whether a focus with these limits applies to spells at
+// the character's top level (no max-level limit, or one at or above it).
+func focusCoversTop(l buffmod.Limits, topLevel int) bool {
+	return l.MaxLevel == 0 || l.MaxLevel >= topLevel
 }
 
 // focusCandidates returns every item the character's class/race/level can use
@@ -62,6 +83,7 @@ func (h *charactersHandler) focusCandidates(char character.Character) (map[strin
 	}
 	spells := map[int][]buffmod.Modifier{}
 	out := map[string][]focusItem{}
+	top := focusTopLevel(char)
 	for _, c := range cands {
 		mods, ok := spells[c.FocusEffect]
 		if !ok {
@@ -78,7 +100,7 @@ func (h *charactersHandler) focusCandidates(char character.Character) (map[strin
 			out[m.Category] = append(out[m.Category], focusItem{
 				ItemID: c.ID, Name: c.Name, Icon: c.Icon, ReqLevel: c.ReqLevel,
 				NoDrop: c.NoDrop == 0, FocusSpellID: c.FocusEffect, FocusName: c.FocusName,
-				Percent: m.Percent, Limits: m.Limits,
+				Percent: m.Percent, Limits: m.Limits, CoversTop: focusCoversTop(m.Limits, top),
 			})
 			break
 		}
@@ -104,7 +126,7 @@ func (h *charactersHandler) missingFocusCategories(char character.Character, con
 		return missing
 	}
 	for _, def := range buffmod.Categories {
-		if have[def.ID] || len(cands[def.ID]) == 0 {
+		if def.NoMissingHint || have[def.ID] || len(cands[def.ID]) == 0 {
 			continue
 		}
 		missing = append(missing, missingFocusCategory{
@@ -119,12 +141,21 @@ type focusUpgradesResponse struct {
 	Label    string `json:"label"`
 	Blurb    string `json:"blurb"`
 	SPA      int    `json:"spa"`
+	// Rolls is true when the percent is a per-cast random 1..N% (not fixed).
+	Rolls bool `json:"rolls"`
 	// Current lists what the character wears in this category now.
-	Current []buffmod.Modifier `json:"current"`
-	// CurrentPercent is the best worn percent (0 when none) — only the best
-	// focus in a category applies.
+	Current []currentFocus `json:"current"`
+	// CurrentPercent is the best worn percent among foci that still cover the
+	// character's top spells (0 when none do) — only the best applicable focus
+	// in a category applies.
 	CurrentPercent int         `json:"current_percent"`
 	Items          []focusItem `json:"items"`
+}
+
+// currentFocus is a worn contributor plus whether it covers the top spells.
+type currentFocus struct {
+	buffmod.Modifier
+	CoversTop bool `json:"covers_top"`
 }
 
 // focusUpgrades handles GET /api/characters/{id}/focus-upgrades?category=<id>:
@@ -158,22 +189,27 @@ func (h *charactersHandler) focusUpgrades(w http.ResponseWriter, r *http.Request
 	}
 
 	// What's worn now (best effort — no export just means nothing is worn).
-	current := []buffmod.Modifier{}
+	top := focusTopLevel(char)
+	current := []currentFocus{}
 	cfg := h.mgr.Get()
 	if cfg.EQPath != "" && zeal.FindQuarmyFile(cfg.EQPath, char.Name) != "" {
 		if res, err := buffmod.Compute(cfg.EQPath, char.Name, h.db); err == nil {
 			for _, m := range res.Contributors {
 				if m.Category == catID {
-					current = append(current, m)
+					current = append(current, currentFocus{Modifier: m, CoversTop: focusCoversTop(m.Limits, top)})
 				}
 			}
 		}
 	}
-	best := 0
+	// best is the best percent among worn foci that still cover the top spells.
+	best, anyCovering := 0, false
 	wornItems := map[int]bool{}
 	for _, m := range current {
-		if m.Percent > best {
-			best = m.Percent
+		if m.CoversTop {
+			anyCovering = true
+			if m.Percent > best {
+				best = m.Percent
+			}
 		}
 		if m.SourceItemID > 0 {
 			wornItems[m.SourceItemID] = true
@@ -186,13 +222,19 @@ func (h *charactersHandler) focusUpgrades(w http.ResponseWriter, r *http.Request
 		return
 	}
 	items := cands[catID]
-	// For hate, a bigger number isn't an upgrade (it depends on tank vs. caster).
-	comparable := catID != "spell_hate"
+	// For hate foci a bigger number isn't plainly better, so never flag upgrades.
+	comparable := catID != "aggro_reduction" && catID != "bash_hate"
 	for i := range items {
 		items[i].Equipped = wornItems[items[i].ItemID]
-		items[i].IsUpgrade = comparable && items[i].Percent > best
+		// An upgrade must still apply to the character's top spells, and either
+		// nothing worn does, or it rolls/gives more than the best worn one.
+		items[i].IsUpgrade = comparable && items[i].CoversTop &&
+			(!anyCovering || items[i].Percent > best)
 	}
 	sort.SliceStable(items, func(a, b int) bool {
+		if items[a].CoversTop != items[b].CoversTop {
+			return items[a].CoversTop
+		}
 		if items[a].Percent != items[b].Percent {
 			return items[a].Percent > items[b].Percent
 		}
@@ -208,7 +250,7 @@ func (h *charactersHandler) focusUpgrades(w http.ResponseWriter, r *http.Request
 		items = []focusItem{}
 	}
 	writeJSON(w, http.StatusOK, focusUpgradesResponse{
-		Category: def.ID, Label: def.Label, Blurb: def.Blurb, SPA: def.SPA,
+		Category: def.ID, Label: def.Label, Blurb: def.Blurb, SPA: def.SPA, Rolls: def.Rolls,
 		Current: current, CurrentPercent: best, Items: items,
 	})
 }

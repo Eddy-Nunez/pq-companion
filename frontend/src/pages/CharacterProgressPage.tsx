@@ -2020,7 +2020,7 @@ function ModifierRow({ m, onShowUpgrades }: { m: SpellModifier; onShowUpgrades?:
             </button>
           )}
           <span className="font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>
-            {sign}{m.percent}% {spaLabel(m.spa)}
+            {m.percent < 0 ? `−${-m.percent}` : `${sign}${m.percent}`}% {spaLabel(m.spa)}
           </span>
         </span>
       </div>

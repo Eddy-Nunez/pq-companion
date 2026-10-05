@@ -102,6 +102,25 @@ func (db *DB) FocusOptions(classBit, maxLevel int) ([]FocusOption, error) {
 	return out, rows.Err()
 }
 
+// ItemFocusSpellIDs returns every distinct spell id carried as a focus effect by
+// at least one item. Used by tests that sweep the whole focus catalogue.
+func (db *DB) ItemFocusSpellIDs() ([]int, error) {
+	rows, err := db.Query(`SELECT DISTINCT focuseffect FROM items WHERE focuseffect > 0 ORDER BY focuseffect`)
+	if err != nil {
+		return nil, fmt.Errorf("item focus spell ids: %w", err)
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("item focus spell ids scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // excludedGearItems are items the upgrade finder must never suggest even though
 // quarm.db marks them as equippable with normal class/race masks: GM/dev-only
 // items and other non-obtainable specials. There's no data flag distinguishing

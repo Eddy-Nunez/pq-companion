@@ -4,6 +4,7 @@ import { X, RefreshCw, PackageCheck } from 'lucide-react'
 import {
   getAllInventories,
   getCharacterFocusUpgrades,
+  type FocusUpgradeItem,
   type FocusUpgradesResponse,
 } from '../services/api'
 import { ItemIcon } from './Icon'
@@ -14,9 +15,23 @@ interface FocusUpgradesCardProps {
   onClose: () => void
 }
 
-// Cast-time (127) and mana-cost (132) foci are reductions, shown with a minus.
-function sign(spa: number): string {
-  return spa === 127 || spa === 132 ? '−' : '+'
+// fmtPct renders a focus magnitude with its sign: cast-time (127) and mana-cost
+// (132) foci are reductions (minus), a negative value (aggro reduction) already
+// carries its own sign, and everything else is a bonus (plus).
+function fmtPct(spa: number, percent: number): string {
+  if (percent < 0) return `−${-percent}%`
+  return `${spa === 127 || spa === 132 ? '−' : '+'}${percent}%`
+}
+
+// scopeTags turns a focus's limits into short labels for what it applies to.
+function scopeTags(l: FocusUpgradeItem['limits']): string[] {
+  const tags: string[] = []
+  if (l.spell_type === 1) tags.push('beneficial only')
+  else if (l.spell_type === 0) tags.push('detrimental only')
+  if (l.instant_only) tags.push('direct damage only')
+  if (l.min_duration_sec) tags.push(`spells ≥ ${l.min_duration_sec}s`)
+  if (l.min_cast_time_ms) tags.push(`≥ ${l.min_cast_time_ms / 1000}s cast`)
+  return tags
 }
 
 // ownedByItem maps item id → names of characters carrying it (bags, bank,
@@ -106,13 +121,27 @@ export default function FocusUpgradesCard({
                 {data.current.map((m, i) => (
                   <span key={i} className="font-mono" style={{ color: 'var(--color-primary)' }}>
                     {i > 0 ? ', ' : ''}
-                    {m.source === 'item' ? m.source_item_name : m.source_aa_name} ({sign(data.spa)}{m.percent}%)
+                    {m.source === 'item' ? m.source_item_name : m.source_aa_name} ({fmtPct(data.spa, m.percent)})
+                    {!m.covers_top && m.limits.max_level ? (
+                      <span
+                        style={{ color: '#f59e0b' }}
+                        title={`Only affects spells up to level ${m.limits.max_level} — nothing above that`}
+                      >
+                        {' '}⚠ ≤ L{m.limits.max_level}
+                      </span>
+                    ) : null}
                   </span>
                 ))}
-                . Only the best focus in a category applies.
+                . Only the best focus that applies to a spell counts.
               </>
             )}
           </p>
+
+          {data.rolls && (
+            <p className="mb-2 text-[11px]" style={{ color: 'var(--color-muted)' }}>
+              Percentages are the maximum: each cast rolls a random 1% to that amount.
+            </p>
+          )}
 
           {data.items.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -145,7 +174,16 @@ export default function FocusUpgradesCard({
                         {it.equipped && <Tag label="worn" accent />}
                         {it.is_upgrade && <Tag label="upgrade" success />}
                         {it.req_level > 0 && <Tag label={`req L${it.req_level}`} />}
-                        {it.limits.max_level ? <Tag label={`spells ≤ L${it.limits.max_level}`} /> : null}
+                        {it.limits.max_level ? (
+                          <Tag
+                            label={`spells ≤ L${it.limits.max_level}`}
+                            warn={!it.covers_top}
+                            title={it.covers_top
+                              ? undefined
+                              : `Won't affect spells above level ${it.limits.max_level}`}
+                          />
+                        ) : null}
+                        {scopeTags(it.limits).map((t) => <Tag key={t} label={t} />)}
                         {it.no_drop && <Tag label="no drop" />}
                         {who && (
                           <span
@@ -159,7 +197,7 @@ export default function FocusUpgradesCard({
                       </div>
                     </div>
                     <span className="shrink-0 font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>
-                      {sign(data.spa)}{it.percent}%
+                      {fmtPct(data.spa, it.percent)}
                     </span>
                   </div>
                 )
@@ -172,13 +210,22 @@ export default function FocusUpgradesCard({
   )
 }
 
-function Tag({ label, accent, success }: { label: string; accent?: boolean; success?: boolean }): React.ReactElement {
+function Tag({ label, accent, success, warn, title }: {
+  label: string
+  accent?: boolean
+  success?: boolean
+  warn?: boolean
+  title?: string
+}): React.ReactElement {
   return (
     <span
       className="rounded px-1.5 py-0.5 text-[10px]"
+      title={title}
       style={{
         backgroundColor: 'var(--color-surface-3)',
-        color: success ? 'var(--color-success)' : accent ? 'var(--color-primary)' : 'var(--color-muted-foreground)',
+        color: warn
+          ? '#f59e0b'
+          : success ? 'var(--color-success)' : accent ? 'var(--color-primary)' : 'var(--color-muted-foreground)',
       }}
     >
       {label}

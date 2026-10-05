@@ -84,3 +84,47 @@ func TestFocusCandidates_ClassAndLevelFiltered(t *testing.T) {
 		}
 	}
 }
+
+// Focus level caps are hard limits: a level-65 caster gets nothing from a "Max
+// Level 60" focus on their top spells, so Spell Haste IV (≤65) must count as
+// covering them and III (≤60) must not — even though III's percent can be
+// higher — while a level-60 caster is fully covered by III.
+func TestFocusCandidates_CoversTop(t *testing.T) {
+	h := &charactersHandler{db: openFocusTestDB(t)}
+
+	coverage := func(level int) map[int]bool {
+		cands, err := h.focusCandidates(character.Character{Class: 13, Race: 1, Level: level})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[int]bool{}
+		for _, it := range cands["spell_haste"] {
+			out[it.FocusSpellID] = it.CoversTop
+		}
+		return out
+	}
+	const spellHasteIII, spellHasteIV = 2341, 3525
+
+	at65 := coverage(65)
+	if covers, ok := at65[spellHasteIV]; !ok || !covers {
+		t.Errorf("level 65: Spell Haste IV should be a covering candidate (present=%v covers=%v)", ok, covers)
+	}
+	if covers, ok := at65[spellHasteIII]; ok && covers {
+		t.Errorf("level 65: Spell Haste III (max level 60) must not cover top spells")
+	}
+	if covers, ok := coverage(60)[spellHasteIII]; ok && !covers {
+		t.Errorf("level 60: Spell Haste III should cover top spells")
+	}
+}
+
+// Bash hate is tank gear, never a "missing" spell focus — even for a paladin,
+// who isn't in the non-caster list.
+func TestMissingFocusCategories_NoBashHate(t *testing.T) {
+	h := &charactersHandler{db: openFocusTestDB(t)}
+	paladin := character.Character{Class: 2, Race: 1, Level: 65}
+	for _, c := range h.missingFocusCategories(paladin, nil) {
+		if c.ID == "bash_hate" {
+			t.Errorf("bash_hate must never be offered as a missing focus type")
+		}
+	}
+}

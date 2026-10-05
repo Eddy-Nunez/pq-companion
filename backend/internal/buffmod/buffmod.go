@@ -40,6 +40,7 @@ const (
 	SPAReagentConserve  = 131 // SE_ReduceReagentCost
 	SPAManaCost         = 132 // SE_ReduceManaCost
 	SPALimitMaxLevel    = 134 // SE_LimitMaxLevel
+	SPALimitResist      = 135 // SE_LimitResist: spell must be this resist type (see ResistType)
 	SPALimitEffect      = 137 // SE_LimitEffect: base is an SPA code; negative = exclude, positive = require
 	SPALimitSpellType   = 138 // SE_LimitSpellType: 0 = detrimental, 1 = beneficial, 2 = any
 	SPALimitSpellID     = 139 // SE_LimitSpell: negative = exclude spell ID, positive = whitelist
@@ -121,6 +122,7 @@ type Limits struct {
 	MaxLevel       int   `json:"max_level,omitempty"`        // SPA 134; max caster level
 	MinLevel       int   `json:"min_level,omitempty"`        // SPA 142
 	SpellType      int   `json:"spell_type"`                 // SPA 138; SpellTypeUnset/0/1/2
+	ResistType     int   `json:"resist_type,omitempty"`      // SPA 135; 1 magic, 2 fire, 3 cold, 4 poison, 5 disease; 0 = any
 	MinDurationSec int   `json:"min_duration_sec,omitempty"` // SPA 140 × 6
 	MinCastTimeMs  int   `json:"min_cast_time_ms,omitempty"` // SPA 143; target spell base cast time ≥ this (ms)
 	InstantOnly    bool  `json:"instant_only,omitempty"`     // SPA 141; applies only to instant (zero-duration) spells
@@ -260,7 +262,7 @@ func Compute(eqPath, charName string, gameDB *db.DB) (*Result, error) {
 			SPA:          entry.SPA,
 			Percent:      entry.PerRank[aa.Rank-1],
 			Limits:       Limits{SpellType: entry.SpellType},
-			Category:     CategoryOf(entry.SPA, Limits{SpellType: entry.SpellType}),
+			Category:     CategoryOf(entry.SPA, entry.PerRank[aa.Rank-1], Limits{SpellType: entry.SpellType}),
 		})
 	}
 
@@ -290,6 +292,8 @@ func parseFocusSpell(s *db.Spell) []Modifier {
 			}
 		case SPALimitMaxLevel:
 			limits.MaxLevel = base
+		case SPALimitResist:
+			limits.ResistType = base
 		case SPALimitMinLevel:
 			limits.MinLevel = base
 		case SPALimitSpellType:

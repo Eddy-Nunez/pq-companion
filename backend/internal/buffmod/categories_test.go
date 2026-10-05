@@ -33,6 +33,12 @@ func TestFocusModifiersCategory(t *testing.T) {
 		{2363, "Affliction Efficiency I", "affliction_efficiency"},
 		{2372, "Reanimation Efficiency I", "reanimation_efficiency"},
 		{3085, "Chromosphere", ""}, // single-spell focus
+		{3517, "Fury of Ro", "damage_fire"},
+		{3519, "Anger of E`ci", "damage_cold"},
+		{3522, "Anger of Druzzil", "damage_magic"},
+		{3923, "Fury of Bertoxxulous", "damage_disease"},
+		{2456, "Furious Bash II", "bash_hate"},
+		{3549, "Innoruuk's Sarcasm", "aggro_reduction"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,6 +66,43 @@ func TestCategoryLabels(t *testing.T) {
 		seen[c.ID] = true
 		if c.Label == "" || buffmod.CategoryLabel(c.ID) != c.Label {
 			t.Errorf("category %q label mismatch", c.ID)
+		}
+	}
+}
+
+// TestEveryItemFocusIsCategorised walks every focus spell carried by an item in
+// quarm.db. Each must land in a known category, or be a single-spell focus
+// (SPA 139 whitelist) that deliberately has none — so a future dump that adds
+// a focus with a new shape fails here instead of silently vanishing from the
+// Spell Modifiers views.
+func TestEveryItemFocusIsCategorised(t *testing.T) {
+	d := openDB(t)
+	ids, err := d.ItemFocusSpellIDs()
+	if err != nil {
+		t.Fatalf("ItemFocusSpellIDs: %v", err)
+	}
+	if len(ids) == 0 {
+		t.Fatal("no item focus spells found")
+	}
+	for _, id := range ids {
+		sp, err := d.GetSpell(id)
+		if err != nil || sp == nil {
+			continue
+		}
+		for _, m := range buffmod.FocusModifiers(sp) {
+			if m.Category == "" {
+				if len(m.Limits.IncludeSpells) == 0 {
+					t.Errorf("%s (%d): SPA %d %d%% has no category and is not single-spell (limits %+v)",
+						sp.Name, id, m.SPA, m.Percent, m.Limits)
+				}
+				continue
+			}
+			def, ok := buffmod.CategoryDefFor(m.Category)
+			if !ok {
+				t.Errorf("%s (%d): unknown category %q", sp.Name, id, m.Category)
+			} else if def.SPA != m.SPA {
+				t.Errorf("%s (%d): category %q is SPA %d but the focus is SPA %d", sp.Name, id, m.Category, def.SPA, m.SPA)
+			}
 		}
 	}
 }
