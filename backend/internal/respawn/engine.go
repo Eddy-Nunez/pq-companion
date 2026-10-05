@@ -77,6 +77,26 @@ type Engine struct {
 
 	// instanceMode is a manual, session-only override (see SetInstanceMode).
 	instanceMode bool
+
+	// pinHandoff reports whether a popped pinned timer should pass its pin to
+	// the next kill at the same spot (see claimPinLocked). It's a getter so the
+	// persisted user preference is read live; nil means off. Off by default:
+	// spawn ids aren't stable and the match is a proximity guess, so an
+	// automatic handoff can land the pin on the wrong mob.
+	pinHandoff func() bool
+}
+
+// SetPinHandoffSource wires the (persisted) "auto pin handoff" preference. See
+// the pinHandoff field.
+func (e *Engine) SetPinHandoffSource(fn func() bool) {
+	e.mu.Lock()
+	e.pinHandoff = fn
+	e.mu.Unlock()
+}
+
+// pinHandoffOn reports whether pin handoff is enabled. Caller must hold e.mu.
+func (e *Engine) pinHandoffOn() bool {
+	return e.pinHandoff != nil && e.pinHandoff()
 }
 
 // NewEngine returns an initialised Engine ready to receive log events.
@@ -296,8 +316,13 @@ func (e *Engine) onKill(displayName string, diedAt time.Time) {
 		newTimer.killX, newTimer.killY, newTimer.hasKillPos = posX, posY, true
 	}
 	handoffFrom := ""
-	if match := e.claimPinLocked(zoneShort, displayName, hasPos, posX, posY, diedAt); match != nil {
+	var match *RespawnTimer
+	if e.pinHandoffOn() {
+		match = e.claimPinLocked(zoneShort, displayName, hasPos, posX, posY, diedAt)
+	}
+	if match != nil {
 		newTimer.Pinned = true
+		newTimer.PinLabel = match.PinLabel
 		newTimer.anchorX, newTimer.anchorY, newTimer.hasAnchor = match.anchorX, match.anchorY, match.hasAnchor
 		newTimer.pinnedAt = match.pinnedAt
 		handoffFrom = match.ID
@@ -413,7 +438,33 @@ func (e *Engine) TogglePin(id string, pinned bool) bool {
 		t.anchorX, t.anchorY, t.hasAnchor = t.killX, t.killY, t.hasKillPos
 	} else {
 		t.hasAnchor = false
+		t.PinLabel = ""
 	}
+	snap := e.snapshot(time.Now())
+	e.mu.Unlock()
+
+	e.hub.Broadcast(ws.Event{Type: WSEventRespawns, Data: snap})
+	return true
+}
+
+// maxPinLabelLen caps a pin label so one can't blow out an overlay row.
+const maxPinLabelLen = 40
+
+// SetPinLabel sets a short free-text label on a pinned timer ("named PH",
+// "camp 2") shown beside the name, so the player can tell which pinned row is
+// which. Empty clears it. Returns false if id isn't an active pinned timer.
+func (e *Engine) SetPinLabel(id, label string) bool {
+	label = strings.TrimSpace(label)
+	if r := []rune(label); len(r) > maxPinLabelLen {
+		label = string(r[:maxPinLabelLen])
+	}
+	e.mu.Lock()
+	t, ok := e.timers[id]
+	if !ok || !t.Pinned {
+		e.mu.Unlock()
+		return false
+	}
+	t.PinLabel = label
 	snap := e.snapshot(time.Now())
 	e.mu.Unlock()
 
@@ -474,6 +525,7 @@ func (e *Engine) UnpinLatest() bool {
 	}
 	latest.Pinned = false
 	latest.hasAnchor = false
+	latest.PinLabel = ""
 	snap := e.snapshot(time.Now())
 	e.mu.Unlock()
 
@@ -491,6 +543,7 @@ func (e *Engine) ClearPins() bool {
 		if t.Pinned {
 			t.Pinned = false
 			t.hasAnchor = false
+			t.PinLabel = ""
 			any = true
 		}
 	}

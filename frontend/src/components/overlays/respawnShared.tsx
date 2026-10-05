@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Pin, X } from 'lucide-react'
-import { removeRespawn, setRespawnPinned } from '../../services/api'
+import { removeRespawn, setRespawnPinLabel, setRespawnPinned } from '../../services/api'
 import { useTimerAppearance } from '../../hooks/useTimerAppearance'
 import type { RespawnTimer } from '../../types/respawn'
 
@@ -47,6 +47,64 @@ interface RespawnRowProps {
    * CustomTimer's do in clickthrough/display-only lock modes.
    */
   showControls?: boolean
+}
+
+const MAX_PIN_LABEL = 40
+
+// PinLabel is the small click-to-edit note on a pinned row ("named PH",
+// "camp 2"). Read-only text when controls are hidden (locked overlay); an empty
+// label shows only as a faint "+ label" affordance while controls are on.
+function PinLabel({ timer, editable, color, shadow }: {
+  timer: RespawnTimer
+  editable: boolean
+  color: string
+  shadow?: string
+}): React.ReactElement | null {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const label = timer.pin_label ?? ''
+
+  if (editing) {
+    const commit = (): void => {
+      setEditing(false)
+      if (draft.trim() !== label) setRespawnPinLabel(timer.id, draft).catch(() => {})
+    }
+    return (
+      <input
+        autoFocus
+        value={draft}
+        maxLength={MAX_PIN_LABEL}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        placeholder="label"
+        style={{
+          width: 90, fontSize: 10, padding: '0 3px', flexShrink: 0,
+          background: 'rgba(0,0,0,0.5)', color: '#fff',
+          border: `1px solid ${PIN_COLOR}`, borderRadius: 2, outline: 'none',
+        }}
+      />
+    )
+  }
+  if (!label && !editable) return null
+  return (
+    <span
+      onClick={editable ? () => { setDraft(label); setEditing(true) } : undefined}
+      title={editable ? 'Click to edit label' : undefined}
+      style={{
+        fontSize: 10, flexShrink: 0, textShadow: shadow,
+        color: label ? PIN_COLOR : color,
+        opacity: label ? 1 : 0.55,
+        cursor: editable ? 'pointer' : 'default',
+        fontStyle: label ? 'normal' : 'italic',
+      }}
+    >
+      {label ? `· ${label}` : '+ label'}
+    </span>
+  )
 }
 
 // RespawnRow renders one death/respawn countdown. Shared between the dashboard
@@ -99,6 +157,9 @@ export function RespawnRow({ timer, currentZone, variant, showControls = true }:
             {timer.npc_name}{' '}
             <span style={{ color: mutedColor, fontVariantNumeric: 'tabular-nums' }}>{label}</span>
           </span>
+          {timer.pinned && (
+            <PinLabel timer={timer} editable={showControls} color={mutedColor} shadow={textShadow} />
+          )}
           {otherZone && (
             <span style={{ fontSize: 10, color: mutedColor, flexShrink: 0, textShadow }}>
               [{timer.zone}]

@@ -50,9 +50,13 @@ type RespawnTimer struct {
 	// Pinned marks a timer the player has flagged as their camp/farm target
 	// (see Engine.TogglePin). Pinned timers sort first, are never auto-pruned
 	// after they pop, and hand the pin off to a later kill at the same spot
-	// (see Engine.claimPinLocked) so the player doesn't have to re-pin every
-	// cycle.
+	// (see Engine.claimPinLocked) when the "auto pin handoff" preference is on
+	// — it's off by default, so a pin stays put at POP until dismissed.
 	Pinned bool `json:"pinned"`
+
+	// PinLabel is an optional short user label on a pinned timer (see
+	// Engine.SetPinLabel). Cleared on unpin; carried across a pin handoff.
+	PinLabel string `json:"pin_label,omitempty"`
 
 	// anchorX/anchorY are the player's world position (Zeal pipe GameX/GameY)
 	// at the moment this timer was pinned. Unexported: it's engine-internal

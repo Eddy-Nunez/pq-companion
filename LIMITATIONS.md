@@ -1350,8 +1350,10 @@ These are inherent to log-file parsing and affect multiple features:
 ### 20.1 Pin handoff anchors on the player's position, not the mob's
 
 - **Limitation:** Pinning a respawn timer (row button or `/pipe respawn
-  pin`) stamps an anchor from the player's Zeal-pipe position at kill time,
-  so that once the timer pops, the next kill within ~200 units can inherit
+  pin`) stamps an anchor from the player's Zeal-pipe position at kill time.
+  With **Settings → Auto-hand off pinned respawns** on (off by default, since
+  the match is a guess and was reported as unreliable for placeholder camps),
+  once the timer pops the next kill within ~200 units can inherit
   the pin regardless of name (`internal/respawn/engine.go`,
   `claimPinLocked`). This is a proxy for "the camp spot," not the killed
   NPC's own location. A kill made a good distance from where the player was

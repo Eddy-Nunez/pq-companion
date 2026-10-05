@@ -325,6 +325,7 @@ func TestTogglePin_UnknownID(t *testing.T) {
 // pinned timer hasn't popped yet.
 func TestClaimPin_HandoffByPosition(t *testing.T) {
 	e := newTestEngine(t)
+	e.SetPinHandoffSource(func() bool { return true })
 	e.logZoneShort = "nektulos"
 	t0 := time.Now()
 
@@ -414,6 +415,7 @@ func TestClaimPin_HandoffByPosition(t *testing.T) {
 // timers are both within range, the nearer one's pin is claimed.
 func TestClaimPin_NearestOfTwoCandidates(t *testing.T) {
 	e := newTestEngine(t)
+	e.SetPinHandoffSource(func() bool { return true })
 	e.logZoneShort = "nektulos"
 	t0 := time.Now()
 
@@ -476,6 +478,7 @@ func TestClaimPin_NearestOfTwoCandidates(t *testing.T) {
 // handoff matches on name only, oldest death first, and never crosses names.
 func TestClaimPin_HandoffBySameName(t *testing.T) {
 	e := newTestEngine(t)
+	e.SetPinHandoffSource(func() bool { return true })
 	e.logZoneShort = "nektulos"
 	t0 := time.Now()
 	// No SetPipePlayerPos call: hasPipePos stays false for this whole test,
@@ -603,5 +606,107 @@ func TestHandlePipeCommand(t *testing.T) {
 	}
 	if e.HandlePipeCommand("") {
 		t.Error("HandlePipeCommand matched empty text")
+	}
+}
+
+// TestPinHandoff_OffByDefault verifies a popped pinned timer keeps its pin and
+// the next kill at the same spot does NOT inherit it unless the preference is on.
+func TestPinHandoff_OffByDefault(t *testing.T) {
+	e := newTestEngine(t)
+	e.logZoneShort = "nektulos"
+	t0 := time.Now()
+
+	e.SetPipePlayerPos(0, 0)
+	e.Handle(killEvent("a skeleton", t0))
+	id1 := e.GetState().Timers[0].ID
+	e.TogglePin(id1, true)
+	expireLocked(e, id1)
+
+	e.SetPipePlayerPos(10, 10)
+	e.Handle(killEvent("a skeleton", t0))
+
+	st := e.GetState()
+	if len(st.Timers) != 2 {
+		t.Fatalf("want 2 timers (no handoff by default), got %d: %+v", len(st.Timers), st.Timers)
+	}
+	for _, tm := range st.Timers {
+		switch {
+		case tm.ID == id1 && !tm.Pinned:
+			t.Errorf("original pin should stay put at POP")
+		case tm.ID != id1 && tm.Pinned:
+			t.Errorf("new kill must not inherit the pin when handoff is off")
+		}
+	}
+
+	// Turning the preference on takes effect immediately (the getter is live).
+	on := true
+	e.SetPinHandoffSource(func() bool { return on })
+	e.Handle(killEvent("a skeleton", t0))
+	pinned := 0
+	for _, tm := range e.GetState().Timers {
+		if tm.Pinned {
+			pinned++
+		}
+	}
+	if pinned != 1 {
+		t.Errorf("with handoff on, want exactly one pinned timer after the claim, got %d", pinned)
+	}
+}
+
+func TestPinLabel(t *testing.T) {
+	e := newTestEngine(t)
+	e.logZoneShort = "nektulos"
+	t0 := time.Now()
+	e.Handle(killEvent("a skeleton", t0))
+	id := e.GetState().Timers[0].ID
+
+	if e.SetPinLabel(id, "named PH") {
+		t.Fatalf("labeling an unpinned timer should fail")
+	}
+	e.TogglePin(id, true)
+	if !e.SetPinLabel(id, "  named PH  ") {
+		t.Fatalf("SetPinLabel on a pinned timer returned false")
+	}
+	if got := e.GetState().Timers[0].PinLabel; got != "named PH" {
+		t.Errorf("label = %q, want trimmed %q", got, "named PH")
+	}
+
+	long := ""
+	for i := 0; i < maxPinLabelLen+10; i++ {
+		long += "x"
+	}
+	e.SetPinLabel(id, long)
+	if got := len([]rune(e.GetState().Timers[0].PinLabel)); got != maxPinLabelLen {
+		t.Errorf("label length = %d, want capped at %d", got, maxPinLabelLen)
+	}
+
+	if e.SetPinLabel("nope|nope|1", "x") {
+		t.Errorf("unknown id should return false")
+	}
+
+	// Unpinning clears the label.
+	e.TogglePin(id, false)
+	if got := e.GetState().Timers[0].PinLabel; got != "" {
+		t.Errorf("label after unpin = %q, want empty", got)
+	}
+}
+
+// TestPinLabel_SurvivesHandoff verifies the label rides along when handoff is on.
+func TestPinLabel_SurvivesHandoff(t *testing.T) {
+	e := newTestEngine(t)
+	e.SetPinHandoffSource(func() bool { return true })
+	e.logZoneShort = "nektulos"
+	t0 := time.Now()
+
+	e.Handle(killEvent("a skeleton", t0))
+	id1 := e.GetState().Timers[0].ID
+	e.TogglePin(id1, true)
+	e.SetPinLabel(id1, "camp 2")
+	expireLocked(e, id1)
+
+	e.Handle(killEvent("a skeleton", t0))
+	st := e.GetState()
+	if len(st.Timers) != 1 || !st.Timers[0].Pinned || st.Timers[0].PinLabel != "camp 2" {
+		t.Fatalf("want one pinned timer labeled %q, got %+v", "camp 2", st.Timers)
 	}
 }

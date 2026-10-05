@@ -1816,6 +1816,10 @@ export function setRespawnPinned(id: string, pinned: boolean): Promise<RespawnSt
   return put<RespawnState>(`/api/overlay/respawns/${encodeURIComponent(id)}/pin`, { pinned })
 }
 
+export function setRespawnPinLabel(id: string, label: string): Promise<RespawnState> {
+  return put<RespawnState>(`/api/overlay/respawns/${encodeURIComponent(id)}/label`, { label })
+}
+
 export function clearRespawnPins(): Promise<void> {
   return del('/api/overlay/respawns/pins')
 }

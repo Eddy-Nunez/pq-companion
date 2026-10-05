@@ -2910,6 +2910,31 @@ export default function SettingsPage(): React.ReactElement {
               secondsHint="Fires when a respawn crosses this many seconds left (0 = right as it pops)."
               ttsPlaceholder="{npc} has re-spawned"
             />
+
+            <label className="mt-4 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.preferences?.respawn_pin_handoff ?? false}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    preferences: { ...config.preferences, respawn_pin_handoff: e.target.checked },
+                  })
+                }
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  Auto-hand off pinned respawns
+                </span>
+                <span className="mt-0.5 block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                  When a pinned respawn pops, move the pin to the next kill at the same
+                  spot. It's a guess (placeholders and rotating spawn ids can send it to
+                  the wrong mob), so it's off by default — a pin otherwise stays on its
+                  timer until you unpin it or remove the timer.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* ── Detrimental timer alerts ─────────────────────────────────── */}

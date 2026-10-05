@@ -25,9 +25,12 @@ export interface RespawnTimer {
   /**
    * True when the player has flagged this timer as a priority (camp/farm
    * target). Pinned timers sort first, are never auto-pruned after they
-   * pop, and hand the pin off to a later kill at the same spot.
+   * pop, and (when the "Auto pin handoff" setting is on) hand the pin off to
+   * a later kill at the same spot.
    */
   pinned: boolean
+  /** Optional short user label on a pinned timer (cleared on unpin). */
+  pin_label?: string
 }
 
 export interface RespawnState {

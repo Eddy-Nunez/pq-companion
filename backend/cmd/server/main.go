@@ -789,6 +789,7 @@ func main() {
 	// Respawn (death) timer engine: starts a countdown when a mob is killed,
 	// using the spawn data's respawn time for the player's current zone.
 	respawnEngine := respawn.NewEngine(hub, database)
+	respawnEngine.SetPinHandoffSource(func() bool { return cfgMgr.Get().Preferences.RespawnPinHandoff })
 	go respawnEngine.Start(context.Background())
 
 	// Invalidate the engine's modifier cache whenever the Quarmy export is

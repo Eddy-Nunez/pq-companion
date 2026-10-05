@@ -84,6 +84,33 @@ func (h *respawnHandler) setPin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.engine.GetState())
 }
 
+// setPinLabel handles PUT /api/overlay/respawns/{id}/label — sets (or, when
+// empty, clears) the label on a pinned timer (see respawn.Engine.SetPinLabel).
+// Returns 404 if the ID isn't an active pinned timer.
+func (h *respawnHandler) setPinLabel(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	// IDs contain '|' and spaces, so they arrive percent-encoded — see remove.
+	if decoded, err := url.PathUnescape(id); err == nil {
+		id = decoded
+	}
+	var req struct {
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if !h.engine.SetPinLabel(id, req.Label) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.engine.GetState())
+}
+
 // clearPins handles DELETE /api/overlay/respawns/pins — unpins every
 // currently pinned timer (see respawn.Engine.ClearPins).
 func (h *respawnHandler) clearPins(w http.ResponseWriter, r *http.Request) {

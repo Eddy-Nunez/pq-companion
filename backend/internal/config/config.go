@@ -471,6 +471,12 @@ type Preferences struct {
 	// the same reason as CustomTimerAlert.
 	RespawnAlert *TimerAlertPref `yaml:"respawn_alert,omitempty" json:"respawn_alert,omitempty"`
 
+	// RespawnPinHandoff makes a popped, pinned respawn timer pass its pin to
+	// the next kill at the same spot (proximity via the Zeal pipe, else same
+	// name). Off by default: the match is a guess — spawn ids rotate and
+	// placeholders spawn different mobs — so it can pin the wrong mob.
+	RespawnPinHandoff bool `yaml:"respawn_pin_handoff,omitempty" json:"respawn_pin_handoff"`
+
 	// DetrimTimerAlert is the default "fading soon" audio cue applied to every
 	// auto-detected Detrimental-overlay timer (debuff/dot/mez/stun) that has no
 	// alert of its own. The spell-timer engine creates these timers straight

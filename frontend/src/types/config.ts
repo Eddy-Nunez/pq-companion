@@ -191,6 +191,10 @@ export interface Preferences {
   // Audio cue fired as each NPC respawn timer crosses `seconds` remaining
   // (0 = at "POP"). Applies to every respawn timer; disabled by default.
   respawn_alert?: TimerAlertPref
+  // When true, a popped pinned respawn timer passes its pin to the next kill at
+  // the same spot (proximity via the Zeal pipe, else same name). Off by
+  // default — the match is a guess and can pin the wrong mob.
+  respawn_pin_handoff?: boolean
   // Default fading-soon alert applied to every auto-detected Detrimental
   // timer (debuff/dot/mez/stun) that has no per-trigger alert of its own —
   // i.e. native spell-timer timers on any mob, raid or not. Trigger-driven
