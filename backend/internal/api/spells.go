@@ -388,11 +388,14 @@ func (h *spellsHandler) shoppingRoute(w http.ResponseWriter, r *http.Request) {
 		dist = shoproute.Distances(body.StartZone, adj)
 	}
 
-	plan := shoproute.Solve(input, dist)
+	plan := shoproute.SolveFrom(input, dist, body.StartZone)
 
 	// Order the stops from the starting zone, if one was given.
 	if body.StartZone != "" && len(plan.Stops) > 1 {
 		plan.Stops = shoproute.Order(plan.Stops, body.StartZone, adj)
+		// Re-credit each spell to the earliest stop that sells it, so a
+		// starting city keeps everything it can sell.
+		plan.Stops = shoproute.Consolidate(plan.Stops, input)
 	}
 
 	resp := shoppingRoute{

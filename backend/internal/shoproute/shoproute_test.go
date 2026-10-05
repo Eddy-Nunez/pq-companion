@@ -180,3 +180,77 @@ func TestSolveDistanceTiebreak(t *testing.T) {
 		t.Errorf("partial-dist tiebreak: got %q, want akanon", got)
 	}
 }
+
+func TestSolveFromStartZone(t *testing.T) {
+	// Spell 1 is only sold in qeynos (an anchor); spells 2 and 3 are sold in both
+	// qeynos and poknowledge. Plain Solve credits everything to qeynos; starting
+	// in poknowledge must keep 2 and 3 there.
+	spells := []SpellAvail{
+		avail(1, "qeynos"),
+		avail(2, "qeynos", "poknowledge"),
+		avail(3, "qeynos", "poknowledge"),
+	}
+
+	tests := []struct {
+		name      string
+		start     string
+		wantStops []Stop
+	}{
+		{
+			name:  "no start: anchor swallows overlapping spells",
+			start: "",
+			wantStops: []Stop{
+				{Zone: "qeynos", Reason: ReasonAnchor, SpellIDs: []int{1, 2, 3}},
+			},
+		},
+		{
+			name:  "start zone takes everything it sells first",
+			start: "poknowledge",
+			wantStops: []Stop{
+				{Zone: "poknowledge", Reason: ReasonGreedy, SpellIDs: []int{2, 3}},
+				{Zone: "qeynos", Reason: ReasonAnchor, SpellIDs: []int{1}},
+			},
+		},
+		{
+			name:  "start zone selling nothing requested is not added",
+			start: "freportw",
+			wantStops: []Stop{
+				{Zone: "qeynos", Reason: ReasonAnchor, SpellIDs: []int{1, 2, 3}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SolveFrom(spells, nil, tt.start)
+			if !reflect.DeepEqual(got.Stops, tt.wantStops) {
+				t.Errorf("stops = %+v, want %+v", got.Stops, tt.wantStops)
+			}
+		})
+	}
+}
+
+func TestConsolidate(t *testing.T) {
+	spells := []SpellAvail{
+		avail(1, "a", "b"),
+		avail(2, "b"),
+		avail(3, "b", "c"),
+	}
+	// Greedy credited 1 and 3 to the later stops, but stop a (visited first)
+	// also sells 1, and c's only spell (3) is also sold at b.
+	stops := []Stop{
+		{Zone: "a", Reason: ReasonGreedy, SpellIDs: nil},
+		{Zone: "b", Reason: ReasonAnchor, SpellIDs: []int{2}},
+		{Zone: "c", Reason: ReasonGreedy, SpellIDs: []int{3}},
+	}
+	// Stop a has no credited spells but sells spell 1 via the other stop's list.
+	stops[1].SpellIDs = []int{1, 2}
+
+	got := Consolidate(stops, spells)
+	want := []Stop{
+		{Zone: "a", Reason: ReasonGreedy, SpellIDs: []int{1}},
+		{Zone: "b", Reason: ReasonAnchor, SpellIDs: []int{2, 3}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Consolidate = %+v, want %+v", got, want)
+	}
+}

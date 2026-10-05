@@ -72,6 +72,15 @@ type Plan struct {
 // nearer wins; the lexicographically-first short-name breaks any remaining tie,
 // so the same input always yields the same route.
 func Solve(spells []SpellAvail, dist map[string]int) Plan {
+	return SolveFrom(spells, dist, "")
+}
+
+// SolveFrom is Solve with a starting zone. When start sells any of the
+// requested spells it is seeded into the itinerary first and credited with
+// everything it sells, so a player who chooses a hub (say Plane of Knowledge)
+// never has those spells routed to a farther town just because that town was
+// an anchor for some other spell. An empty start behaves exactly like Solve.
+func SolveFrom(spells []SpellAvail, dist map[string]int, start string) Plan {
 	// missing tracks spells not yet covered, keyed by spell id.
 	missing := make(map[int]map[string]bool, len(spells))
 	var uncovered []int
@@ -91,6 +100,17 @@ func Solve(spells []SpellAvail, dist map[string]int) Plan {
 
 	plan := Plan{Uncovered: uncovered}
 	chosen := make(map[string]bool) // zones already added to the itinerary
+
+	// Phase 0 — start zone. Shopping where the player already is costs no
+	// travel, so it takes every spell it sells before anything else is chosen.
+	if start != "" {
+		if covered := takeCovered(missing, start); len(covered) > 0 {
+			chosen[start] = true
+			plan.Stops = append(plan.Stops, Stop{
+				Zone: start, Reason: ReasonGreedy, SpellIDs: covered,
+			})
+		}
+	}
 
 	// Phase 1 — anchors. A spell with exactly one zone forces that zone.
 	var anchorZones []string
@@ -128,6 +148,49 @@ func Solve(spells []SpellAvail, dist map[string]int) Plan {
 	}
 
 	return plan
+}
+
+// Consolidate reassigns every spell to the earliest stop, in the given visiting
+// order, that sells it, then drops stops left with nothing to buy. Solve credits
+// spells while choosing stops (before the visiting order is known), so a spell
+// can end up credited to a later stop even though an earlier stop on the route
+// also sells it; this pass makes the route shop as early as possible and may
+// shrink it. Stop order and reasons are preserved.
+func Consolidate(stops []Stop, spells []SpellAvail) []Stop {
+	zonesOf := make(map[int]map[string]bool, len(spells))
+	for _, s := range spells {
+		zonesOf[s.SpellID] = s.Zones
+	}
+	assigned := make([][]int, len(stops))
+	for _, st := range stops {
+		for _, id := range st.SpellIDs {
+			placed := false
+			for i, cand := range stops {
+				if zonesOf[id][cand.Zone] {
+					assigned[i] = append(assigned[i], id)
+					placed = true
+					break
+				}
+			}
+			if !placed { // defensive: keep the original credit
+				for i, cand := range stops {
+					if cand.Zone == st.Zone {
+						assigned[i] = append(assigned[i], id)
+					}
+				}
+			}
+		}
+	}
+	out := make([]Stop, 0, len(stops))
+	for i, st := range stops {
+		if len(assigned[i]) == 0 {
+			continue
+		}
+		sort.Ints(assigned[i])
+		st.SpellIDs = assigned[i]
+		out = append(out, st)
+	}
+	return out
 }
 
 // takeCovered removes every still-missing spell available in zone z and
