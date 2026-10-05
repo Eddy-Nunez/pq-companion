@@ -139,32 +139,6 @@ func TestRaidSplit_ManualRosterProposal(t *testing.T) {
 	}
 }
 
-func TestRaidSplit_CuratedCapsSurfaceInResponse(t *testing.T) {
-	_, r, s := newRaidSplitTestRouter(t)
-	if err := s.SaveEncounter(validSplitEncounter()); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	code, out := doSplit(t, r, map[string]any{
-		"encounter_id": "split-test",
-		"preference":   "curated",
-		"wildcards": []map[string]any{
-			{"kind": "member", "member": "Ghost", "group": 1},
-			{"kind": "class", "value": "clr", "max": 0, "min": 1},
-		},
-	})
-	if code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %v", code, out)
-	}
-	warnings, _ := out["warnings"].([]any)
-	joined := strings.Join(toStrings(warnings), " | ")
-	if !strings.Contains(joined, "Ghost") {
-		t.Errorf("want a warning about pinned member Ghost, got %q", joined)
-	}
-	if !strings.Contains(joined, "wanted at least 1") {
-		t.Errorf("want an unmet-min warning for clr, got %q", joined)
-	}
-}
-
 func toStrings(v []any) []string {
 	out := make([]string, 0, len(v))
 	for _, x := range v {
@@ -207,7 +181,7 @@ func TestRaidSplit_NoNullArrays(t *testing.T) {
 				{"name": "Dps", "class": "rog"},
 			},
 		},
-		"empty roster": {"encounter_id": "split-test", "preference": "trinity"},
+		"empty roster":       {"encounter_id": "split-test", "preference": "trinity"},
 		"compless encounter": {"encounter_id": "no-comps", "preference": "trinity"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -264,14 +238,6 @@ func TestRaidSplit_CohortsPassthrough(t *testing.T) {
 		if v, ok := out[field]; !ok || v == nil {
 			t.Errorf("field %q missing or null in cohort response: %v", field, out[field])
 		}
-	}
-	// Curated + cohorts is a 400 with the reason.
-	code, _ = doSplit(t, r, map[string]any{
-		"encounter_id": "split-test", "preference": "curated", "cohorts": 2,
-		"roster": []map[string]any{{"name": "T", "class": "war"}},
-	})
-	if code != http.StatusBadRequest {
-		t.Errorf("curated + cohorts: want 400, got %d", code)
 	}
 }
 

@@ -283,15 +283,14 @@ type splitRosterInput struct {
 // a grouping preference, and an optional manual roster (live roster is used
 // otherwise — same roster-source convention as the check endpoint).
 type splitRequest struct {
-	EncounterID           string              `json:"encounter_id"`
-	Preference            string              `json:"preference"`
-	GroupSize             int                 `json:"group_size,omitempty"`
-	RespectExistingGroups bool                `json:"respect_existing_groups,omitempty"`
-	Wildcards             []raidcomp.Wildcard `json:"wildcards,omitempty"`
+	EncounterID           string `json:"encounter_id"`
+	Preference            string `json:"preference"`
+	GroupSize             int    `json:"group_size,omitempty"`
+	RespectExistingGroups bool   `json:"respect_existing_groups,omitempty"`
 	// Cohorts (2..raidcomp.MaxSplitCohorts) splits the roster into N smaller
 	// raids, each targeting the full template — see the engine's docs.
-	Cohorts int                       `json:"cohorts,omitempty"`
-	Roster  []splitRosterInput        `json:"roster,omitempty"`
+	Cohorts int                `json:"cohorts,omitempty"`
+	Roster  []splitRosterInput `json:"roster,omitempty"`
 }
 
 // checkCompRequest asks for a composition check. roster is optional: when
@@ -408,7 +407,6 @@ func (h *raidsHandler) splitComp(w http.ResponseWriter, r *http.Request) {
 		Preference:            raidcomp.SplitPreference(req.Preference),
 		GroupSize:             req.GroupSize,
 		RespectExistingGroups: req.RespectExistingGroups,
-		Wildcards:             req.Wildcards,
 		Cohorts:               req.Cohorts,
 	}, members)
 	if err != nil {

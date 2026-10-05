@@ -142,113 +142,6 @@ func TestSplit_TrinityWeavesTankHealerEarly(t *testing.T) {
 	}
 }
 
-func TestSplit_FocusedClustersSameClass(t *testing.T) {
-	enc := splitEncounter("enc")
-	enc.Comps = []CompRow{
-		{Role: "healer", Sub: "ch_cleric", Min: 4, Rec: 4},
-		{Role: "damage", Min: 8, Rec: 8},
-	}
-	rep, err := Split(splitLeaves(t), enc, SplitRequest{Preference: SplitFocused, GroupSize: 6}, splitFixture())
-	if err != nil {
-		t.Fatalf("Split: %v", err)
-	}
-	// All four clerics (Holyheal, Cureall, Bigheal, Tickleheal) should share
-	// one group under the focused preference.
-	clerics := map[string]bool{"Holyheal": true, "Cureall": true, "Bigheal": true, "Tickleheal": true}
-	groups := map[int]int{}
-	for _, g := range rep.Groups {
-		for _, s := range g.Slots {
-			if clerics[s.Member] {
-				groups[g.Number]++
-			}
-		}
-	}
-	if len(groups) != 1 {
-		t.Errorf("clerics spread across %d groups, want 1: %v", len(groups), groups)
-	}
-	// And the healer slots must all be filled by clerics.
-	for _, c := range rep.Min {
-		if c.Path == "healer.ch_cleric" && c.Placed < c.Need {
-			t.Errorf("focused: cleric CH slots placed %d < need %d", c.Placed, c.Need)
-		}
-	}
-}
-
-func TestSplit_CuratedPinsAndCaps(t *testing.T) {
-	enc := splitEncounter("enc")
-	enc.Comps = []CompRow{
-		{Role: "tank", Sub: "defensive", Min: 1, Rec: 1},
-		{Role: "healer", Sub: "ch_cleric", Min: 2, Rec: 3},
-		{Role: "damage", Min: 4, Rec: 6},
-	}
-	req := SplitRequest{
-		Preference: SplitCurated,
-		GroupSize:  6,
-		Wildcards: []Wildcard{
-			{Kind: "member", Member: "Bonce", Group: 2, Locked: true},
-			{Kind: "class", Value: "clr", Max: 2},
-			{Kind: "class", Value: "clr", Min: 2},
-		},
-	}
-	rep, err := Split(splitLeaves(t), enc, req, splitFixture())
-	if err != nil {
-		t.Fatalf("Split: %v", err)
-	}
-	// Bonce pinned to group 2.
-	g2 := findGroup(rep, 2)
-	if g2 == nil {
-		t.Fatal("group 2 missing")
-	}
-	found := false
-	for _, s := range g2.Slots {
-		if s.Member == "Bonce" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Bonce not seated in group 2: %+v", g2.Slots)
-	}
-	// Cleric cap: at most 2 clerics placed anywhere.
-	clericN := 0
-	for _, g := range rep.Groups {
-		for _, s := range g.Slots {
-			if s.Class == CodeCleric {
-				clericN++
-			}
-		}
-	}
-	if clericN > 2 {
-		t.Errorf("cleric cap violated: %d clerics placed (cap 2)", clericN)
-	}
-	// Cleric min met → no warning mentioning it.
-	for _, w := range rep.Warnings {
-		if strings.Contains(w, "class=\"clr\"") && strings.Contains(w, "wanted at least") {
-			t.Errorf("unexpected min warning despite meeting it: %s", w)
-		}
-	}
-}
-
-func TestSplit_CuratedPinnedUnknownMemberWarns(t *testing.T) {
-	enc := splitEncounter("enc")
-	enc.Comps = []CompRow{{Role: "damage", Min: 2, Rec: 2}}
-	rep, err := Split(splitLeaves(t), enc, SplitRequest{
-		Preference: SplitCurated,
-		Wildcards:  []Wildcard{{Kind: "member", Member: "Nobody", Group: 1}},
-	}, splitFixture())
-	if err != nil {
-		t.Fatalf("Split: %v", err)
-	}
-	found := false
-	for _, w := range rep.Warnings {
-		if strings.Contains(w, "Nobody") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected a warning about Nobody, got %v", rep.Warnings)
-	}
-}
-
 func TestSplit_GroupsFullMembersUnassigned(t *testing.T) {
 	enc := splitEncounter("enc")
 	enc.Comps = []CompRow{{Role: "damage", Min: 3, Rec: 3}}
@@ -551,13 +444,7 @@ func TestSplit_Cohorts_LiveGroupSeedingKeepsTowerGroups(t *testing.T) {
 	}
 }
 
-func TestSplit_Cohorts_RejectsFocusedAndCurated(t *testing.T) {
-	if _, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitFocused, Cohorts: 2}, cohortRoster()); err == nil {
-		t.Fatal("focused + cohorts must be rejected")
-	}
-	if _, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitCurated, Cohorts: 2}, cohortRoster()); err == nil {
-		t.Fatal("curated + cohorts must be rejected")
-	}
+func TestSplit_Cohorts_RejectsOversize(t *testing.T) {
 	if _, err := Split(splitLeaves(t), cohortComp("c"), SplitRequest{Preference: SplitTrinity, Cohorts: 7}, cohortRoster()); err == nil {
 		t.Fatal("cohorts 7 must be rejected (max 6)")
 	}

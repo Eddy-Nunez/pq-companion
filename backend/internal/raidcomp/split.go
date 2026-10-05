@@ -3,7 +3,6 @@ package raidcomp
 import (
 	"fmt"
 	"sort"
-	"strings"
 )
 
 // SplitPreference selects the grouping strategy for a composition proposal.
@@ -17,62 +16,27 @@ const (
 	// SplitFocused builds class-focused groups: same-class members cluster
 	// into shared groups (e.g. all clerics together for a CH chain), then
 	// comp slots are assigned to seated members, class-eligibility first.
-	SplitFocused SplitPreference = "focused"
-	// SplitCurated is trinity seating plus user pin/cap rules (wildcards):
-	// exact members pinned to groups, per-class / per-path / any caps.
-	SplitCurated SplitPreference = "curated"
 )
 
 // Valid reports whether p is a known split preference.
 func (p SplitPreference) Valid() bool {
-	switch p {
-	case SplitTrinity, SplitFocused, SplitCurated:
-		return true
-	}
-	return false
-}
-
-// Wildcard is one curated rule constraining the proposal. Kind selects the
-// shape; zero-value fields are ignored per kind.
-type Wildcard struct {
-	// Kind is one of "member", "class", "path", "any".
-	Kind string `json:"kind"`
-	// Value is the class code ("clr") or role path ("healer.ch_cleric")
-	// for the class / path kinds.
-	Value string `json:"value,omitempty"`
-	// Member is the exact roster name for the member kind.
-	Member string `json:"member,omitempty"`
-	// Group pins the rule to one group number (1-based). 0 = any group.
-	Group int `json:"group,omitempty"`
-	// Max caps how many matching members may be placed anywhere in the
-	// proposal (class/path/any kinds; members capped out of seating come
-	// back unassigned with a reason). 0 = unlimited.
-	Max int `json:"max,omitempty"`
-	// Min asks for at least this many matching placements; unmet Mins are
-	// reported as warnings, not hard failures.
-	Min int `json:"min,omitempty"`
-	// Locked pins a member to their pinned (or live) group; the allocator
-	// seats them before anything else moves.
-	Locked bool `json:"locked,omitempty"`
+	return p == SplitTrinity
 }
 
 // SplitRequest is one composition-proposal request: a roster, the target
 // composition (encounter), and a grouping preference.
 type SplitRequest struct {
-	// Preference is trinity | focused | curated.
+	// Preference is trinity (baseline; empty also means trinity).
 	Preference SplitPreference `json:"preference"`
 	// GroupSize caps group size (EQ standard 6). 0 = 6.
 	GroupSize int `json:"group_size,omitempty"`
 	// RespectExistingGroups seats members into their live Zeal group where
 	// possible (live groups cohere) instead of pure balancing.
 	RespectExistingGroups bool `json:"respect_existing_groups,omitempty"`
-	// Wildcards only apply to SplitCurated.
-	Wildcards []Wildcard `json:"wildcards,omitempty"`
 	// Cohorts splits the roster into this many smaller raids, each targeting
 	// the FULL encounter template (best effort — per-cohort coverage and
 	// warnings report shortfalls; see docs/raid-split-cohorts-plan.md).
-	// 0/1 = single raid (legacy shape). Trinity only: cohort-scoped curated
-	// rules and focused clustering are not supported yet.
+	// 0/1 = single raid (legacy shape).
 	Cohorts int `json:"cohorts,omitempty"`
 }
 
@@ -162,7 +126,6 @@ type splitMember struct {
 	rank    string
 	group   int // proposed group (0 = unseated)
 	slot    *splitSlot
-	pinned  bool
 	// cohort mode: cohort is the member's raid (0 = unset in the legacy
 	// single-raid path); localGrp is their live group renumbered within its
 	// cohort block (0 = no live group).
@@ -306,14 +269,16 @@ func classInSet(c ClassCode, set ClassSet) bool {
 // MIN slots are the hard floor and fill first; REC extras are best-effort.
 // A member fills a comp slot only when their class is in the leaf's
 // ClassSet; members without a resolvable class are seated as fill but never
-// hold comp slots. Curated caps (Wildcard.Max) bound how many matching
-// members may be placed at all — capped-out members return unassigned.
+// hold comp slots.
 func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []RosterMember) (*SplitReport, error) {
 	if enc == nil {
 		return nil, fmt.Errorf("raidcomp: encounter required")
 	}
+	if req.Preference == "" {
+		req.Preference = SplitTrinity // baseline default
+	}
 	if !req.Preference.Valid() {
-		return nil, fmt.Errorf("raidcomp: invalid preference %q (want trinity|focused|curated)", req.Preference)
+		return nil, fmt.Errorf("raidcomp: invalid preference %q (want trinity)", req.Preference)
 	}
 	size := req.GroupSize
 	if size <= 0 {
@@ -326,12 +291,6 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 		return nil, fmt.Errorf("raidcomp: cohorts must be 0..%d, got %d", MaxSplitCohorts, req.Cohorts)
 	}
 	if req.Cohorts > 1 {
-		// Cohort mode is trinity-only in v1 (docs/raid-split-cohorts-plan.md):
-		// curated group pins are ambiguous across cohorts and focused class
-		// clustering contradicts pre-formed tower groups.
-		if req.Preference != SplitTrinity {
-			return nil, fmt.Errorf("raidcomp: %s does not support cohorts yet (trinity only)", req.Preference)
-		}
 		return splitCohorts(leaves, enc, req, members)
 	}
 
@@ -358,36 +317,18 @@ func Split(leaves []RoleLeaf, enc *Encounter, req SplitRequest, members []Roster
 		slots = minBeforeRec(slots)
 	}
 
-	// Resolve members; index by name for curated rules.
 	ms := make([]splitMember, 0, len(members))
-	byName := make(map[string]*splitMember, len(members))
 	for _, m := range members {
 		if m.Name == "" {
 			continue
 		}
 		ms = append(ms, splitMember{name: m.Name, code: m.Class, liveGrp: m.Group, rank: m.Rank})
-		byName[m.Name] = &ms[len(ms)-1]
 	}
 
 	groups := newGroupTracker(size)
 
-	switch req.Preference {
-	case SplitFocused:
-		// Phase 1: seat by class clusters; Phase 2: assign comp slots to
-		// seated members.
-		seatFocusedClusters(ms, groups)
-		assignSlotsToSeated(slots, ms)
-		seatRemaining(ms, groups, req.RespectExistingGroups, rep, nil)
-	default: // trinity + curated
-		var caps *curatedCaps
-		if req.Preference == SplitCurated {
-			caps = newCuratedCaps(req.Wildcards)
-			applyCuratedRules(req.Wildcards, ms, byName, groups, caps, rep)
-		}
-		fillSlotsInGroups(slots, ms, groups, req, caps, rep)
-		seatRemaining(ms, groups, req.RespectExistingGroups, rep, caps)
-		applyCuratedMinChecks(req.Wildcards, ms, rep)
-	}
+	fillSlotsInGroups(slots, ms, groups, req, rep)
+	seatRemaining(ms, groups, req.RespectExistingGroups, rep)
 
 	rep.Groups = assembleGroups(ms, 0, size)
 	// buildCoverage returns empty (non-nil) slices so min/rec are [] not
@@ -442,43 +383,6 @@ func (g *groupTracker) firstOpen(from int) int {
 	return 0
 }
 
-// applyCuratedRules pre-seats pinned/locked members and pre-charges their
-// class against the curated caps. Non-member rules are validated lazily by
-// the caps machinery during allocation.
-func applyCuratedRules(rules []Wildcard, ms []splitMember, byName map[string]*splitMember, groups *groupTracker, caps *curatedCaps, rep *SplitReport) {
-	for _, w := range rules {
-		if (w.Kind != "member" && w.Kind != "any") || w.Member == "" {
-			continue
-		}
-		m, ok := byName[w.Member]
-		if !ok {
-			rep.Warnings = append(rep.Warnings, fmt.Sprintf("pinned member %q is not on the roster", w.Member))
-			continue
-		}
-		if m.group != 0 {
-			continue // already pinned
-		}
-		grp := w.Group
-		if grp == 0 {
-			grp = liveGroupNum(m.liveGrp)
-		}
-		if grp < 1 || grp > maxSplitGroups {
-			rep.Warnings = append(rep.Warnings, fmt.Sprintf("pinned member %q: group %d out of range 1..%d", w.Member, w.Group, maxSplitGroups))
-			continue
-		}
-		if !groups.space(grp) {
-			rep.Warnings = append(rep.Warnings, fmt.Sprintf("pinned member %q: group %d is full", w.Member, grp))
-			continue
-		}
-		groups.seat(grp)
-		m.group = grp
-		m.pinned = true
-		if caps != nil {
-			caps.commitClass(m.code)
-		}
-	}
-}
-
 // liveGroupNum parses a live Zeal group string ("1".."12"); "0"/""/invalid
 // → 0 (no live group).
 func liveGroupNum(g string) int {
@@ -503,7 +407,7 @@ func liveGroupNum(g string) int {
 // RespectExistingGroups, a chosen member seats into their LIVE group (when
 // it has space) so live groups cohere instead of spreading across the
 // cursor order.
-func fillSlotsInGroups(slots []splitSlot, ms []splitMember, groups *groupTracker, req SplitRequest, caps *curatedCaps, rep *SplitReport) {
+func fillSlotsInGroups(slots []splitSlot, ms []splitMember, groups *groupTracker, req SplitRequest, rep *SplitReport) {
 	gi := 1
 	capWarned := false
 	for si := range slots {
@@ -518,11 +422,7 @@ func fillSlotsInGroups(slots []splitSlot, ms []splitMember, groups *groupTracker
 			}
 			break
 		}
-		var capVeto func(*splitMember, *splitSlot) bool
-		if caps != nil {
-			capVeto = caps.vetoSlot
-		}
-		m := pickForSlot(s, ms, gi, req, capVeto)
+		m := pickForSlot(s, ms, gi, req)
 		if m == nil {
 			continue // unfilled; coverage reports the shortfall
 		}
@@ -539,114 +439,18 @@ func fillSlotsInGroups(slots []splitSlot, ms []splitMember, groups *groupTracker
 		m.slot = s
 		s.filled = true
 		s.member = m
-		if caps != nil {
-			caps.commitClass(m.code)
-			caps.commitPath(s.leaf.Path())
-		}
-	}
-}
-
-// curatedCaps tracks class/path/any placement counts against Wildcard.Max.
-type curatedCaps struct {
-	byClass map[ClassCode]int
-	byPath  map[string]int
-	anyCap  int // 0 = unlimited
-	anyN    int
-}
-
-func newCuratedCaps(rules []Wildcard) *curatedCaps {
-	c := &curatedCaps{byClass: map[ClassCode]int{}, byPath: map[string]int{}}
-	for _, w := range rules {
-		if w.Max <= 0 {
-			continue
-		}
-		switch w.Kind {
-		case "class":
-			c.byClass[normClass(w.Value)] = w.Max
-		case "path":
-			c.byPath[strings.TrimSpace(w.Value)] = w.Max
-		case "any":
-			if c.anyCap == 0 {
-				c.anyCap = w.Max
-			}
-		}
-	}
-	return c
-}
-
-func normClass(v string) ClassCode {
-	return ClassCode(strings.ToLower(strings.TrimSpace(v)))
-}
-
-// vetoSlot reports whether seating m into s would exceed a curated cap
-// (slot pass): class cap spent, path cap spent, or any-cap spent.
-func (c *curatedCaps) vetoSlot(m *splitMember, s *splitSlot) bool {
-	if c == nil {
-		return false
-	}
-	// allowed reports whether seating m into s stays within every cap.
-	allowed := func(m *splitMember, s *splitSlot) bool {
-		if n, ok := c.byClass[m.code]; ok && n <= 0 {
-			return false
-		}
-		if n, ok := c.byPath[s.leaf.Path()]; ok && n <= 0 {
-			return false
-		}
-		return !(c.anyCap > 0 && c.anyN >= c.anyCap)
-	}
-	return allowed(m, s)
-}
-
-// exhaustedForSeating reports whether m may not be SEATED at all (used in
-// the fill phase, where no slot context exists): their class cap or the any
-// cap is spent.
-func (c *curatedCaps) exhaustedForSeating(m *splitMember) bool {
-	if c == nil {
-		return false
-	}
-	if n, ok := c.byClass[m.code]; ok && n <= 0 {
-		return true
-	}
-	return c.anyCap > 0 && c.anyN >= c.anyCap
-}
-
-// commitClass records one placement of m's class against the caps.
-func (c *curatedCaps) commitClass(code ClassCode) {
-	if c == nil {
-		return
-	}
-	if n, ok := c.byClass[code]; ok {
-		c.byClass[code] = n - 1
-	}
-	if c.anyCap > 0 {
-		c.anyN++
-	}
-}
-
-// commitPath records one placement of a role path against the caps.
-func (c *curatedCaps) commitPath(path string) {
-	if c == nil {
-		return
-	}
-	if n, ok := c.byPath[path]; ok {
-		c.byPath[path] = n - 1
 	}
 }
 
 // pickForSlot selects the best eligible member for s when filling group gi.
-// Priority: a member already seated in gi (curated pin) > unseated members
-// whose live group is gi (RespectExistingGroups) > any other unseated
-// member; ties break by name for determinism. capVeto may exclude members
-// that would exceed a curated cap.
-func pickForSlot(s *splitSlot, ms []splitMember, gi int, req SplitRequest, capVeto func(*splitMember, *splitSlot) bool) *splitMember {
+// Priority: a member already seated in gi > unseated members whose live
+// group is gi (RespectExistingGroups) > any other unseated member; ties
+// break by name for determinism.
+func pickForSlot(s *splitSlot, ms []splitMember, gi int, req SplitRequest) *splitMember {
 	var best *splitMember
 	for i := range ms {
 		m := &ms[i]
 		if !m.eligible(s) {
-			continue
-		}
-		if capVeto != nil && !capVeto(m, s) {
-			// vetoSlot returns allowed=false when a cap is exceeded — skip.
 			continue
 		}
 		if best == nil {
@@ -667,9 +471,9 @@ func pickForSlot(s *splitSlot, ms []splitMember, gi int, req SplitRequest, capVe
 	return best
 }
 
-// scoreFor ranks candidates for a slot in group gi: seated-in-gi first
-// (curated pin), then live-group affinity when re-balancing is off, then
-// everyone else.
+// scoreFor ranks candidates for a slot in group gi: seated-in-gi first,
+// then live-group affinity when RespectExistingGroups is set, then everyone
+// else.
 func (m *splitMember) scoreFor(gi int, req SplitRequest) int {
 	switch {
 	case m.group == gi:
@@ -683,95 +487,10 @@ func (m *splitMember) scoreFor(gi int, req SplitRequest) int {
 	}
 }
 
-// seatFocusedClusters seats every classed member by class clusters (phase 1
-// of the focused preference): classes in name order, members in name order.
-// A cluster fills its group contiguously; a NEW class opens the next group
-// once the current one already carries 3+ members and none of this class —
-// small tails top up the previous group instead of wasting a seat.
-func seatFocusedClusters(ms []splitMember, groups *groupTracker) {
-	var codes []ClassCode
-	byCode := map[ClassCode][]*splitMember{}
-	for i := range ms {
-		m := &ms[i]
-		if m.code == "" {
-			continue // classless members seat in the fill phase
-		}
-		if _, ok := byCode[m.code]; !ok {
-			codes = append(codes, m.code)
-		}
-		byCode[m.code] = append(byCode[m.code], m)
-	}
-	sort.Slice(codes, func(i, j int) bool { return ClassNames[codes[i]] < ClassNames[codes[j]] })
-
-	gi := 1
-	for _, code := range codes {
-		for _, m := range byCode[code] {
-			if m.group != 0 {
-				continue
-			}
-			if !groups.space(gi) {
-				next := groups.firstOpen(gi + 1)
-				if next == 0 {
-					return
-				}
-				gi = next
-			} else if groups.count[gi] >= 3 && classCountInGroup(ms, gi, code) == 0 {
-				// Current group is carrying a different class's cluster —
-				// open a fresh group for this class.
-				next := groups.firstOpen(gi + 1)
-				if next == 0 {
-					return
-				}
-				gi = next
-			}
-			groups.seat(gi)
-			m.group = gi
-		}
-	}
-}
-
-// classCountInGroup counts seated members of code in group grp.
-func classCountInGroup(ms []splitMember, grp int, code ClassCode) int {
-	n := 0
-	for i := range ms {
-		if ms[i].group == grp && ms[i].code == code {
-			n++
-		}
-	}
-	return n
-}
-
-// assignSlotsToSeated assigns comp slots to already-seated members (the
-// focused path): each slot goes to the alphabetically-first unroled,
-// class-eligible member seated in the earliest group that has one.
-func assignSlotsToSeated(slots []splitSlot, ms []splitMember) {
-	for si := range slots {
-		s := &slots[si]
-		for gi := 1; gi <= maxSplitGroups; gi++ {
-			var best *splitMember
-			for i := range ms {
-				m := &ms[i]
-				if m.group == gi && m.eligible(s) {
-					if best == nil || m.name < best.name {
-						best = m
-					}
-				}
-			}
-			if best != nil {
-				best.slot = s
-				s.filled = true
-				s.member = best
-				break
-			}
-		}
-	}
-}
-
 // seatRemaining seats members the allocation left unseated: prefer their
 // live group (when RespectExistingGroups), else the first group with space.
-// Members excluded by a curated cap, or that fit nowhere, come back
-// unassigned with the reason.
-func seatRemaining(ms []splitMember, groups *groupTracker, respect bool, rep *SplitReport, caps *curatedCaps) {
+// Members that fit nowhere come back unassigned with the reason.
+func seatRemaining(ms []splitMember, groups *groupTracker, respect bool, rep *SplitReport) {
 	var order []*splitMember
 	for i := range ms {
 		if ms[i].group == 0 {
@@ -780,13 +499,6 @@ func seatRemaining(ms []splitMember, groups *groupTracker, respect bool, rep *Sp
 	}
 	sort.Slice(order, func(i, j int) bool { return order[i].name < order[j].name })
 	for _, m := range order {
-		if caps != nil && caps.exhaustedForSeating(m) {
-			rep.Unassigned = append(rep.Unassigned, Unassigned{
-				Name: m.name, Class: m.code,
-				Reason: fmt.Sprintf("excluded by curated cap (%s)", capDescribe(caps, m.code)),
-			})
-			continue
-		}
 		grp := 0
 		if respect {
 			if lg := liveGroupNum(m.liveGrp); lg > 0 && groups.space(lg) {
@@ -805,23 +517,7 @@ func seatRemaining(ms []splitMember, groups *groupTracker, respect bool, rep *Sp
 		}
 		groups.seat(grp)
 		m.group = grp
-		if caps != nil {
-			// Fill seats consume caps too, so a capped class can't exceed its
-			// Max through the back door.
-			caps.commitClass(m.code)
-		}
 	}
-}
-
-// capDescribe names the cap that excluded a member, for the unassigned
-// reason ("class clr ≤ 2"). The stored counter is what remains, so the
-// original Max is recovered as remaining + placed; simpler to report the
-// rule shape without arithmetic games.
-func capDescribe(c *curatedCaps, code ClassCode) string {
-	if _, ok := c.byClass[code]; ok {
-		return fmt.Sprintf("class %s capped", code)
-	}
-	return "wildcard cap"
 }
 
 // assembleGroups turns seat state into the report's group list, carrying
@@ -882,40 +578,6 @@ func buildCoverage(ordered []splitLeaf, slots []splitSlot) (minC, recC []Coverag
 		})
 	}
 	return minC, recC
-}
-
-// applyCuratedMinChecks reports curated Min rules the proposal could not
-// meet (Min semantics are advisory: unmet Mins surface as warnings).
-func applyCuratedMinChecks(rules []Wildcard, ms []splitMember, rep *SplitReport) {
-	for _, w := range rules {
-		if w.Min <= 0 || (w.Kind != "class" && w.Kind != "path" && w.Kind != "any") {
-			continue
-		}
-		n := 0
-		for i := range ms {
-			m := &ms[i]
-			if m.group == 0 {
-				continue
-			}
-			switch w.Kind {
-			case "class":
-				if m.code == normClass(w.Value) {
-					n++
-				}
-			case "path":
-				if m.slot != nil && m.slot.leaf.Path() == strings.TrimSpace(w.Value) {
-					n++
-				}
-			case "any":
-				n++
-			}
-		}
-		if n < w.Min {
-			rep.Warnings = append(rep.Warnings, fmt.Sprintf(
-				"wildcard %s=%q: wanted at least %d placement(s), proposal made %d",
-				w.Kind, w.Value, w.Min, n))
-		}
-	}
 }
 
 // ── cohort mode (docs/raid-split-cohorts-plan.md) ──────────────────────────
@@ -1251,7 +913,7 @@ func SplitPlan(leaves []RoleLeaf, enc *Encounter, members []RosterMember) SplitP
 	}
 	best := 0
 	seenMin := false // best==0 is a legitimate ratio (unstaffable leaf) — track
-	                // initialization separately or every leaf re-binds
+	// initialization separately or every leaf re-binds
 	for _, leaf := range leaves {
 		row, ok := compByLeaf[leafKey(leaf.Role, leaf.Sub)]
 		if !ok || (row.Min == 0 && row.Rec == 0) {

@@ -172,26 +172,15 @@ export interface RaidRoleProvisionResult {
 
 // ── Group composition proposal (split) ───────────────────────────
 
-export type SplitPreference = 'trinity' | 'focused' | 'curated'
+export type SplitPreference = 'trinity'
 
 export type CompLevelFill = 'min' | 'rec'
 
-export interface SplitWildcard {
-  kind: 'member' | 'class' | 'path' | 'any'
-  value?: string
-  member?: string
-  group?: number
-  max?: number
-  min?: number
-  locked?: boolean
-}
-
 export interface SplitRequest {
   encounter_id: string
-  preference: SplitPreference
+  preference?: SplitPreference
   group_size?: number
   respect_existing_groups?: boolean
-  wildcards?: SplitWildcard[]
   // Cohort mode: split the roster into N smaller raids (2..6), each staffed
   // against the full template. Omitted = single raid.
   cohorts?: number
