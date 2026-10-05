@@ -22,12 +22,15 @@ package respawn
 // avoid an off-by-one at the boundaries (e.g. a 360s base must NOT fall in the
 // 360001ms lower-bound range).
 //
-// LIMITATION: reduction is keyed purely off the static zone row. Raid/guild
-// instances run with reduction disabled on the live server, but an instance is
-// indistinguishable from its open-world counterpart here — the EQ log never
-// marks a guild instance as "(Instanced)", and the Zeal pipe reports only the
-// base zoneidnumber. So an instanced run of a reduced zone will still show the
-// fast timer. There is currently no signal available to detect this.
+// LIMITATION: reduction is keyed purely off the static zone row. Per the server
+// (Spawn2::resetTimer, Oct 2026), reduced zones use the reduction in the open
+// world AND in ordinary guild instances; only the Guild-1 PvP instance uses the
+// raw spawn2 timer, and raid-target spawnpoints are never reduced in open
+// world. PoP guild instances additionally follow the Timekeeper's pace
+// (pop_spawn_minutes_<zone>). The app can't tell instances apart — the EQ log
+// never marks a zone "(Instanced)" and the Zeal pipe reports only the base
+// zoneidnumber — so the PvP instance (use the manual raw-timers toggle) and PoP
+// instance pace are the cases it can't model.
 const (
 	dungeonHigherBoundMinMs = 900000
 	dungeonHigherBoundMaxMs = 2400000

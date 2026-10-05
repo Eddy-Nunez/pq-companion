@@ -477,9 +477,16 @@ a future data source fix this?" column against the new capabilities.
 - **Limitation:** Spawn/respawn timers for instanced areas can be wrong, because
   instanced spawns and PvP/guild instance rules differ from the open-world
   timers we model.
+- **What the server does (Oct 2026 patch):** zones flagged for reduced respawns
+  use the reduction in the open world and in *ordinary guild instances*, so those
+  match what we show. The exceptions we can't model: the Guild-1 PvP instance
+  uses the raw database timer (the Respawn overlay's manual FAST/NORMAL toggle
+  covers this), PoP guild instances follow the Timekeeper's pace
+  (`pop_spawn_minutes_<zone>`), and pre-PoP guild instances cap respawns at 7
+  days.
 - **Root cause:** A consequence of 4.1 — without knowing the instance type, we
-  can't apply the right respawn rules (instance reset behavior, Quarm
-  fast-respawn variations, etc.).
+  can't apply the right respawn rules (instance reset behavior, instance pace,
+  etc.).
 - **Sources checked:** Log, DB (open-world spawn data), Zeal.
 - **Could a future data source fix this?** **No** without instance metadata from
   a future data source.

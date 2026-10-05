@@ -10,9 +10,9 @@ interface OverlayInstanceModeButtonProps {
 /**
  * Shield toggle for the respawn overlay headers. Forces newly started timers
  * to use the raw (unreduced) respawn time instead of Quarm's fast-respawn
- * reduction — for guild/raid-locked instances (e.g. Sebilis, Howling
- * Stones), which run with the reduction disabled server-side but are
- * otherwise indistinguishable from the open-world zone (LIMITATIONS.md
+ * reduction — correct for the Guild-1 PvP instance, the one place the server
+ * skips the reduction (open world and ordinary guild instances both use it),
+ * and otherwise indistinguishable from the open-world zone (LIMITATIONS.md
  * §4.1). Manual because there is no data source to detect this
  * automatically.
  */
@@ -27,7 +27,7 @@ export default function OverlayInstanceModeButton({
       title={
         enabled
           ? 'Normal timers — new kills use the full unreduced respawn time (click to use fast-respawn timers)'
-          : 'Fast timers — Quarm\'s reduction is applied (click to use normal/unreduced timers for a guild/raid-locked instance)'
+          : 'Fast timers — Quarm\'s reduction is applied (click to use normal/unreduced timers — only right in the PvP instance)'
       }
       aria-pressed={enabled}
       style={{

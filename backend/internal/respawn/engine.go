@@ -584,11 +584,12 @@ func (e *Engine) GetState() RespawnState {
 
 // SetInstanceMode toggles the manual "raw timers" override: while enabled,
 // newly started timers skip Quarm's fast-respawn reduction and use the raw
-// spawn2.respawntime instead. Guild/raid-locked instances run with the
-// reduction disabled server-side, but are indistinguishable from the
-// open-world zone from any data source available to the app (log, DB, Zeal
-// pipe — see LIMITATIONS.md §4.1), so this is a manual per-session flag
-// rather than something the engine can detect on its own. Already-running
+// spawn2.respawntime instead. That matches the server only in the Guild-1 PvP
+// instance (ordinary guild instances and the open world both use the
+// reduction), which is indistinguishable from the open-world zone from any
+// data source available to the app (log, DB, Zeal pipe — see LIMITATIONS.md
+// §4.1), so this is a manual per-session flag rather than something the engine
+// can detect on its own. Already-running
 // timers are left as-is; only kills processed after the toggle are affected.
 func (e *Engine) SetInstanceMode(enabled bool) RespawnState {
 	e.mu.Lock()
