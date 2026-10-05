@@ -458,7 +458,7 @@ function BenchRow({ entry, index, interactive, stripe, classNames }: {
 function GroupCard({ title, cohort, group, interactive, classNames }: {
   title: string
   cohort: number
-  group: { number: number; size: number; slots: SplitSlot[] }
+  group: { number: number; size: number; slots: SplitSlot[]; shape_id?: string }
   interactive: boolean
   classNames?: Record<string, string>
 }): React.ReactElement {
@@ -492,6 +492,15 @@ function GroupCard({ title, cohort, group, interactive, classNames }: {
         <span className="text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
           {group.slots.length}/{group.size} seats
         </span>
+        {group.shape_id ? (
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+            title="Formed from the group composition template — under-filled rows show open seats"
+            style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground, #fff)' }}
+          >
+            shape: {group.shape_id}
+          </span>
+        ) : null}
         {shape.length > 0 ? (
           <span className="ml-auto flex items-center gap-1.5 text-[11px]">
             {shape.map(({ fam, n }) => (

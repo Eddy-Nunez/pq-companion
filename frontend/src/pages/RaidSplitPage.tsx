@@ -30,6 +30,12 @@ export default function RaidSplitPage(): React.ReactElement {
   // endpoint suggests how many complete MIN comps the live roster can staff.
   const [cohorts, setCohorts] = useState(1)
   const [plan, setPlan] = useState<SplitPlanReport | null>(null)
+  // Group-shape templates (docs/raid-group-compositions-plan.md): explicit
+  // opt-in per generate — checked ids travel with the request, unchecked
+  // (the default) means pure trinity. Cohort mode only (shapes are a
+  // multi-raid feature; the backend 400s otherwise).
+  const [shapeIds, setShapeIds] = useState<Set<string>>(new Set())
+  const [shapeDist, setShapeDist] = useState<'replicate' | 'distribute'>('replicate')
   const [busy, setBusy] = useState(false)
   const [splitError, setSplitError] = useState('')
 
@@ -49,6 +55,7 @@ export default function RaidSplitPage(): React.ReactElement {
   React.useEffect(() => {
     let cancelled = false
     setPlan(null)
+    setShapeIds(new Set()) // shape selection is per-encounter; default unchecked
     if (!selectedId) return
     getRaidSplitPlan(selectedId)
       .then((p) => {
@@ -73,11 +80,14 @@ export default function RaidSplitPage(): React.ReactElement {
     setBusy(true)
     setSplitError('')
     try {
+      const withShapes = cohorts > 1 && shapeIds.size > 0
       const rep = await splitRaidComp({
         encounter_id: selectedId,
         group_size: groupSize,
         respect_existing_groups: respectGroups,
         cohorts: cohorts > 1 ? cohorts : undefined,
+        shapes: withShapes ? Array.from(shapeIds) : undefined,
+        shape_distribution: withShapes ? shapeDist : undefined,
       })
       setReport(rep)
       setAdjusted(false)
@@ -193,6 +203,52 @@ export default function RaidSplitPage(): React.ReactElement {
         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
           Trinity seating: tank + healer + support first in every group, damage fills the rest.
         </p>
+
+        {cohorts > 1 && (selectedEncounter?.shapes?.length ?? 0) > 0 ? (
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+              group compositions
+            </span>
+            {selectedEncounter!.shapes!.map((sh) => (
+              <label
+                key={sh.shape_id}
+                className="flex items-center gap-1.5 text-sm"
+                style={{ color: shapeIds.has(sh.shape_id) ? 'var(--color-foreground)' : 'var(--color-muted-foreground)' }}
+                title={`Group template: ${sh.rows.map((r) => `${r.role}${r.sub_role ? '.' + r.sub_role : ''} ×${r.count}`).join(', ')}${sh.group_number ? ` — pinned to group ${sh.group_number}` : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={shapeIds.has(sh.shape_id)}
+                  onChange={(e) =>
+                    setShapeIds((prev) => {
+                      const next = new Set(prev)
+                      if (e.target.checked) next.add(sh.shape_id)
+                      else next.delete(sh.shape_id)
+                      return next
+                    })
+                  }
+                />
+                {sh.shape_id}
+              </label>
+            ))}
+            <label
+              className="flex items-center gap-1.5 text-sm"
+              style={{ color: 'var(--color-muted-foreground)' }}
+              title="replicate — every raid fields every enabled shape · distribute — shape 1 to raid 1, shape 2 to raid 2 (shapes beyond the raid count are ignored)"
+            >
+              placement
+              <select
+                className={selectCls}
+                style={selectStyle}
+                value={shapeDist}
+                onChange={(e) => setShapeDist(e.target.value as 'replicate' | 'distribute')}
+              >
+                <option value="replicate">replicate</option>
+                <option value="distribute">distribute</option>
+              </select>
+            </label>
+          </div>
+        ) : null}
 
         {cohorts > 1 && plan ? (
           <p className="text-xs" style={{ color: plan.max_cohorts >= cohorts ? 'var(--color-success)' : 'var(--color-danger)' }}>
