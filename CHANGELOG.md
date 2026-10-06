@@ -9,6 +9,14 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.26.0-beta.2 — 2026-10-06
+
+Fixes the #raidmove copy flow to match how EQ actually accepts pastes — one command per chat message — and adds a per-member copy button on every seat and bench row.
+
+### Fixes
+- **#raidmove copies one command at a time** — EQ's chat input runs a pasted multi-line block as a single chat message, so only the first `#raidmove` would execute. The copy buttons now hand you one command per click and rotate through the proposal's members in order (the button shows your place, e.g. "3/6"); bulk setup is click, paste, Enter, repeat. Copies always read the proposal as currently edited, drags included.
+- **Per-member copy button** — every seated and unseated row has a small copy button for that exact member's `#raidmove <name> <group>` command (bench rows copy `#raidmove <name> 0` to ungroup), so a one-off fix doesn't mean clicking through the whole rotation.
+
 ## v0.26.0-beta.1 — 2026-10-05
 
 Introduces the Group Composition Proposal — a split planner that seats your raid into balanced groups against an encounter's target composition, with named group-composition templates and one-click in-game move scripts.
