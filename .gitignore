@@ -22,6 +22,7 @@
 !/docs/zeal-1.4.6-plan.md
 !/docs/log-backfill-archives-plan.md
 !/docs/raid-split-cohorts-plan.md
+!/docs/group-composition-proposal-guide.md
 
 # ── Environment & secrets ─────────────────────────────────────────────────────
 .env
