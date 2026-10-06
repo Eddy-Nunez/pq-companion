@@ -96,53 +96,64 @@ export function raidMoveLines(group: { number: number; slots: SplitSlot[] }): st
   return group.slots.map((s) => `#raidmove ${s.member} ${group.number}`)
 }
 
-// raidMoveScript builds a whole-raid move script: every seated member of
-// the given groups in order, optionally followed by bench members moved to
-// group 0 (ungrouped) so one paste sets up the entire raid. Used by the
-// copy-all buttons (proposal header for single-raid reports, per-cohort
-// headers in cohort mode — a single global script for multi-raid would mix
-// each raid's local group numbers, so cohort raids copy one raid at a time).
-export function raidMoveScript(groups: { number: number; slots: SplitSlot[] }[], bench?: string[]): string {
-  const lines = groups.flatMap((g) => raidMoveLines(g))
-  for (const name of bench ?? []) lines.push(`#raidmove ${name} 0`)
-  return lines.join('\n')
-}
-
-// CopyScriptButton copies a ready-made #raidmove script to the clipboard
-// (house clipboard pattern: writeText + transient check mark).
-function CopyScriptButton({ script, label, title }: { script: string; label: string; title: string }): React.ReactElement {
+// CopyNextRaidMoveButton copies ONE #raidmove command per click and
+// advances to the next member (wrapping around). This is the whole flow,
+// not a nicety: EQ's chat input does not accept multi-command pastes — a
+// pasted "send each line separately" block lands as ONE chat message and
+// only the first #raidmove executes (the rest die inside a garbled
+// string). Chat paste is also length-capped (EQ_CHAT_LINE_MAX in
+// lib/eqClipboard.ts, ~400 chars), so a whole-raid script could not fit
+// anyway. The working primitive is one command per paste: bulk setup is
+// click → paste → Enter → click again; the label shows rotation progress
+// ("3/6") and a transient check mark confirms each copy. Commands come
+// from the live report prop at render, so drags are reflected on the next
+// click. The accessible name stays the stable label (aria-label) so the
+// transient 'copied' text never changes what assistive tech/tests match.
+function CopyNextRaidMoveButton({ commands, label, title }: { commands: string[]; label: string; title: string }): React.ReactElement {
   const [copied, setCopied] = useState(false)
+  const [idx, setIdx] = useState(0)
   function handleCopy(): void {
-    if (!script) return
-    navigator.clipboard.writeText(script).then(() => {
+    if (commands.length === 0) return
+    navigator.clipboard.writeText(commands[idx]).then(() => {
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      setTimeout(() => setCopied(false), 1200)
+      setIdx((i) => (i + 1) % commands.length)
     }).catch(() => {})
   }
+  const progress = commands.length > 1 && idx > 0 ? ` ${idx + 1}/${commands.length}` : ''
   return (
     <button
       type="button"
       onClick={handleCopy}
-      disabled={!script}
+      disabled={commands.length === 0}
       title={title}
-      className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded shrink-0"
+      aria-label={label}
+      className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded shrink-0 tabular-nums"
       style={{ backgroundColor: 'var(--color-surface)', color: copied ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}
     >
-      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : label}
+      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : `${label}${progress}`}
     </button>
   )
 }
 
-// CopyRaidMoveButton copies one group card's #raidmove script.
+// CopyRaidMoveButton rotates through one group card's seated members.
 function CopyRaidMoveButton({ group }: { group: { number: number; slots: SplitSlot[] } }): React.ReactElement {
   const lines = raidMoveLines(group)
   return (
-    <CopyScriptButton
-      script={lines.join('\n')}
+    <CopyNextRaidMoveButton
+      commands={lines}
       label="#raidmove"
-      title={lines.length > 0 ? `Copy ${lines.length} #raidmove command${lines.length === 1 ? '' : 's'} — one per member, moving them into group ${group.number}` : 'No seated members to move'}
+      title={lines.length > 0
+        ? `Copy the next #raidmove command for this group (${lines.length} members in group ${group.number}). EQ sends one command per chat message — click, paste, Enter, click again for the next.`
+        : 'No seated members to move'}
     />
   )
+}
+
+// raidMoveCommand is the single-member copy primitive (seat/bench row
+// buttons): one command, one paste.
+export function raidMoveCommand(member: string, group: number): string {
+  return `#raidmove ${member} ${group}`
 }
 
 // cohortsOf returns the report's cohorts, synthesizing one entry from the
@@ -459,7 +470,10 @@ function SeatRow({ slot, cohort, groupId, index, interactive, stripe, classNames
       <span className="text-xs" title={className ? slot.class : undefined} style={{ color: 'var(--color-muted-foreground)' }}>
         {className ?? slot.class ?? '—'}
       </span>
-      <RoleBadge slot={slot} />
+      <span className="flex items-center justify-end gap-1.5">
+        <RoleBadge slot={slot} />
+        <CopyRowRaidMoveButton member={slot.member} group={groupId} />
+      </span>
     </div>
   )
 }
@@ -510,7 +524,36 @@ function BenchRow({ entry, index, interactive, stripe, classNames }: {
       <span style={{ color: 'var(--color-foreground)' }}>{entry.name}</span>
       <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{className ?? entry.class ?? 'unclassed'}</span>
       <span className="text-xs" style={{ color: 'var(--color-danger)' }}>{entry.reason}</span>
+      <span className="ml-auto"><CopyRowRaidMoveButton member={entry.name} group={0} /></span>
     </div>
+  )
+}
+
+// CopyRowRaidMoveButton copies one member's command (#raidmove name group,
+// or name 0 for the bench) — the single-move primitive for one-off fixes:
+// instead of clicking through the card's rotation to reach a specific
+// member, each seat/bench row carries its own copy button. Mounted at the
+// end of every SeatRow and BenchRow.
+function CopyRowRaidMoveButton({ member, group }: { member: string; group: number }): React.ReactElement {
+  const [copied, setCopied] = useState(false)
+  function handleCopy(e: React.MouseEvent): void {
+    e.stopPropagation()
+    navigator.clipboard.writeText(raidMoveCommand(member, group)).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    }).catch(() => {})
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={`Copy #raidmove ${member} ${group}`}
+      aria-label={`copy #raidmove for ${member}`}
+      className="shrink-0"
+      style={{ background: 'none', border: 'none', color: copied ? 'var(--color-success)' : 'var(--color-muted-foreground)', cursor: 'pointer' }}
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+    </button>
   )
 }
 
@@ -609,11 +652,14 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
   const cohorts = cohortsOf(report)
   const unassigned = report.unassigned ?? []
   const interactive = onEdit != null
-  // Whole-raid copy buttons: single-raid reports copy every group (plus
-  // bench → group 0) from the proposal header; cohort reports put the
-  // button on each raid's header (per-raid local group numbers — one raid
-  // at a time in game).
+  // Whole-raid copy buttons: single-raid reports rotate every seated
+  // member (plus bench → group 0) from the proposal header; cohort reports
+  // put the button on each raid's header (per-raid local group numbers —
+  // one raid at a time in game).
   const benchNames = unassigned.map((u) => u.name)
+  const singleRaidCommands = cohorts.length === 1
+    ? [...(cohorts[0]?.groups ?? []).flatMap((g) => raidMoveLines(g)), ...benchNames.map((n) => raidMoveCommand(n, 0))]
+    : []
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const [dragging, setDragging] = useState<DragRef | null>(null)
@@ -663,10 +709,10 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
           {' '}of ≤{report.group_size} · {report.preference} seating
         </span>
         {cohorts.length === 1 ? (
-          <CopyScriptButton
-            script={raidMoveScript(cohorts[0]?.groups ?? [], benchNames)}
+          <CopyNextRaidMoveButton
+            commands={singleRaidCommands}
             label="copy all #raidmove"
-            title={`Copy the whole raid's #raidmove script — one command per member in group order${benchNames.length > 0 ? `, bench members to group 0 (ungrouped)` : ''}`}
+            title={`Rotate through the whole raid's #raidmove commands (${singleRaidCommands.length} total: seated members in group order${benchNames.length > 0 ? ', bench members to group 0 (ungrouped)' : ''}). EQ sends one command per chat message — click, paste, Enter, click again.`}
           />
         ) : null}
         {interactive ? (
@@ -705,10 +751,10 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
                   <AlertTriangle size={11} /> {cohort.warnings[0]}
                 </span>
               ) : null}
-              <CopyScriptButton
-                script={raidMoveScript(cohort.groups)}
+              <CopyNextRaidMoveButton
+                commands={cohort.groups.flatMap((g) => raidMoveLines(g))}
                 label="#raidmove"
-                title={`Copy raid ${cohort.number}'s whole #raidmove script — one command per member in group order (paste after forming this raid)`}
+                title={`Rotate through raid ${cohort.number}'s #raidmove commands (one per member, group order). EQ sends one command per chat message — click, paste, Enter, click again.`}
               />
               <span className="ml-auto flex items-center gap-3">
                 <CoveragePills rows={cohort.min ?? []} level="MIN" />
