@@ -173,3 +173,27 @@ func TestDeriveCompletionDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestDerivePoIPreflagFromZeks(t *testing.T) {
+	cases := []struct {
+		name     string
+		q        map[string]string
+		preflag  bool
+		behemoth bool
+	}{
+		{"absent", map[string]string{}, false, false},
+		{"zeks 1 -> preflag only", map[string]string{"zeks": "1"}, true, false},
+		{"zeks 2 -> both", map[string]string{"zeks": "2"}, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			done := setOf(DeriveCompletion(tc.q))
+			if done["poi_preflag"] != tc.preflag {
+				t.Errorf("poi_preflag = %v, want %v", done["poi_preflag"], tc.preflag)
+			}
+			if done["poi_mb"] != tc.behemoth {
+				t.Errorf("poi_mb = %v, want %v", done["poi_mb"], tc.behemoth)
+			}
+		})
+	}
+}
