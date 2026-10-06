@@ -9,6 +9,26 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.26.0-beta.2 — 2026-10-05
+
+Fixes the `#raidmove` copy flow based on first live use.
+
+### Fixes
+- **#raidmove copy buttons now work with EQ chat** — EQ's chat input collapses a multi-line paste into ONE giant message, so pasting a whole script only ever executed the first move. Every copy button now copies **one command at a time** and rotates: each click copies the next member's command (with progress, e.g. `#raidmove 3/6`, wrapping around). Workflow: click → paste → Enter → click again. Every seat row and bench row also has its own copy icon for one-off moves (bench copies `#raidmove <name> 0`). Commands always reflect the proposal as currently edited.
+- **Usage guide added** — the app now ships a user-facing guide for the Group Composition Proposal: generation, coverage reading, drag-and-drop editing, group-composition templates, cohort splits, and the corrected `#raidmove` workflow.
+
+## v0.26.0-beta.1 — 2026-10-05
+
+Introduces the Group Composition Proposal — a split planner that seats your raid into balanced groups against an encounter's target composition, with named group-composition templates and one-click in-game move scripts.
+
+### Highlights
+- **Group Composition Proposal** (Raids → Group Proposal) — generates suggested groups from the live Zeal roster (or a manual roster) against an encounter's target composition: MIN coverage seats first, then REC comfort slots, trinity-interleaved so every group opens with tank + healer + support. Per-role coverage report, plus an unseated bench that says why each member didn't fit.
+- **Multi-raid (cohort) splits** — split one roster into 2–6 smaller raids, each staffed against the full template. Live groups stay intact per raid, scarce classes deal evenly across raids, and each raid gets its own coverage table showing exactly what it fields, MIN gaps included. A plan hint tells you how many complete raids the roster can actually staff.
+- **Group compositions (templates)** — define named group templates per encounter in the Raid Editor (e.g. "healstack": 2 CH clerics + a defensive tank, optionally pinned to a group number) and tick them on the proposal page. The weave seats shape groups first — best-effort: rows it can't fill warn and stay visibly open. Replicate (every raid fields the shape) or distribute (shape 1 → raid 1, shape 2 → raid 2) placement in multi-raid splits. Shapes work for single raids too.
+- **#raidmove copy buttons** — every group card, every raid header, and the whole proposal can copy `#raidmove <member> <group>` scripts to the clipboard; paste straight into EQ chat to form the raid. Bench members ride as group 0 (ungrouped). Scripts always reflect the proposal as currently edited. *(Corrected in beta.2: EQ only accepts one command per paste — the buttons now rotate one command at a time.)*
+- **Drag-and-drop editing** — swap members between seats (contents travel wholesale, across raids too), insert onto open seats, or bench to Unseated; coverage recomputes after every edit, so the MIN/REC tables always tell the truth about the proposal as adjusted.
+- Templates and encounters travel: raid composition packs (export/import) now carry group-composition templates alongside comps, reqs, and strategy.
+
 ## v0.25.1 — 2026-09-30
 
 Fixes from Monday's Vex Thal raid — duplicate buff timers, the second Kaas Thox loot table, Piper TTS in one ear, and trigger timer names — plus nested task lists with import/export.
