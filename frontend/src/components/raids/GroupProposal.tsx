@@ -156,6 +156,51 @@ export function raidMoveCommand(member: string, group: number): string {
   return `#raidmove ${member} ${group}`
 }
 
+// raidMoveScript renders a WHOLE raid's #raidmove snippet: every seated
+// member in group order (multi-line, one command per line), optionally
+// followed by bench members moved to group 0 (ungrouped). Used by the
+// "copy whole raid" buttons (proposal header for single-raid reports,
+// per-cohort headers in cohort mode — a single global script for
+// multi-raid would mix each raid's local group numbers, so cohort raids
+// copy one raid at a time). This exists for SHARING the formation outside
+// the game — Discord, guild notes, planning docs. EQ chat cannot execute a
+// multi-line paste (it lands as one chat message and only the first
+// command runs), so in-game moves go through the one-command-per-click
+// rotation buttons, never this snippet.
+export function raidMoveScript(groups: { number: number; slots: SplitSlot[] }[], bench?: string[]): string {
+  const lines = groups.flatMap((g) => raidMoveLines(g))
+  for (const name of bench ?? []) lines.push(`#raidmove ${name} 0`)
+  return lines.join('\n')
+}
+
+// CopyRaidScriptButton copies a whole raid's #raidmove snippet (multi-line)
+// to the clipboard — one click, full formation, for sharing outside EQ
+// (Discord, notes). Distinct from the in-game rotation buttons: the snippet
+// is explicitly not for pasting into EQ chat (see raidMoveScript).
+function CopyRaidScriptButton({ script, label, title }: { script: string; label: string; title: string }): React.ReactElement {
+  const [copied, setCopied] = useState(false)
+  function handleCopy(): void {
+    if (!script) return
+    navigator.clipboard.writeText(script).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={!script}
+      title={title}
+      aria-label={label}
+      className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded shrink-0"
+      style={{ backgroundColor: 'var(--color-surface)', color: copied ? 'var(--color-success)' : 'var(--color-muted-foreground)' }}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'copied' : label}
+    </button>
+  )
+}
+
 // cohortsOf returns the report's cohorts, synthesizing one entry from the
 // legacy flat fields when an older response omits them.
 function cohortsOf(report: SplitReport): CohortReport[] {
@@ -655,7 +700,10 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
   // Whole-raid copy buttons: single-raid reports rotate every seated
   // member (plus bench → group 0) from the proposal header; cohort reports
   // put the button on each raid's header (per-raid local group numbers —
-  // one raid at a time in game).
+  // one raid at a time in game). The sibling "copy whole raid" script
+  // button shares the same formation as one multi-line snippet (Discord,
+  // notes) — see CopyRaidScriptButton. The script is NOT for EQ chat
+  // (multi-line pastes don't execute); in-game moves use the rotation.
   const benchNames = unassigned.map((u) => u.name)
   const singleRaidCommands = cohorts.length === 1
     ? [...(cohorts[0]?.groups ?? []).flatMap((g) => raidMoveLines(g)), ...benchNames.map((n) => raidMoveCommand(n, 0))]
@@ -709,11 +757,18 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
           {' '}of ≤{report.group_size} · {report.preference} seating
         </span>
         {cohorts.length === 1 ? (
-          <CopyNextRaidMoveButton
-            commands={singleRaidCommands}
-            label="copy all #raidmove"
-            title={`Rotate through the whole raid's #raidmove commands (${singleRaidCommands.length} total: seated members in group order${benchNames.length > 0 ? ', bench members to group 0 (ungrouped)' : ''}). EQ sends one command per chat message — click, paste, Enter, click again.`}
-          />
+          <>
+            <CopyNextRaidMoveButton
+              commands={singleRaidCommands}
+              label="copy all #raidmove"
+              title={`Rotate through the whole raid's #raidmove commands (${singleRaidCommands.length} total: seated members in group order${benchNames.length > 0 ? ', bench members to group 0 (ungrouped)' : ''}). EQ sends one command per chat message — click, paste, Enter, click again.`}
+            />
+            <CopyRaidScriptButton
+              script={raidMoveScript(cohorts[0]?.groups ?? [], benchNames)}
+              label="copy whole raid"
+              title={`Copy the WHOLE raid as one #raidmove snippet (${singleRaidCommands.length} commands, one per line) — paste it anywhere to SHARE the formation (Discord, notes). EQ chat cannot run a multi-line paste (only the first command executes), so in-game moves use the "copy all #raidmove" button instead.`}
+            />
+          </>
         ) : null}
         {interactive ? (
           <span className="text-xs opacity-80">
@@ -755,6 +810,11 @@ export default function GroupProposal({ report, onEdit, classNames }: Props): Re
                 commands={cohort.groups.flatMap((g) => raidMoveLines(g))}
                 label="#raidmove"
                 title={`Rotate through raid ${cohort.number}'s #raidmove commands (one per member, group order). EQ sends one command per chat message — click, paste, Enter, click again.`}
+              />
+              <CopyRaidScriptButton
+                script={raidMoveScript(cohort.groups)}
+                label="copy whole raid"
+                title={`Copy raid ${cohort.number}'s WHOLE formation as one #raidmove snippet (${cohort.groups.flatMap((g) => raidMoveLines(g)).length} commands, one per line) — paste it anywhere to SHARE the formation (Discord, notes). EQ chat cannot run a multi-line paste (only the first command executes), so in-game moves use the #raidmove button instead.`}
               />
               <span className="ml-auto flex items-center gap-3">
                 <CoveragePills rows={cohort.min ?? []} level="MIN" />
