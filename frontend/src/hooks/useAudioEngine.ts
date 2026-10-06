@@ -43,6 +43,8 @@ export function useAudioEngine(): void {
 
     const fired = msg.data as TriggerFired
     if (!fired?.actions) return
+    // Follow-up matches in a {repeated} run only refresh the overlay count.
+    if ((fired.repeat_count ?? 0) > 1) return
 
     const now = Date.now()
     // fired_at is the log line's own timestamp (1-second resolution) for log

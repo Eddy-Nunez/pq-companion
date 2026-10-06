@@ -180,6 +180,12 @@ export interface Trigger {
    */
   refire_cooldown_secs?: number
   /**
+   * Repeat-count window: matches no more than this many seconds apart form one
+   * run, counted by the {repeated}/{count} tokens, and follow-ups update the
+   * on-screen alert in place. 0/absent = off.
+   */
+  repeat_reset_secs?: number
+  /**
    * Cooldown timer (seconds) spawned alongside the duration timer to track
    * reuse cooldown. Counts down on the buff overlay with a " CD" suffix.
    * 0 = no cooldown timer.
@@ -269,6 +275,9 @@ export interface TriggerFired {
   /** True when this fire came from the Trigger Tester, not a real log line
    *  — see TriggerTesterTab. The History tab filters these out. */
   test?: boolean
+  /** Run length (> 1) for a follow-up match inside the trigger's repeat
+   *  window. The overlay updates the existing alert; audio/clipboard skip it. */
+  repeat_count?: number
 }
 
 // ── Trigger Tester ───────────────────────────────────────────────────────────

@@ -309,6 +309,11 @@ type Trigger struct {
 	// Fractional values (e.g. 1.5) are allowed so imports from tools that use
 	// sub-second cooldowns (EQNag and friends) survive without truncation.
 	RefireCooldownSecs float64 `json:"refire_cooldown_secs,omitempty"`
+	// RepeatResetSecs > 0 turns on match counting for the {repeated}/{count}
+	// tokens: consecutive matches no more than this many seconds apart form one
+	// run (EQLogParser's "Repeated Reset Time"). Follow-up matches update the
+	// existing overlay alert instead of stacking new ones. 0 = off.
+	RepeatResetSecs float64 `json:"repeat_reset_secs,omitempty"`
 
 	// CooldownSecs spawns a second timer alongside the buff/duration timer to
 	// track the spell or discipline's reuse cooldown (recast_time in
@@ -420,6 +425,10 @@ type TriggerFired struct {
 	// preview it, but it never lands in history and never posts a Discord
 	// webhook — see applyFire's opts.test.
 	Test bool `json:"test,omitempty"`
+	// RepeatCount is the run length (> 1) when this fire is a follow-up match
+	// inside the trigger's RepeatResetSecs window; the overlay updates the
+	// existing alert in place and audio/clipboard skip it.
+	RepeatCount int `json:"repeat_count,omitempty"`
 }
 
 // TriggerPack is a portable collection of triggers used for import/export and

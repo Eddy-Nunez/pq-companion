@@ -588,6 +588,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
   const [wornOffPattern, setWornOffPattern] = useState(initial?.worn_off_pattern ?? prefill?.wornOffPattern ?? '')
   // Anti-spam refire lockout (seconds); 0 = fire on every match (default).
   const [refireCooldown, setRefireCooldown] = useState(initial?.refire_cooldown_secs ?? 0)
+  const [repeatReset, setRepeatReset] = useState(initial?.repeat_reset_secs ?? 0)
   const [displayThreshold, setDisplayThreshold] = useState(initial?.display_threshold_secs ?? 0)
   // Optional per-trigger bar color; '' = automatic overlay color.
   const [barColor, setBarColor] = useState(initial?.bar_color ?? '')
@@ -684,6 +685,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
     worn_off_pattern: timerType === 'none' ? '' : wornOffPattern.trim(),
     spell_id: initial?.spell_id ?? prefill?.spellId ?? 0,
     refire_cooldown_secs: Math.max(0, refireCooldown),
+    repeat_reset_secs: Math.max(0, repeatReset),
     display_threshold_secs: timerType === 'none' ? 0 : Math.max(0, displayThreshold),
     bar_color: timerType === 'none' ? '' : barColor,
     characters: Array.from(selectedChars),
@@ -696,7 +698,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
   }), [
     initial, name, pattern, actions, categoryId, timerType, timerDuration,
     timerDurationCapture, timerKeyCapture, timerTargetCapture, wornOffPattern,
-    prefill, refireCooldown, displayThreshold, barColor, selectedChars,
+    prefill, refireCooldown, repeatReset, displayThreshold, barColor, selectedChars,
     timerAlerts, excludePatternsText, extraPatterns,
   ])
 
@@ -910,6 +912,7 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
       worn_off_pattern: source === 'pipe' || timerType === 'none' ? '' : wornOffPattern.trim(),
       spell_id: initial?.spell_id ?? prefill?.spellId ?? 0,
       refire_cooldown_secs: Math.max(0, refireCooldown),
+      repeat_reset_secs: Math.max(0, repeatReset),
       display_threshold_secs: timerType === 'none' ? 0 : Math.max(0, displayThreshold),
       bar_color: timerType === 'none' ? '' : barColor,
       pinned: timerType === 'none' ? false : pinned,
@@ -1130,7 +1133,8 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
             <span className="font-mono">{'{name}'}</span> for named groups like{' '}
             <span className="font-mono">(?P&lt;name&gt;…)</span>. Built-ins:{' '}
             <span className="font-mono">{'{c}'}</span> = your character (works in the
-            pattern too), <span className="font-mono">{'{target}'}</span> = the mob you’re
+            pattern too), <span className="font-mono">{'{repeated}'}</span> = match count
+            within the repeat window, <span className="font-mono">{'{target}'}</span> = the mob you’re
             fighting — or set “Target from capture” below to pull it from the matched line
             (a groupmate’s slow victim, a proc target).
           </p>
@@ -1377,6 +1381,29 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
           Useful for spammy lines (rampage, resists) without flooding alerts.
         </p>
       </div>
+
+      {/* Repeat count window — log triggers only (pipe fires have no line run) */}
+      {source === 'log' && (
+        <div className="space-y-1">
+          <label className="text-[11px] font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+            Repeat count window (seconds)
+          </label>
+          <DecimalInput
+            min={0}
+            value={repeatReset}
+            onValue={setRepeatReset}
+            className="w-28 rounded px-3 py-1.5 text-xs outline-none"
+            style={{ ...inputStyle, border: '1px solid var(--color-border)' }}
+            disabled={submitting}
+          />
+          <p className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+            Counts matches that land within this many seconds of each other. Use{' '}
+            <span className="font-mono">{'{repeated}'}</span> in the alert text (e.g.
+            “PBAE hit {'{repeated}'}”) and the one alert updates in place instead of
+            stacking. Sound and TTS play once per burst. 0 = off.
+          </p>
+        </div>
+      )}
 
       {/* Characters */}
       <div className="space-y-1.5">

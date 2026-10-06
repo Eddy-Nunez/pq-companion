@@ -128,14 +128,59 @@ type Engine struct {
 type fireContext struct {
 	mu        sync.Mutex
 	lastFired map[string]time.Time
+	repeats   map[string]repeatState
 	bossCast  *bossCastTracker
+}
+
+// repeatState tracks a trigger's run of matches inside its RepeatResetSecs
+// window: how many lines have matched and when the latest one did.
+type repeatState struct {
+	count int
+	last  time.Time
 }
 
 func newFireContext() *fireContext {
 	return &fireContext{
 		lastFired: make(map[string]time.Time),
+		repeats:   make(map[string]repeatState),
 		bossCast:  newBossCastTracker(),
 	}
+}
+
+// noteRepeat records a confirmed match of t at ts for the {repeated} token and
+// returns the running count. A match more than RepeatResetSecs after the
+// previous one starts a new run at 1; triggers with no window always return 1
+// and record nothing. Called before the refire cooldown so lockout-suppressed
+// matches still count. ts is the log timestamp, like passesRefireCooldown.
+func (fc *fireContext) noteRepeat(t *Trigger, ts time.Time) int {
+	if t.RepeatResetSecs <= 0 {
+		return 1
+	}
+	window := time.Duration(t.RepeatResetSecs * float64(time.Second))
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	st := fc.repeats[t.ID]
+	if st.count == 0 || ts.Sub(st.last) > window || ts.Before(st.last) {
+		st.count = 0
+	}
+	st.count++
+	st.last = ts
+	fc.repeats[t.ID] = st
+	return st.count
+}
+
+// repeatCount returns the current run length noteRepeat last recorded for t
+// (1 when the trigger has no repeat window).
+func (fc *fireContext) repeatCount(t *Trigger) int {
+	if t.RepeatResetSecs <= 0 {
+		return 1
+	}
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	if n := fc.repeats[t.ID].count; n > 0 {
+		return n
+	}
+	return 1
 }
 
 // passesRefireCooldown reports whether the trigger is allowed to fire at ts,
@@ -323,6 +368,9 @@ func (e *Engine) Handle(timestamp time.Time, message string) {
 			if m != nil {
 				extra = &c.extras[i].meta
 			}
+		}
+		if m != nil && !matchesAny(c.excludes, message) {
+			e.fc.noteRepeat(c.trigger, timestamp)
 		}
 		if m != nil && !matchesAny(c.excludes, message) && e.fc.passesRefireCooldown(c.trigger, timestamp) {
 			plan := e.planFire(e.fc, c, message, timestamp, m, names, extra, "")
@@ -755,6 +803,7 @@ type firePlan struct {
 	matchedLine string
 	firedAt     time.Time
 	actions     []Action // capture-substituted, ready to use as-is
+	repeatCount int      // run length inside RepeatResetSecs; 1 = first/no window
 
 	hasTimer      bool
 	timerKey      string
@@ -782,6 +831,10 @@ func (e *Engine) planFire(fc *fireContext, c compiled, matchedLine string, fired
 	// the shared trigger. Done for every fire so {1}/{name} in overlay or TTS
 	// text resolve to the matched values.
 	builtins := e.builtinTokens(character)
+	// {repeated}/{count}: matches of this trigger inside its repeat window.
+	repeatCount := fc.repeatCount(t)
+	rc := strconv.Itoa(repeatCount)
+	builtins["repeated"], builtins["count"] = rc, rc
 	// When the trigger designates a capture group as its target
 	// (TimerTargetCapture), bind {target}/{t} in the action text to that
 	// captured value too — not just the grey "on <target>" timer suffix. This
@@ -801,7 +854,7 @@ func (e *Engine) planFire(fc *fireContext, c compiled, matchedLine string, fired
 		actions[i].Text = substituteCaptures(actions[i].Text, match, names, builtins)
 	}
 
-	plan := firePlan{trigger: t, matchedLine: matchedLine, firedAt: firedAt, actions: actions}
+	plan := firePlan{trigger: t, matchedLine: matchedLine, firedAt: firedAt, actions: actions, repeatCount: repeatCount}
 
 	if c.timerKey != "" {
 		if durationSecs := resolveTimerDuration(t, extra, match, names); durationSecs > 0 {
@@ -880,7 +933,11 @@ type fireOpts struct {
 func (e *Engine) applyFire(plan firePlan, opts fireOpts) {
 	t := plan.trigger
 
-	if !opts.test {
+	// Follow-up matches in a repeat run only refresh the on-screen count, so
+	// they don't re-post webhooks or add history rows (a 12-mob PBAE would
+	// otherwise post 12 times).
+	isRepeat := t.RepeatResetSecs > 0 && plan.repeatCount > 1
+	if !opts.test && !isRepeat {
 		e.dispatchWebhooks(plan.actions)
 	}
 
@@ -892,10 +949,17 @@ func (e *Engine) applyFire(plan firePlan, opts fireOpts) {
 		FiredAt:     plan.firedAt,
 		Test:        opts.test,
 	}
+	if isRepeat {
+		event.RepeatCount = plan.repeatCount
+	}
 
 	if !opts.test {
 		e.histMu.Lock()
-		e.history = append(e.history, event)
+		if n := len(e.history); isRepeat && n > 0 && e.history[n-1].TriggerID == t.ID {
+			e.history[n-1] = event
+		} else {
+			e.history = append(e.history, event)
+		}
 		if len(e.history) > historyMaxSize {
 			e.history = e.history[len(e.history)-historyMaxSize:]
 		}

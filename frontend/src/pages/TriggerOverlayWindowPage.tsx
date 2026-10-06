@@ -504,11 +504,28 @@ export default function TriggerOverlayWindowPage(): React.ReactElement {
       const overlayAction = event.actions.find((a) => a.type === 'overlay_text')
       if (!overlayAction) return
       const now = Date.now()
+      const durationMs = (overlayAction.duration_secs || 5) * 1000
+      // Follow-up match in a {repeated} run: refresh the existing alert's
+      // text and expiry in place. Skips the line dedup below on purpose —
+      // distinct mobs produce identical lines ("a gnoll winces.") and each
+      // one must count.
+      if ((event.repeat_count ?? 0) > 1) {
+        setAlerts((prev) => {
+          const idx = prev.findIndex((a) => a.event.trigger_id === event.trigger_id)
+          // No live alert left (expired mid-burst) — add a fresh one.
+          if (idx < 0) {
+            return [{ id: nextId++, event, expiresAt: now + durationMs }, ...prev].slice(0, 8)
+          }
+          const next = prev.slice()
+          next[idx] = { ...prev[idx], event, expiresAt: now + durationMs }
+          return next
+        })
+        return
+      }
       const key = `${event.trigger_id}|${event.matched_line}`
       const prev = lastFired.current.get(key)
       if (prev !== undefined && now - prev < DEDUP_WINDOW_MS) return
       lastFired.current.set(key, now)
-      const durationMs = (overlayAction.duration_secs || 5) * 1000
       const entry: AlertEntry = {
         id: nextId++,
         event,

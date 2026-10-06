@@ -67,7 +67,9 @@ type triggerRequest struct {
 	// the existing value (matching how cooldown_secs is left untouched). A
 	// present value — including 0 to clear it — replaces it. The editor always
 	// sends it; bulk paths (toggle, move category) omit it.
-	RefireCooldownSecs   *float64 `json:"refire_cooldown_secs,omitempty"`
+	RefireCooldownSecs *float64 `json:"refire_cooldown_secs,omitempty"`
+	// RepeatResetSecs follows the same omitted-preserves rule as above.
+	RepeatResetSecs      *float64 `json:"repeat_reset_secs,omitempty"`
 	DisplayThresholdSecs float64  `json:"display_threshold_secs"`
 	BarColor             string   `json:"bar_color"`
 	Pinned               bool     `json:"pinned"`
@@ -201,6 +203,9 @@ func (h *triggerHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.RefireCooldownSecs != nil {
 		t.RefireCooldownSecs = *req.RefireCooldownSecs
 	}
+	if req.RepeatResetSecs != nil {
+		t.RepeatResetSecs = *req.RepeatResetSecs
+	}
 	if t.Actions == nil {
 		t.Actions = []trigger.Action{}
 	}
@@ -271,6 +276,9 @@ func (h *triggerHandler) update(w http.ResponseWriter, r *http.Request) {
 	// (toggle enabled, move category) omit it and must leave it intact.
 	if req.RefireCooldownSecs != nil {
 		existing.RefireCooldownSecs = *req.RefireCooldownSecs
+	}
+	if req.RepeatResetSecs != nil {
+		existing.RepeatResetSecs = *req.RepeatResetSecs
 	}
 	existing.DisplayThresholdSecs = req.DisplayThresholdSecs
 	existing.BarColor = strings.TrimSpace(req.BarColor)

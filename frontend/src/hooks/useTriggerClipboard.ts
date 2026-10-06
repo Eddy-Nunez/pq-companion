@@ -28,6 +28,7 @@ export function useTriggerClipboard(): void {
 
     const fired = msg.data as TriggerFired
     if (!fired?.actions) return
+    if ((fired.repeat_count ?? 0) > 1) return
 
     const clipboardActions = fired.actions.filter((a) => a.type === 'clipboard')
     if (clipboardActions.length === 0) return

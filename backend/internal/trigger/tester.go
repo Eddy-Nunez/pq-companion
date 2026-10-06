@@ -266,7 +266,7 @@ func (e *Engine) testLine(fc *fireContext, cs []compiled, character string, ts t
 			case matchingExclude(c.excludes, message) != nil:
 				tm.Status = LineStatusExcluded
 				tm.ExcludePattern = matchingExclude(c.excludes, message).String()
-			case !fc.passesRefireCooldown(c.trigger, ts):
+			case func() bool { fc.noteRepeat(c.trigger, ts); return !fc.passesRefireCooldown(c.trigger, ts) }():
 				tm.Status = LineStatusCooldown
 			default:
 				tm.Status = LineStatusMatched

@@ -38,6 +38,7 @@ type eqlpTrigger struct {
 	EndEarlyTextToSpeak string  `json:"EndEarlyTextToSpeak"`
 	EndTextToSpeak      string  `json:"EndTextToSpeak"`
 	LockoutTime         float64 `json:"LockoutTime"`
+	RepeatedResetTime   float64 `json:"RepeatedResetTime"`
 	TextToSendToChat    string  `json:"TextToSendToChat"`
 	ChatWebhook         string  `json:"ChatWebhook"`
 }
@@ -181,6 +182,22 @@ func convertEQLP(n *eqlpNode, group string) (ImportedTrigger, bool) {
 	if td.LockoutTime > 0 {
 		tr.RefireCooldownSecs = td.LockoutTime
 	}
+	// {REPEATED} counts matches inside RepeatedResetTime. Every EQLogParser
+	// trigger carries a reset time (default 0.75), so only enable the window
+	// for triggers that actually reference the token.
+	if td.RepeatedResetTime > 0 && eqlpUsesRepeated(td) {
+		tr.RepeatResetSecs = td.RepeatedResetTime
+		// The count is usually shown via AltTimerName ("Count: {REPEATED}").
+		// We key timers differently, so surface it as overlay text instead.
+		if eqlpHasRepeated(td.AltTimerName) && !eqlpHasRepeated(td.TextToDisplay) && !eqlpHasRepeated(td.TextToSpeak) {
+			tr.Actions = append(tr.Actions, Action{
+				Type:         ActionOverlayText,
+				Text:         eqlpText(td.AltTimerName),
+				DurationSecs: td.RepeatedResetTime + 3,
+				Color:        "#ffffff",
+			})
+		}
+	}
 	if strings.TrimSpace(td.TextToSendToChat) != "" || strings.TrimSpace(td.ChatWebhook) != "" {
 		warnings = append(warnings, "EQLogParser chat/webhook action dropped (no equivalent)")
 	}
@@ -209,11 +226,25 @@ func eqlpText(s string) string {
 	return strings.ReplaceAll(s, "{L}", "{0}")
 }
 
+// eqlpHasRepeated reports whether s references the {REPEATED} token.
+func eqlpHasRepeated(s string) bool {
+	return strings.Contains(strings.ToLower(s), "{repeated}")
+}
+
+// eqlpUsesRepeated reports whether any display/speech/timer-name template of
+// the trigger uses {REPEATED}.
+func eqlpUsesRepeated(td *eqlpTrigger) bool {
+	return eqlpHasRepeated(td.TextToDisplay) || eqlpHasRepeated(td.TextToSpeak) ||
+		eqlpHasRepeated(td.AltTimerName) || eqlpHasRepeated(td.EndTextToSpeak)
+}
+
 // eqlpFirstCaptureGroup returns the normalized regex group name of the first
 // {sN}/{nN}/{name} token in an AltTimerName template, or "" if there is none.
 // {s1} → "S1" (matching how normalizePattern names wildcard groups); a named
 // token like {caster} is returned verbatim.
 func eqlpFirstCaptureGroup(altName string) string {
+	// {REPEATED} is a built-in count, not a capture group to key a timer on.
+	altName = regexp.MustCompile(`(?i)\{repeated\}`).ReplaceAllString(altName, "")
 	m := patternTokenRe.FindStringSubmatch(altName)
 	if m == nil {
 		return ""

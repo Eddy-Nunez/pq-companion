@@ -93,3 +93,42 @@ func TestEQLPWarningAlert(t *testing.T) {
 		t.Errorf("expected a fading TimerAlert from WarningTextToSpeak")
 	}
 }
+
+func TestEQLPRepeatedToken(t *testing.T) {
+	mk := func(alt string, reset float64) *eqlpNode {
+		return &eqlpNode{
+			Name: "PBAE",
+			TriggerData: &eqlpTrigger{
+				Pattern:           `^{s1} (winces|convulses)\.$`,
+				UseRegex:          true,
+				EnableTimer:       true,
+				TimerType:         1,
+				DurationSeconds:   3,
+				AltTimerName:      alt,
+				RepeatedResetTime: reset,
+			},
+		}
+	}
+
+	it, ok := convertEQLP(mk("Count: {REPEATED}", 0.75), "")
+	if !ok {
+		t.Fatal("convertEQLP rejected trigger")
+	}
+	tr := it.Trigger
+	if tr.RepeatResetSecs != 0.75 {
+		t.Errorf("RepeatResetSecs = %v, want 0.75", tr.RepeatResetSecs)
+	}
+	// {REPEATED} must not become a timer-key capture group.
+	if tr.TimerKeyCapture != "" || tr.TimerTargetCapture != "" {
+		t.Errorf("timer captures = %q/%q, want none", tr.TimerKeyCapture, tr.TimerTargetCapture)
+	}
+	if len(tr.Actions) != 1 || tr.Actions[0].Type != ActionOverlayText || tr.Actions[0].Text != "Count: {REPEATED}" {
+		t.Errorf("actions = %+v, want one overlay text carrying the count", tr.Actions)
+	}
+
+	// Default 0.75 reset time on a trigger that never uses the token stays off.
+	it, _ = convertEQLP(mk("Enraged: {s1}", 0.75), "")
+	if it.Trigger.RepeatResetSecs != 0 {
+		t.Errorf("RepeatResetSecs = %v, want 0 when {REPEATED} unused", it.Trigger.RepeatResetSecs)
+	}
+}

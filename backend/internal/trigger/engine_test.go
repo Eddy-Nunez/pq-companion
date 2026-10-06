@@ -1662,3 +1662,103 @@ func TestEngine_WornOffWithoutKeyCapture(t *testing.T) {
 		t.Errorf("legacy worn-off stop = %+v, want Speed of the Shissar/1709", sink)
 	}
 }
+
+func TestEngine_RepeatCountToken(t *testing.T) {
+	s, e := openTestEngine(t)
+
+	tr := &Trigger{
+		ID:              "rep1",
+		Name:            "PBAE hits",
+		Enabled:         true,
+		Pattern:         `^a gnoll (winces|convulses)\.$`,
+		Actions:         []Action{{Type: ActionOverlayText, Text: "Count: {REPEATED}", DurationSecs: 3}},
+		RepeatResetSecs: 0.75,
+		CreatedAt:       time.Now().UTC(),
+	}
+	if err := s.Insert(tr); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	e.Reload()
+
+	base := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	steps := []struct {
+		at        time.Duration
+		wantCount int // RepeatCount on the newest history entry
+		wantText  string
+		wantLen   int
+	}{
+		{0, 0, "Count: 1", 1},
+		{300 * time.Millisecond, 2, "Count: 2", 1},
+		{900 * time.Millisecond, 3, "Count: 3", 1}, // 0.6s after the previous match, still one run
+		{5 * time.Second, 0, "Count: 1", 2},        // gap > window starts a new run
+		{5500 * time.Millisecond, 2, "Count: 2", 2},
+	}
+	for i, st := range steps {
+		e.Handle(base.Add(st.at), "a gnoll winces.")
+		hist := e.GetHistory()
+		if len(hist) != st.wantLen {
+			t.Fatalf("step %d: history len = %d, want %d", i, len(hist), st.wantLen)
+		}
+		last := hist[len(hist)-1]
+		if last.RepeatCount != st.wantCount {
+			t.Errorf("step %d: RepeatCount = %d, want %d", i, last.RepeatCount, st.wantCount)
+		}
+		if got := last.Actions[0].Text; got != st.wantText {
+			t.Errorf("step %d: text = %q, want %q", i, got, st.wantText)
+		}
+	}
+}
+
+func TestEngine_RepeatCountCountsThroughRefireCooldown(t *testing.T) {
+	s, e := openTestEngine(t)
+
+	tr := &Trigger{
+		ID:                 "rep2",
+		Name:               "Locked",
+		Enabled:            true,
+		Pattern:            `ding`,
+		Actions:            []Action{{Type: ActionOverlayText, Text: "{count}"}},
+		RepeatResetSecs:    1,
+		RefireCooldownSecs: 10,
+		CreatedAt:          time.Now().UTC(),
+	}
+	if err := s.Insert(tr); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	e.Reload()
+
+	base := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	e.Handle(base, "ding")
+	e.Handle(base.Add(500*time.Millisecond), "ding") // suppressed by lockout, still counted
+	if got := e.fc.repeatCount(tr); got != 2 {
+		t.Fatalf("repeatCount = %d, want 2", got)
+	}
+	if got := len(e.GetHistory()); got != 1 {
+		t.Fatalf("lockout should leave 1 fire, got %d", got)
+	}
+}
+
+func TestEngine_NoRepeatWindowNeverSetsRepeatCount(t *testing.T) {
+	s, e := openTestEngine(t)
+
+	tr := &Trigger{
+		ID: "rep3", Name: "Plain", Enabled: true, Pattern: `ding`,
+		Actions:   []Action{{Type: ActionOverlayText, Text: "n={repeated}"}},
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.Insert(tr); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	e.Reload()
+
+	base := time.Date(2026, 6, 26, 12, 0, 0, 0, time.UTC)
+	e.Handle(base, "ding")
+	e.Handle(base.Add(100*time.Millisecond), "ding")
+	hist := e.GetHistory()
+	if len(hist) != 2 {
+		t.Fatalf("history len = %d, want 2 (no window = every match is its own fire)", len(hist))
+	}
+	if hist[1].RepeatCount != 0 || hist[1].Actions[0].Text != "n=1" {
+		t.Errorf("got RepeatCount=%d text=%q, want 0 / n=1", hist[1].RepeatCount, hist[1].Actions[0].Text)
+	}
+}

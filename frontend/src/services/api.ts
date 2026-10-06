@@ -2897,6 +2897,7 @@ export interface CreateTriggerRequest {
    * for this many seconds. 0/omitted = fire on every match (default).
    */
   refire_cooldown_secs?: number
+  repeat_reset_secs?: number
   display_threshold_secs?: number
   /** Optional per-trigger timer-bar color ("" = automatic overlay color). */
   bar_color?: string
