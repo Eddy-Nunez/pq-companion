@@ -377,6 +377,7 @@ export default function ChatHistoryPage(): React.ReactElement {
             key={c.peer}
             convo={c}
             character={selectedChar}
+            sortDir={sortDir}
             expanded={expanded.has(c.peer)}
             onToggle={() => toggle(c.peer)}
             onDeleted={() => { setExpanded((p) => { const n = new Set(p); n.delete(c.peer); return n }); load() }}
@@ -418,10 +419,11 @@ export default function ChatHistoryPage(): React.ReactElement {
 
 // ConversationRow — an expandable tell conversation rendered as a chat thread.
 function ConversationRow({
-  convo, character, expanded, onToggle, onDeleted,
+  convo, character, sortDir, expanded, onToggle, onDeleted,
 }: {
   convo: ChatConversation
   character: string
+  sortDir: 'asc' | 'desc'
   expanded: boolean
   onToggle: () => void
   onDeleted: () => void
@@ -430,13 +432,13 @@ function ConversationRow({
   const [err, setErr] = useState<string | null>(null)
 
   const loadThread = useCallback(() => {
-    getChatThread(convo.peer, { sort: 'asc', character: character || undefined })
+    getChatThread(convo.peer, { sort: sortDir, character: character || undefined })
       .then((r) => setThread(r.messages))
       .catch((e: Error) => setErr(e.message))
-  }, [convo.peer, character])
+  }, [convo.peer, character, sortDir])
 
   useEffect(() => { if (expanded && thread === null) loadThread() }, [expanded, thread, loadThread])
-  useEffect(() => { if (expanded) loadThread() }, [convo.last_ts]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (expanded) loadThread() }, [convo.last_ts, sortDir]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation()
