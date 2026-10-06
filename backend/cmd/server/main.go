@@ -22,6 +22,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/applog"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/backfill"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/backup"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/blockbuff"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/buffmod"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/changelog"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/character"
@@ -362,6 +363,15 @@ func main() {
 		os.Exit(1)
 	}
 	defer mapAnnotations.Close()
+
+	blockbuffStore, err := blockbuff.OpenStore(filepath.Join(home, ".pq-companion", "user.db"))
+	var blockbuffConsumer *blockbuff.Consumer
+	if err != nil {
+		slog.Warn("open blocked buffs store (disabled)", "err", err)
+		blockbuffStore = nil
+	} else {
+		defer blockbuffStore.Close()
+	}
 
 	lockoutStore, err := lockout.OpenStore(filepath.Join(home, ".pq-companion", "user.db"))
 	var lockoutConsumer *lockout.Consumer
@@ -1146,6 +1156,25 @@ func main() {
 		})
 	}
 
+	// Spell-name lookup the blocked-buff parser uses to trust bare "#blockbuff"
+	// list rows ("Spirit of Wolf (278)") — only a line whose printed name
+	// matches the spell table counts.
+	blockbuffNames := func(id int) string {
+		if s, err := database.GetSpell(id); err == nil && s != nil {
+			return s.Name
+		}
+		return ""
+	}
+	if blockbuffStore != nil {
+		blockbuffConsumer = blockbuff.NewConsumer(blockbuffStore, blockbuffNames, activeChar)
+		blockbuffConsumer.SetOnChange(func(character string) {
+			hub.Broadcast(ws.Event{
+				Type: "blockbuffs:updated",
+				Data: map[string]any{"character": character},
+			})
+		})
+	}
+
 	if popflagStore != nil {
 		popflagConsumer = popflag.NewConsumer(popflagStore, activeChar)
 		popflagConsumer.SetOnSnapshot(func(character string) {
@@ -1268,6 +1297,15 @@ func main() {
 			Key:        "progress",
 			Label:      "Progression Recap",
 			NewHandler: func(character string) backfill.Handler { return progress.NewBackfillHandler(progressStore, character) },
+		})
+	}
+	if blockbuffStore != nil {
+		backfillRegistry.Register(backfill.Section{
+			Key:   "blockbuffs",
+			Label: "Blocked Buffs",
+			NewHandler: func(character string) backfill.Handler {
+				return blockbuff.NewBackfillHandler(blockbuffStore, blockbuffNames, character)
+			},
 		})
 	}
 	if lockoutStore != nil {
@@ -1860,6 +1898,9 @@ func main() {
 		if lockoutConsumer != nil {
 			lockoutConsumer.HandleLine(ts, msg)
 		}
+		if blockbuffConsumer != nil {
+			blockbuffConsumer.HandleLine(ts, msg)
+		}
 		if popflagConsumer != nil {
 			popflagConsumer.HandleLine(ts, msg)
 		}
@@ -2053,7 +2094,7 @@ func main() {
 	}
 	defer mapStore.Close()
 
-	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, liveZoneFn, actualPort)
+	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, blockbuffStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, liveZoneFn, actualPort)
 
 	// Raid disband watcher. Zeal emits MsgRaid only while is_in_raid(); on
 	// disband the envelopes just STOP — there is no "raid over" message on the

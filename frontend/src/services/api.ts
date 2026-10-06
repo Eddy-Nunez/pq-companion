@@ -1,4 +1,5 @@
 import type { Config } from '../types/config'
+import type { BlockedBuffEntry, BlockedBuffsView } from '../types/blockbuff'
 import type { Item, ItemSources, ItemQuests, QuestSummary, SearchResult, ItemShoppingRoute, ItemShoppingRouteOptions } from '../types/item'
 import type { NPC, NPCSpawns, NPCLootTable, NPCFaction, NPCSpells, NPCMerchant, PatrolRoute } from '../types/npc'
 import type {
@@ -381,6 +382,23 @@ export function searchSpells(
   if (maxLevel > 0) params.set('maxLevel', String(maxLevel))
   if (goodEffectOnly) params.set('goodEffect', '1')
   return get<SearchResult<Spell>>(`/api/spells?${params}`)
+}
+
+// ── Blocked buffs (#blockbuff editor) ──────────────────────────────────────────
+
+export function getBlockedBuffs(character: string): Promise<BlockedBuffsView> {
+  return get<BlockedBuffsView>(`/api/blockbuffs/?character=${encodeURIComponent(character)}`)
+}
+
+export function putBlockedBuffs(
+  character: string,
+  entries: BlockedBuffEntry[],
+): Promise<BlockedBuffsView> {
+  return put<BlockedBuffsView>('/api/blockbuffs/', { character, entries })
+}
+
+export function adoptBlockedBuffs(character: string): Promise<BlockedBuffsView> {
+  return post<BlockedBuffsView>('/api/blockbuffs/adopt', { character })
 }
 
 export function getSpell(id: number): Promise<Spell> {

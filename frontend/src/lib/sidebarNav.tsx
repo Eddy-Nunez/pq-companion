@@ -3,7 +3,7 @@ import {
   Sword, Sparkles, Skull, Map, Hammer, Activity, Layers, ScrollText, Zap,
   Users, Dice5, UserSearch, MessageSquare, Package, TrendingUp, BookOpen,
   Library, KeyRound, Hourglass, Star, Wand2, ListChecks, Percent, Store, PawPrint,
-  Flag, Swords, Keyboard, Route, Scale, Navigation, ShieldCheck,
+  Flag, Swords, ShieldBan, Keyboard, Route, Scale, Navigation, ShieldCheck,
 } from 'lucide-react'
 import type { Preferences } from '../types/config'
 
@@ -66,6 +66,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: '/characters/spellsets', label: 'Spellsets', icon: <Library size={16} /> },
       { to: '/characters/bandolier', label: 'Bandolier', icon: <Swords size={16} /> },
       { to: '/characters/macros', label: 'Macros', icon: <Keyboard size={16} /> },
+      { to: '/characters/blocked-buffs', label: 'Blocked Buffs', icon: <ShieldBan size={16} /> },
       { to: '/characters/keys', label: 'Keys', icon: <KeyRound size={16} /> },
       { to: '/characters/lockouts', label: 'Lockouts', icon: <Hourglass size={16} /> },
       { to: '/characters/wishlist', label: 'Wishlist', icon: <Star size={16} /> },
