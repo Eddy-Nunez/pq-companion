@@ -433,10 +433,12 @@ function CoverageTable({ min, rec }: { min: SplitCoverage[]; rec: SplitCoverage[
 // ── draggable/droppable pieces ──────────────────────────────────────────────
 
 // One grid template shared by the header and every seat row so the columns
-// stay aligned. Interactive rows gain a leading grip cell.
+// stay aligned. Interactive rows gain a leading grip cell and a trailing
+// copy-button cell — BOTH must be in the template, or the extra child wraps
+// to an implicit second grid row and the copy icon lands under the grip.
 const seatGrid = (interactive: boolean): string =>
   interactive
-    ? 'grid-cols-[18px_minmax(110px,1.2fr)_minmax(64px,0.7fr)_minmax(150px,1.6fr)]'
+    ? 'grid-cols-[18px_minmax(110px,1.2fr)_minmax(64px,0.7fr)_minmax(150px,1.6fr)_16px]'
     : 'grid-cols-[minmax(110px,1.2fr)_minmax(64px,0.7fr)_minmax(150px,1.6fr)]'
 
 const dropHighlight: React.CSSProperties = { borderColor: 'var(--color-primary)' }
@@ -617,6 +619,7 @@ function GroupCard({ title, cohort, group, interactive, classNames }: {
               <span>Member</span>
               <span>Class</span>
               <span>Proposed role</span>
+              {interactive ? <span /> : null}
             </div>
             {group.slots.map((slot, i) => (
               <SeatRow key={`${slot.member}-${i}`} slot={slot} cohort={cohort} groupId={group.number} index={i} interactive={interactive} stripe={i % 2 === 1} classNames={classNames} />
