@@ -9,6 +9,18 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.26.0-beta.4 — 2026-10-06
+
+### Fixes
+- **Proposal copy icons aligned with their rows** — the per-row `#raidmove` copy icon on group proposal cards rendered in the left gutter, offset between rows, instead of at the end of its own row. Every seat row's copy icon now sits vertically centered in its row, next to the role badge.
+
+## v0.26.0-beta.3 — 2026-10-06
+
+Adds "copy whole raid" — the full #raidmove formation as one shareable snippet — alongside the one-command-at-a-time in-game copy flow.
+
+### Highlights
+- **Copy whole raid** — the proposal header (single raid) and each multi-raid header now have a "copy whole raid" button that copies the entire formation as one multi-line `#raidmove` snippet (every member in group order; bench members as `#raidmove <name> 0`). Paste it into Discord, guild notes, or a planning doc to share the proposal. EQ chat still can't execute a multi-line paste — only the first command runs — so in-game moves keep using the one-command-per-click buttons; the snippet is for sharing, and it matches exactly what those buttons step through.
+
 ## v0.26.0-beta.2 — 2026-10-05
 
 Fixes the `#raidmove` copy flow based on first live use.
