@@ -2014,6 +2014,38 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.27.0 — Variant Labels, Blocked Buffs, Trigger Repeat Count
+
+- **Same-name NPC variants are labelled** — `overlay.TargetVariant` carries
+  `spawn_chance` (the highest `spawnentry.chance` in the current zone) and a
+  `distinguish` list (texture, gender, size, and key abilities the sibling
+  rows lack: summon, enrage, rampage, area rampage, flurry), built in
+  `overlay/variant_hints.go` from `db.GetVariantTraits`. Shown on the
+  dashboard panel, the pop-out overlay and its variant ribbon, including the
+  headline row. Pending a Zeal release that reports `target_texture`,
+  `target_gender` and `target_size`, the overlay also narrows candidates by
+  appearance (`narrowByAppearance`); each step is skipped if it would leave
+  no candidate.
+- **NPC overlay item filters** — Settings → Overlays → NPC Overlay Items: a
+  checkbox per overlay item in collapsible groups, one global hidden list for
+  both surfaces, and optional per-character overrides.
+- **Blocked Buffs editor** — Characters → Blocked Buffs tracks the buffs to
+  refuse via `#blockbuff` / `#blockbuffif` / `#allowbuff`, reads the server's
+  replies from the log to know what is applied, and prints the commands that
+  close the gap.
+- **Trigger `{repeated}` / `{count}`** — per-trigger "Repeat count window";
+  follow-up matches update the existing overlay alert in place and skip
+  sound/TTS/clipboard, webhooks and extra history rows. EQLogParser's
+  `RepeatedResetTime` is mapped on import.
+- **PoP Flags: All characters tab** — progress grid for every character,
+  `GET /api/popflags/summary`, `GET /api/popflags/export` (versioned JSON
+  envelope) and a copy-as-text summary. The Giwin preflag now completes from
+  the `zeks` qglobal.
+- **Timer row controls on hover** — mute/hide/remove appear on hover;
+  Settings → Spell Timers → "Always show row controls" restores them.
+- Tell threads follow the page's sort direction; the pop-out NPC overlay Dist
+  chip matches the other stat chips.
+
 ## v0.26.0 — Focus Upgrades, Spell Pass, PoP Stat Caps
 
 - **Spell Modifiers: missing focus types and upgrade browser** — every
