@@ -9,6 +9,23 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.27.0 — 2026-10-08
+
+Same-name NPCs are easier to tell apart in the NPC overlay, and this release adds a Blocked Buffs editor, a {repeated} trigger count, per-item NPC overlay filters and an all-characters PoP flag overview.
+
+### Highlights
+- **Same-name NPC versions are labelled** — when a target matches several database rows, each version now shows its spawn chance and what sets it apart: texture, gender, size, or an ability the others lack (summons, enrages, rampages, flurries). A Valiant Spirit in Halls of Honor A is the case that prompted it: the 90% version doesn't summon and the 10% one does, and the two used to read identically. The headline row is labelled too, in the dashboard panel and the pop-out overlay.
+- **NPC overlay item filters** — Settings → Overlays has a new NPC Overlay Items card with a checkbox for every item the overlay can show (identity, combat, behavior, resists, attributes, each special ability type). The hidden list applies to the dashboard and the pop-out, and any character can opt into its own list.
+- **Blocked Buffs editor** — Characters → Blocked Buffs keeps the list of other players' buffs you want refused with #blockbuff. The server stores that list itself, so the page reads its replies from your log to track what is actually applied and shows the exact commands needed to close the gap.
+- **Trigger {repeated} match count** — a new per-trigger "Repeat count window" counts matches that land within N seconds of each other, so a PBAE trigger can show how many mobs it hit. {repeated} and {count} work in action and timer-alert text, and follow-up matches update the existing overlay alert instead of stacking. The EQLogParser importer maps RepeatedResetTime for triggers that use {REPEATED}.
+- **PoP Flags: All characters tab** — zone progress for every character on one grid, with a JSON export and a copy-as-text summary for pasting into Discord.
+- **Timer row controls appear on hover** — the mute, hide and remove buttons on buff, detrimental and custom timer rows show only when you hover them, leaving more width for the spell name and countdown. Settings → Spell Timers → "Always show row controls" restores the old layout.
+
+### Fixes
+- **Giwin preflag never completed from #popflags** — it now completes when your zeks qglobal reaches 1.
+- **Tell threads ignored the sort toggle** — expanded conversations always showed oldest first; they now follow the page's sort direction (newest first by default).
+- **Pop-out NPC overlay Dist chip** — it is now the same size as the other stat chips.
+
 ## v0.26.0 — 2026-10-04
 
 Spell Modifiers now tells you which focus effects you're missing and what you could wear instead, alongside a round of Planes of Power fixes from user reports: bard song instruments, the spell shopping route, stat caps above 255, and more.
