@@ -5,6 +5,7 @@ import { WSEvent } from '../../lib/wsEvents'
 import { useActivePlayerName, targetSuffix } from '../../hooks/useActivePlayerName'
 import { useDisplayThresholds, passesThreshold, useHideOtherCharacterTimers, passesCharacterScope } from '../../hooks/useDisplayThresholds'
 import { useBuffSortMode, sortBuffs } from '../../hooks/useBuffSortMode'
+import TimerRowControls from './TimerRowControls'
 import { useTimerAppearance, type TimerAppearance } from '../../hooks/useTimerAppearance'
 import { clearTimers, getLogStatus, getTimerState, removeTimer } from '../../services/api'
 import OverlayWindow from '../OverlayWindow'
@@ -64,7 +65,7 @@ function BuffRow({ timer, activePlayer, appearance }: { timer: ActiveTimer; acti
   const onTarget = targetSuffix(timer.target_name, activePlayer)
 
   return (
-    <div style={{ position: 'relative', padding: `${appearance.rowPadding}px 10px`, borderBottom: '1px solid var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
+    <div className="timer-row" style={{ position: 'relative', padding: `${appearance.rowPadding}px 10px`, borderBottom: '1px solid var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
       <div
         style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
@@ -91,13 +92,15 @@ function BuffRow({ timer, activePlayer, appearance }: { timer: ActiveTimer; acti
         >
           {expired ? fmtOverdue(overdue) : fmtRemaining(timer.remaining_seconds, appearance.showSeconds)}
         </span>
-        <button
-          onClick={() => removeTimer(timer.id).catch(() => {})}
-          title="Remove this timer"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', flexShrink: 0, lineHeight: 0 }}
-        >
-          <X size={11} />
-        </button>
+        <TimerRowControls alwaysShow={appearance.controlsAlwaysShow}>
+          <button
+            onClick={() => removeTimer(timer.id).catch(() => {})}
+            title="Remove this timer"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', flexShrink: 0, lineHeight: 0 }}
+          >
+            <X size={11} />
+          </button>
+        </TimerRowControls>
       </div>
     </div>
   )

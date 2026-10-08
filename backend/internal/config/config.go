@@ -210,6 +210,11 @@ type SpellTimerSettings struct {
 	// rounded-up minutes-only display ("5m"). Off by default. Frontend-only;
 	// the engine never reads it.
 	TimerShowSeconds bool `yaml:"timer_show_seconds,omitempty" json:"timer_show_seconds,omitempty"`
+
+	// TimerRowControlsAlwaysShow, when true, keeps each timer row's mute /
+	// hide / remove buttons permanently visible. Off by default: they appear
+	// only while the row is hovered. Frontend-only; the engine never reads it.
+	TimerRowControlsAlwaysShow bool `yaml:"timer_row_controls_always_show,omitempty" json:"timer_row_controls_always_show,omitempty"`
 }
 
 // DPSClassColors holds the user-customisable bar colours for the DPS meter

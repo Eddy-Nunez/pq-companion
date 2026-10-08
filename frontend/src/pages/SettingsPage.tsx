@@ -2858,6 +2858,32 @@ export default function SettingsPage(): React.ReactElement {
                 </span>
               </span>
             </label>
+
+            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.spell_timer?.timer_row_controls_always_show ?? false}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    spell_timer: {
+                      ...config.spell_timer,
+                      timer_row_controls_always_show: e.target.checked,
+                    },
+                  })
+                }
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  Always show row controls
+                </span>
+                <span className="block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                  By default each timer row's mute / hide / remove buttons appear only while you hover
+                  the row. Enable this to keep them visible all the time.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* ── Custom timer alerts ──────────────────────────────────────── */}

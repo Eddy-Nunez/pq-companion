@@ -216,6 +216,29 @@ body {
   -webkit-app-region: no-drag;
 }
 
+/* Timer overlay rows: the mute / hide / remove cluster is hidden until the row
+   is hovered, then floats over its right edge (TimerRowControls). Skipped when
+   the "always show row controls" setting is on. */
+.timer-row:hover .timer-row-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+.timer-row-controls {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(12, 12, 22, 0.92);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
 /* "Display only" overlay lock mode hides the title bar entirely so the overlay
    is a pure, fully click-through HUD. The class is toggled on <html> per
    overlay window by useOverlayLock; it's lifted while the global "Position

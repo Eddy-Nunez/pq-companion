@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Bell, BellOff, Hourglass, Palette, Pin, Trash2, ExternalLink, X } from 'lucide-react'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { useDisplayThresholds, passesThreshold } from '../../hooks/useDisplayThresholds'
+import TimerRowControls from './TimerRowControls'
 import { useTimerAppearance, type TimerAppearance } from '../../hooks/useTimerAppearance'
 import { useCustomTimerAlertPref } from '../../hooks/useCustomTimerAlertPref'
 import { customAlertThresholds, withTimerAlertDefaults } from '../../lib/timerAlerts'
@@ -94,7 +95,7 @@ function TimerRow({ timer, appearance }: { timer: ActiveTimer; appearance: Timer
   const urgent = expired || pct < 0.2
 
   return (
-    <div style={{ position: 'relative', padding: `${appearance.rowPadding}px 10px`, borderBottom: '1px solid var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
+    <div className="timer-row" style={{ position: 'relative', padding: `${appearance.rowPadding}px 10px`, borderBottom: '1px solid var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
       <div
         style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
@@ -122,17 +123,19 @@ function TimerRow({ timer, appearance }: { timer: ActiveTimer; appearance: Timer
         >
           {expired ? `+${Math.floor(overdue) < 60 ? Math.floor(overdue) + 's' : Math.floor(overdue / 60) + 'm'}` : fmtRemaining(timer.remaining_seconds)}
         </span>
-        <button
-          onClick={() => removeTimer(timer.id).catch(() => {})}
-          title="Remove this timer"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            color: 'var(--color-muted)', display: 'flex', alignItems: 'center',
-            flexShrink: 0, lineHeight: 0,
-          }}
-        >
-          <X size={11} />
-        </button>
+        <TimerRowControls alwaysShow={appearance.controlsAlwaysShow}>
+          <button
+            onClick={() => removeTimer(timer.id).catch(() => {})}
+            title="Remove this timer"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              color: 'var(--color-muted)', display: 'flex', alignItems: 'center',
+              flexShrink: 0, lineHeight: 0,
+            }}
+          >
+            <X size={11} />
+          </button>
+        </TimerRowControls>
       </div>
     </div>
   )

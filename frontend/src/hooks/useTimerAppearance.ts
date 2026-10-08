@@ -25,6 +25,8 @@ export interface TimerAppearance {
   urgentTextWhite: boolean
   /** Show minutes and seconds (e.g. "4m 32s") instead of minutes-only. */
   showSeconds: boolean
+  /** Keep row mute/hide/remove buttons visible instead of hover-only. */
+  controlsAlwaysShow: boolean
 }
 
 // Built-in defaults, matching the panels' historical hardcoded values.
@@ -36,6 +38,7 @@ const DEFAULTS: TimerAppearance = {
   stackFromBottom: false,
   urgentTextWhite: false,
   showSeconds: false,
+  controlsAlwaysShow: false,
 }
 
 /**
@@ -66,6 +69,7 @@ function resolve(st: SpellTimerSettings | undefined): TimerAppearance {
     stackFromBottom: st.timer_bar_stack_from_bottom ?? DEFAULTS.stackFromBottom,
     urgentTextWhite: st.timer_bar_urgent_text_white ?? DEFAULTS.urgentTextWhite,
     showSeconds: st.timer_show_seconds ?? DEFAULTS.showSeconds,
+    controlsAlwaysShow: st.timer_row_controls_always_show ?? DEFAULTS.controlsAlwaysShow,
   }
 }
 

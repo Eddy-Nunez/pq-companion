@@ -419,6 +419,12 @@ export interface SpellTimerSettings {
    * ("5m"). Off by default.
    */
   timer_show_seconds?: boolean
+
+  /**
+   * When true, each timer row's mute / hide / remove buttons stay visible
+   * instead of appearing only while the row is hovered. Off by default.
+   */
+  timer_row_controls_always_show?: boolean
 }
 
 // CHChainSettings configures the Complete-Heal-chain overlay matcher. Mirrors

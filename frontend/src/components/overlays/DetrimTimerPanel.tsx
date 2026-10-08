@@ -4,6 +4,7 @@ import { useWebSocket } from '../../hooks/useWebSocket'
 import { WSEvent } from '../../lib/wsEvents'
 import { useActivePlayerName } from '../../hooks/useActivePlayerName'
 import { useDisplayThresholds, passesThreshold, useHideOtherCharacterTimers, passesCharacterScope } from '../../hooks/useDisplayThresholds'
+import TimerRowControls from './TimerRowControls'
 import { useTimerAppearance, type TimerAppearance } from '../../hooks/useTimerAppearance'
 import { clearTimers, getLogStatus, getTimerState, removeTimer } from '../../services/api'
 import OverlayWindow from '../OverlayWindow'
@@ -94,6 +95,7 @@ function DetrimRow({ timer, activePlayer, appearance, overrides, setOverride }: 
 
   return (
     <div
+      className="timer-row"
       style={{
         position: 'relative', padding: `${appearance.rowPadding}px 10px`, borderBottom: '1px solid var(--color-border)',
         overflow: 'hidden', flexShrink: 0, opacity: maybeDead ? 0.45 : 1,
@@ -127,20 +129,22 @@ function DetrimRow({ timer, activePlayer, appearance, overrides, setOverride }: 
         >
           {expired ? fmtOverdue(overdue) : fmtRemaining(timer.remaining_seconds, appearance.showSeconds)}
         </span>
-        <DetrimSpellControls
-          timerId={timer.id}
-          spellName={timer.spell_name}
-          overrides={overrides}
-          setOverride={setOverride}
-          color="var(--color-muted)"
-        />
-        <button
-          onClick={() => removeTimer(timer.id).catch(() => {})}
-          title="Remove this timer"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', flexShrink: 0, lineHeight: 0 }}
-        >
-          <X size={11} />
-        </button>
+        <TimerRowControls alwaysShow={appearance.controlsAlwaysShow}>
+          <DetrimSpellControls
+            timerId={timer.id}
+            spellName={timer.spell_name}
+            overrides={overrides}
+            setOverride={setOverride}
+            color="var(--color-muted)"
+          />
+          <button
+            onClick={() => removeTimer(timer.id).catch(() => {})}
+            title="Remove this timer"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-muted)', display: 'flex', alignItems: 'center', flexShrink: 0, lineHeight: 0 }}
+          >
+            <X size={11} />
+          </button>
+        </TimerRowControls>
       </div>
     </div>
   )
