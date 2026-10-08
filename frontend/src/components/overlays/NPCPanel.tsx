@@ -32,6 +32,7 @@ import NPCDistanceChip from './NPCDistanceChip'
 import TargetTimerList from './TargetTimerList'
 import TargetPlayerCard from './TargetPlayerCard'
 import type { TargetState, SpecialAbility, TargetVariant, NPCCasterSummary } from '../../types/overlay'
+import { variantSuffix } from '../../types/overlay'
 import type { LogTailerStatus } from '../../types/logEvent'
 import type { NPC, NPCLootTable, LootDrop, NPCFaction } from '../../types/npc'
 import type { Item } from '../../types/item'
@@ -471,7 +472,7 @@ function OtherVariants({
             casterSummary={v.caster_summary}
             sections={sections}
             view={view}
-            variantLabel={`${className(v.npc.class)} · L${npcLevelLabel(v.npc)} · ${v.npc.hp.toLocaleString()} HP`}
+            variantLabel={`${className(v.npc.class)} · L${npcLevelLabel(v.npc)} · ${v.npc.hp.toLocaleString()} HP${variantSuffix(v)}`}
             onItemClick={onItemClick}
             wishlistItemIds={wishlistItemIds}
             charLevel={charLevel}
@@ -711,6 +712,11 @@ function NPCCard({
   // npc is the strongest row (backend headlines it); the disclosure shows the
   // rest. Filter by id rather than slice so the primary never double-renders.
   const otherVariants = npc ? variants.filter((v) => v.npc.id !== npc.id) : []
+  const primaryVariant = npc ? variants.find((v) => v.npc.id === npc.id) : undefined
+  const primaryLabel =
+    npc && primaryVariant && otherVariants.length > 0
+      ? `${className(npc.class)} · L${npcLevelLabel(npc)} · ${npc.hp.toLocaleString()} HP${variantSuffix(primaryVariant)}`
+      : undefined
 
   // Timers tab works for any target (player or NPC). Player lookup only runs
   // when there's no DB record — that's the case where the target is a player.
@@ -776,6 +782,9 @@ function NPCCard({
             casterSummary={state.caster_summary}
             sections={sections}
             view={view}
+            // Label the headline row too once siblings exist, so same-looking
+            // rows (A Valiant Spirit) can be told apart.
+            variantLabel={primaryLabel}
             onItemClick={onItemClick}
             wishlistItemIds={wishlistItemIds}
             charLevel={charLevel}

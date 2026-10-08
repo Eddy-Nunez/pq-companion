@@ -941,3 +941,41 @@ func TestNPCTracker_DistanceFeed(t *testing.T) {
 		t.Fatalf("distance after disconnect = %+v, want empty", got)
 	}
 }
+
+// A Valiant Spirit (hohonora) is two rows with identical class/level/HP/size;
+// only the 90/10 spawn weight, body texture and Summon differ. The overlay
+// must carry enough for the UI to label them apart.
+func TestNPCTracker_ValiantSpiritVariantsAreDistinguishable(t *testing.T) {
+	tr := newRealDBTracker(t)
+	tr.SetPipePlayerSnapshot(211 /* hohonora */, 0, 0, 0)
+	tr.SetPipeTarget("A Valiant Spirit")
+	st := tr.GetState()
+	if len(st.Variants) != 2 {
+		t.Fatalf("Variants len = %d, want 2", len(st.Variants))
+	}
+	byID := map[int]TargetVariant{}
+	for _, v := range st.Variants {
+		byID[v.NPC.ID] = v
+	}
+	plain, summoner := byID[211017], byID[211119]
+	if plain.SpawnChance == nil || *plain.SpawnChance != 90 {
+		t.Errorf("211017 SpawnChance = %v, want 90", plain.SpawnChance)
+	}
+	if summoner.SpawnChance == nil || *summoner.SpawnChance != 10 {
+		t.Errorf("211119 SpawnChance = %v, want 10", summoner.SpawnChance)
+	}
+	contains := func(hs []string, want string) bool {
+		for _, h := range hs {
+			if h == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !contains(summoner.Distinguish, "summons") || !contains(summoner.Distinguish, "texture 2") {
+		t.Errorf("211119 Distinguish = %v, want summons + texture 2", summoner.Distinguish)
+	}
+	if !contains(plain.Distinguish, "no summon") || !contains(plain.Distinguish, "texture 0") {
+		t.Errorf("211017 Distinguish = %v, want no summon + texture 0", plain.Distinguish)
+	}
+}

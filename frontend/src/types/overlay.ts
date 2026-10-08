@@ -24,6 +24,21 @@ export interface TargetVariant {
   npc: NPC
   special_abilities: SpecialAbility[]
   caster_summary?: NPCCasterSummary
+  // spawn_chance is the row's spawnentry weight (0-100) in the current zone;
+  // distinguish lists what sets it apart from sibling rows ("summons",
+  // "texture 2"). Both only present on multi-variant results.
+  spawn_chance?: number
+  distinguish?: string[]
+}
+
+// variantSuffix renders the spawn weight and distinguishing traits of a
+// variant as " · 10% spawn · summons" (empty when it has neither), for
+// appending to a class/level/HP label.
+export function variantSuffix(v: TargetVariant): string {
+  const parts: string[] = []
+  if (v.spawn_chance !== undefined) parts.push(`${v.spawn_chance}% spawn`)
+  if (v.distinguish?.length) parts.push(...v.distinguish)
+  return parts.length ? ` · ${parts.join(' · ')}` : ''
 }
 
 // MobThreat is the player's estimated personal hate into one mob (mirrors the

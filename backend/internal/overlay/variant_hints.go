@@ -1,0 +1,105 @@
+package overlay
+
+import (
+	"fmt"
+	"log/slog"
+	"math"
+
+	"github.com/jasonsoprovich/pq-companion/backend/internal/db"
+)
+
+// hintAbilities are the special-ability codes worth calling out when sibling
+// rows disagree on them — the ones a player changes tactics for. Codes follow
+// the EQMacEmu numbering documented in CLAUDE.md.
+var hintAbilities = map[int]string{
+	1: "summons",
+	2: "enrages",
+	3: "rampages",
+	4: "area rampages",
+	5: "flurries",
+}
+
+var hintGenders = map[int]string{0: "male", 1: "female", 2: "neuter"}
+
+// annotateVariants fills SpawnChance and Distinguish on a variant set so the
+// overlay can label rows that otherwise read identically (same class, level
+// and HP — e.g. the two A Valiant Spirit rows). Hints only describe what
+// differs between the candidates; a trait shared by all of them is omitted.
+// Best effort: a lookup failure leaves the variants unannotated.
+func (t *NPCTracker) annotateVariants(out []TargetVariant, zoneShort string) {
+	if t.db == nil || len(out) < 2 {
+		return
+	}
+	ids := make([]int, len(out))
+	for i, v := range out {
+		ids[i] = v.NPC.ID
+	}
+	traits, err := t.db.GetVariantTraits(ids, zoneShort)
+	if err != nil {
+		slog.Debug("overlay: variant traits lookup failed", "err", err)
+		return
+	}
+	for i := range out {
+		if tr, ok := traits[out[i].NPC.ID]; ok && tr.SpawnChance >= 0 {
+			c := tr.SpawnChance
+			out[i].SpawnChance = &c
+		}
+		out[i].Distinguish = variantHints(i, out, traits)
+	}
+}
+
+// variantHints lists what sets out[idx] apart from its siblings.
+func variantHints(idx int, out []TargetVariant, traits map[int]db.VariantTraits) []string {
+	me := out[idx]
+	myT := traits[me.NPC.ID]
+	var hints []string
+
+	differs := func(same func(o TargetVariant) bool) bool {
+		for j, o := range out {
+			if j != idx && !same(o) {
+				return true
+			}
+		}
+		return false
+	}
+
+	if differs(func(o TargetVariant) bool { return traits[o.NPC.ID].Texture == myT.Texture }) {
+		hints = append(hints, fmt.Sprintf("texture %d", myT.Texture))
+	}
+	if differs(func(o TargetVariant) bool { return traits[o.NPC.ID].Gender == myT.Gender }) {
+		if g, ok := hintGenders[myT.Gender]; ok {
+			hints = append(hints, g)
+		}
+	}
+	if differs(func(o TargetVariant) bool { return math.Abs(o.NPC.Size-me.NPC.Size) < 0.5 }) {
+		hints = append(hints, fmt.Sprintf("size %.0f", me.NPC.Size))
+	}
+
+	has := func(v TargetVariant, code int) bool {
+		for _, a := range v.SpecialAbilities {
+			if a.Code == code && a.Value != 0 {
+				return true
+			}
+		}
+		return false
+	}
+	for _, code := range []int{1, 2, 3, 4, 5} {
+		mine := has(me, code)
+		if differs(func(o TargetVariant) bool { return has(o, code) == mine }) {
+			if mine {
+				hints = append(hints, hintAbilities[code])
+			} else {
+				hints = append(hints, "no "+trimPlural(hintAbilities[code]))
+			}
+		}
+	}
+	return hints
+}
+
+// trimPlural turns "summons" into "summon" for the "no summon" phrasing.
+func trimPlural(s string) string {
+	if len(s) > 1 && s[len(s)-1] == 's' {
+		return s[:len(s)-1]
+	}
+	return s
+}

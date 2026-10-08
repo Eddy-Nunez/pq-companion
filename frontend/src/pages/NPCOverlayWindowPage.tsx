@@ -36,6 +36,7 @@ import {
 } from '../lib/npcHelpers'
 import { effectiveDropPct, rarityColor } from '../lib/lootHelpers'
 import type { TargetState, SpecialAbility, TargetVariant, NPCCasterSummary } from '../types/overlay'
+import { variantSuffix } from '../types/overlay'
 import type { NPC, NPCLootTable, LootDrop, NPCFaction } from '../types/npc'
 import type { NPCOverlaySections } from '../types/config'
 
@@ -297,6 +298,7 @@ function VariantRibbon({ variants }: { variants: TargetVariant[] }): React.React
           style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: 600, borderRadius: 3, padding: '1px 6px' }}
         >
           {className(v.npc.class)} · L{npcLevelLabel(v.npc)}
+          {variantSuffix(v)}
         </span>
       ))}
     </div>
@@ -682,7 +684,7 @@ function NPCContent({
               sections={sections}
               view={view}
               wishlistItemIds={wishlistItemIds}
-              variantLabel={`${className(v.npc.class)} · L${npcLevelLabel(v.npc)}`}
+              variantLabel={`${className(v.npc.class)} · L${npcLevelLabel(v.npc)}${variantSuffix(v)}`}
               onItemClick={onItemClick}
               onSpellClick={onSpellClick}
               charLevel={charLevel}
