@@ -46,6 +46,10 @@ var targetKeys = []string{
 	"target_class",
 	"target_race",
 	"target_loc",
+	"target_texture",
+	"target_gender",
+	"target_size",
+	"target_equipment",
 }
 
 // spawnTypeNames maps Zeal's EntityTypes enum (Zeal/game_structures.h:132).
