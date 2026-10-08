@@ -227,6 +227,11 @@ export interface Preferences {
   raid_threat_player_mods?: Record<string, number>
   npc_overlay_dashboard_sections: NPCOverlaySections
   npc_overlay_popout_sections: NPCOverlaySections
+  // Individual NPC overlay items hidden on both surfaces (keys from
+  // lib/npcItemFilters, e.g. "ability.10", "combat.atk"), plus per-character
+  // overrides keyed by lowercased name — a present key replaces the global list.
+  npc_overlay_hidden_items?: string[]
+  npc_overlay_hidden_items_by_character?: Record<string, string[]>
   // npc_overlay_cast_range: the spell range the NPC overlay's distance readout
   // is coloured against (backend normalises <= 0 to 200).
   // npc_overlay_ranged_range: optional second range (e.g. a bow's); 0 = off.

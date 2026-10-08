@@ -549,3 +549,37 @@ func TestDetrimSpellOverride(t *testing.T) {
 		t.Errorf("nil map override = %q, want empty", got)
 	}
 }
+
+// A character with an empty override list must survive a save/reload: a present
+// key means "use my own (empty) list", distinct from "fall back to global".
+func TestLoadFrom_NPCOverlayHiddenItemsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	m, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	c := m.Get()
+	c.Preferences.NPCOverlayHiddenItems = []string{"ability.10", "combat.atk"}
+	c.Preferences.NPCOverlayHiddenItemsByCharacter = map[string][]string{
+		"osui":  {"ability.14"},
+		"empty": {},
+	}
+	if err := m.Update(c); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	m2, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom (reload): %v", err)
+	}
+	got := m2.Get().Preferences
+	if len(got.NPCOverlayHiddenItems) != 2 || got.NPCOverlayHiddenItems[0] != "ability.10" {
+		t.Errorf("global list = %v", got.NPCOverlayHiddenItems)
+	}
+	if v := got.NPCOverlayHiddenItemsByCharacter["osui"]; len(v) != 1 || v[0] != "ability.14" {
+		t.Errorf("osui override = %v", v)
+	}
+	if _, ok := got.NPCOverlayHiddenItemsByCharacter["empty"]; !ok {
+		t.Error("empty override key was dropped on round trip")
+	}
+}

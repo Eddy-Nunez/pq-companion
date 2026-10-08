@@ -10,6 +10,7 @@ import KokoroTtsSettings from '../components/settings/KokoroTtsSettings'
 import DiscordVoiceOverlaySettings from '../components/settings/DiscordVoiceOverlaySettings'
 import DiscordWebhookSettings from '../components/settings/DiscordWebhookSettings'
 import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
+import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFiltersCard'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, updateConfig, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
@@ -2407,6 +2408,24 @@ export default function SettingsPage(): React.ReactElement {
                 ...config.preferences,
                 npc_overlay_cast_range: cast,
                 npc_overlay_ranged_range: ranged,
+              },
+            })
+          }
+        />
+        )}
+
+        {/* ── NPC Overlay item filters ───────────────────────────────────── */}
+        {tab === 'overlays' && (
+        <NPCOverlayItemFiltersCard
+          hidden={config.preferences.npc_overlay_hidden_items ?? []}
+          byCharacter={config.preferences.npc_overlay_hidden_items_by_character ?? {}}
+          onChange={(hidden, byCharacter) =>
+            setConfig({
+              ...config,
+              preferences: {
+                ...config.preferences,
+                npc_overlay_hidden_items: hidden,
+                npc_overlay_hidden_items_by_character: byCharacter,
               },
             })
           }

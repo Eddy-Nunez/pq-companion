@@ -7,6 +7,8 @@ import { useOverlayChromeFade } from '../hooks/useOverlayChromeFade'
 import { useOverlayLock } from '../hooks/useOverlayLock'
 import { useWindowDrag } from '../hooks/useWindowDrag'
 import { useNPCOverlaySections } from '../hooks/useNPCOverlaySections'
+import { useNPCOverlayHiddenItems } from '../hooks/useNPCOverlayHiddenItems'
+import { abilityKey } from '../lib/npcItemFilters'
 import { useNPCTargetDistance, type NPCTargetDistance } from '../hooks/useNPCTargetDistance'
 import { useWishlistItemIds } from '../hooks/useWishlistItemIds'
 import { useActiveCharacterLevel } from '../hooks/useActiveCharacterLevel'
@@ -393,7 +395,10 @@ function StatsBody({
   // distance: live player→target distance, for the caster in-reach markers.
   distance?: number | null
 }): React.ReactElement {
-  const shown = abilities.filter((a) => a.value !== 0)
+  const hidden = useNPCOverlayHiddenItems()
+  const vis = (k: string): boolean => !hidden.has(k)
+  const anyVis = (...ks: string[]): boolean => ks.some(vis)
+  const shown = abilities.filter((a) => a.value !== 0 && vis(abilityKey(a.code)))
   // The live level when Zeal reports it and it fits this row; otherwise the
   // worst case for a range-spawn NPC, mirroring the resist calculator's
   // convention of using the top end of the level range.
@@ -418,34 +423,46 @@ function StatsBody({
         <LootContent npcId={npc.id} wishlistItemIds={wishlistItemIds} onItemClick={onItemClick} />
       ) : (
         <>
-          {sections.identity && (
+          {sections.identity &&
+            anyVis('identity.level', 'identity.class', 'identity.race', 'identity.body') && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              <span
-                title={
-                  levelLabel !== npcLevelLabel(npc)
-                    ? `Live level from Zeal (DB range ${npcLevelLabel(npc)})`
-                    : undefined
-                }
-              >
-                <Chip label="Lv" value={levelLabel} color="#c9a84c" />
-              </span>
-              <Chip value={className(npc.class)} />
-              <Chip value={npc.race_name} />
-              <Chip value={bodyTypeName(npc.body_type)} />
+              {vis('identity.level') && (
+                <span
+                  title={
+                    levelLabel !== npcLevelLabel(npc)
+                      ? `Live level from Zeal (DB range ${npcLevelLabel(npc)})`
+                      : undefined
+                  }
+                >
+                  <Chip label="Lv" value={levelLabel} color="#c9a84c" />
+                </span>
+              )}
+              {vis('identity.class') && <Chip value={className(npc.class)} />}
+              {vis('identity.race') && <Chip value={npc.race_name} />}
+              {vis('identity.body') && <Chip value={bodyTypeName(npc.body_type)} />}
             </div>
           )}
 
-          {sections.combat && (
+          {sections.combat &&
+            anyVis('combat.hp', 'combat.mana', 'combat.ac', 'combat.dmg', 'combat.atk', 'combat.speed', 'combat.pbaoe') && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              <Chip label="HP" value={npc.hp.toLocaleString()} color="#22c55e" />
-              {npc.mana > 0 && (
+              {vis('combat.hp') && (
+                <Chip label="HP" value={npc.hp.toLocaleString()} color="#22c55e" />
+              )}
+              {vis('combat.mana') && npc.mana > 0 && (
                 <Chip label="Mana" value={npc.mana.toLocaleString()} color="#3b82f6" />
               )}
-              <Chip label="AC" value={npc.ac} />
-              <Chip label="DMG" value={`${npc.min_dmg}-${npc.max_dmg}`} color="#ef4444" />
-              <Chip label="Atk/Rd" value={npc.attack_count < 0 ? 'default' : npc.attack_count} />
-              <Chip label="Speed" value={`${npcRunSpeedPct(npc.run_speed)}%`} />
-              {pbaoe?.applies && (
+              {vis('combat.ac') && <Chip label="AC" value={npc.ac} />}
+              {vis('combat.dmg') && (
+                <Chip label="DMG" value={`${npc.min_dmg}-${npc.max_dmg}`} color="#ef4444" />
+              )}
+              {vis('combat.atk') && (
+                <Chip label="Atk/Rd" value={npc.attack_count < 0 ? 'default' : npc.attack_count} />
+              )}
+              {vis('combat.speed') && (
+                <Chip label="Speed" value={`${npcRunSpeedPct(npc.run_speed)}%`} />
+              )}
+              {vis('combat.pbaoe') && pbaoe?.applies && (
                 <span
                   style={{
                     display: 'inline-flex',
@@ -467,35 +484,43 @@ function StatsBody({
           )}
 
           {sections.behavior &&
-            (npc.attack_delay > 0 || npc.aggro_radius > 0 || npc.assist_radius > 0) && (
+            ((vis('behavior.delay') && npc.attack_delay > 0) ||
+              (vis('behavior.aggro') && npc.aggro_radius > 0) ||
+              (vis('behavior.assist') && npc.assist_radius > 0)) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {npc.attack_delay > 0 && (
+              {vis('behavior.delay') && npc.attack_delay > 0 && (
                 <Chip label="Delay" value={`${(npc.attack_delay / 10).toFixed(1)}s`} />
               )}
-              {npc.aggro_radius > 0 && <Chip label="Aggro" value={npc.aggro_radius} />}
-              {npc.assist_radius > 0 && <Chip label="Assist" value={npc.assist_radius} />}
+              {vis('behavior.aggro') && npc.aggro_radius > 0 && (
+                <Chip label="Aggro" value={npc.aggro_radius} />
+              )}
+              {vis('behavior.assist') && npc.assist_radius > 0 && (
+                <Chip label="Assist" value={npc.assist_radius} />
+              )}
             </div>
           )}
 
-          {sections.resists && (
+          {sections.resists &&
+            anyVis('resists.mr', 'resists.cr', 'resists.fr', 'resists.dr', 'resists.pr') && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              <ResistChip type="magic"   value={npc.mr} />
-              <ResistChip type="cold"    value={npc.cr} />
-              <ResistChip type="fire"    value={npc.fr} />
-              <ResistChip type="disease" value={npc.dr} />
-              <ResistChip type="poison"  value={npc.pr} />
+              {vis('resists.mr') && <ResistChip type="magic"   value={npc.mr} />}
+              {vis('resists.cr') && <ResistChip type="cold"    value={npc.cr} />}
+              {vis('resists.fr') && <ResistChip type="fire"    value={npc.fr} />}
+              {vis('resists.dr') && <ResistChip type="disease" value={npc.dr} />}
+              {vis('resists.pr') && <ResistChip type="poison"  value={npc.pr} />}
             </div>
           )}
 
-          {sections.attributes && (
+          {sections.attributes &&
+            anyVis('attributes.str', 'attributes.sta', 'attributes.dex', 'attributes.agi', 'attributes.int', 'attributes.wis', 'attributes.cha') && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              <Chip label="STR" value={npc.str} />
-              <Chip label="STA" value={npc.sta} />
-              <Chip label="DEX" value={npc.dex} />
-              <Chip label="AGI" value={npc.agi} />
-              <Chip label="INT" value={npc.int} />
-              <Chip label="WIS" value={npc.wis} />
-              <Chip label="CHA" value={npc.cha} />
+              {vis('attributes.str') && <Chip label="STR" value={npc.str} />}
+              {vis('attributes.sta') && <Chip label="STA" value={npc.sta} />}
+              {vis('attributes.dex') && <Chip label="DEX" value={npc.dex} />}
+              {vis('attributes.agi') && <Chip label="AGI" value={npc.agi} />}
+              {vis('attributes.int') && <Chip label="INT" value={npc.int} />}
+              {vis('attributes.wis') && <Chip label="WIS" value={npc.wis} />}
+              {vis('attributes.cha') && <Chip label="CHA" value={npc.cha} />}
             </div>
           )}
 

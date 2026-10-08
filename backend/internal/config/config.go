@@ -574,6 +574,18 @@ type Preferences struct {
 	// in one place and a sparser one in the other.
 	NPCOverlayPopoutSections NPCOverlaySections `yaml:"npc_overlay_popout_sections" json:"npc_overlay_popout_sections"`
 
+	// NPCOverlayHiddenItems lists individual NPC overlay items (single chips
+	// and special-ability badges) to hide on both surfaces, by key — e.g.
+	// "ability.10" (Magical Attack), "combat.atk", "resists.pr". Sections stay
+	// governed by the toggles above; this trims inside them. Empty = show all.
+	NPCOverlayHiddenItems []string `yaml:"npc_overlay_hidden_items,omitempty" json:"npc_overlay_hidden_items,omitempty"`
+
+	// NPCOverlayHiddenItemsByCharacter overrides NPCOverlayHiddenItems for a
+	// specific character (lowercased name → hidden keys). A present key — even
+	// with an empty list — means that character uses its own list instead of
+	// the global one. Frontend-only; the engine never reads it.
+	NPCOverlayHiddenItemsByCharacter map[string][]string `yaml:"npc_overlay_hidden_items_by_character,omitempty" json:"npc_overlay_hidden_items_by_character,omitempty"`
+
 	// NPCFactionSectionMigrationDone marks that the one-time migration which
 	// turns the (later-added) Faction section on for pre-existing configs has
 	// run. Without it, configs saved before the Faction field existed would
