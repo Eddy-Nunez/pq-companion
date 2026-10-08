@@ -203,6 +203,7 @@ type resolvedTarget struct {
 // rather than on every ~10 Hz pipe tick.
 type resolveSig struct {
 	hasDesc  bool
+	hasApp   bool
 	locKnown bool
 	x, y     float64
 }
@@ -211,7 +212,7 @@ func sigFor(d *zealpipe.TargetDescriptors) resolveSig {
 	if d == nil {
 		return resolveSig{}
 	}
-	return resolveSig{hasDesc: true, locKnown: d.LocKnown, x: d.GameX, y: d.GameY}
+	return resolveSig{hasDesc: true, hasApp: d.HasAppearance, locKnown: d.LocKnown, x: d.GameX, y: d.GameY}
 }
 
 // sigMoveThreshold is how far a target must move before an ambiguous
@@ -222,7 +223,7 @@ const sigMoveThreshold = 25.0
 // descriptors or a position appeared, or the target moved far enough to
 // possibly separate its candidates' spawn points.
 func (s resolveSig) changed(next resolveSig) bool {
-	if s.hasDesc != next.hasDesc || s.locKnown != next.locKnown {
+	if s.hasDesc != next.hasDesc || s.hasApp != next.hasApp || s.locKnown != next.locKnown {
 		return true
 	}
 	if !next.locKnown {
@@ -1101,6 +1102,7 @@ func (t *NPCTracker) fetchVariants(dbName, zoneShort string) []db.NPCVariant {
 	if len(out) == 0 {
 		return nil
 	}
+	t.fillAppearance(out, zoneShort)
 	return out
 }
 
@@ -1164,6 +1166,9 @@ func filterVariantsByDescriptors(variants []db.NPCVariant, d *zealpipe.TargetDes
 		if n.Race == d.Race && n.Class == d.Class && d.Level >= n.Level && d.Level <= maxLevel {
 			out = append(out, v)
 		}
+	}
+	if len(out) > 1 && d.HasAppearance {
+		out = narrowByAppearance(out, d)
 	}
 	if len(out) == 0 {
 		slog.Debug("overlay: target descriptors matched no candidate; keeping all",

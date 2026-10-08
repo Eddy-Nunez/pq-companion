@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/zealpipe"
 )
 
 // hintAbilities are the special-ability codes worth calling out when sibling
@@ -102,4 +103,62 @@ func trimPlural(s string) string {
 		return s[:len(s)-1]
 	}
 	return s
+}
+
+// fillAppearance loads npc_types.texture/gender onto each candidate so
+// narrowByAppearance can compare them with the live target. Best effort:
+// without it candidates keep zero values and the appearance narrowing is a
+// no-op for rows it can't tell apart.
+func (t *NPCTracker) fillAppearance(vs []db.NPCVariant, zoneShort string) {
+	if t.db == nil || len(vs) < 2 {
+		return
+	}
+	ids := make([]int, len(vs))
+	for i, v := range vs {
+		ids[i] = v.NPC.ID
+	}
+	traits, err := t.db.GetVariantTraits(ids, zoneShort)
+	if err != nil {
+		slog.Debug("overlay: appearance lookup failed", "err", err)
+		return
+	}
+	for i := range vs {
+		if tr, ok := traits[vs[i].NPC.ID]; ok {
+			vs[i].Texture, vs[i].Gender = tr.Texture, tr.Gender
+		}
+	}
+}
+
+// appearanceSizeTolerance absorbs float noise between the client's model
+// height and npc_types.size.
+const appearanceSizeTolerance = 0.5
+
+// narrowByAppearance keeps the candidates whose texture, then gender, then
+// size match the live target. Each step applies only if it leaves at least one
+// candidate, so a client value that doesn't line up with the DB column
+// (illusions, server-side scaling) can never empty the set. A size of 0 in
+// the DB means "race default", so size is not compared for such rows.
+func narrowByAppearance(vs []db.NPCVariant, d *zealpipe.TargetDescriptors) []db.NPCVariant {
+	steps := []func(v db.NPCVariant) bool{
+		func(v db.NPCVariant) bool { return v.Texture == d.Texture },
+		func(v db.NPCVariant) bool { return v.Gender == d.Gender },
+		func(v db.NPCVariant) bool {
+			return v.NPC.Size == 0 || math.Abs(v.NPC.Size-d.Size) <= appearanceSizeTolerance
+		},
+	}
+	for _, keep := range steps {
+		if len(vs) < 2 {
+			break
+		}
+		next := make([]db.NPCVariant, 0, len(vs))
+		for _, v := range vs {
+			if keep(v) {
+				next = append(next, v)
+			}
+		}
+		if len(next) > 0 {
+			vs = next
+		}
+	}
+	return vs
 }

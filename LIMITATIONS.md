@@ -361,6 +361,16 @@ a future data source fix this?" column against the new capabilities.
   zone change — spawn ids are recycled), and an ambiguous result upgrades
   itself as soon as the target comes within 250 units; a resolved one never
   reverts.
+- **Appearance (pending a Zeal PR):** rows identical in level/class/race/spawn
+  point can still differ in body texture, gender or model size — e.g. **A
+  Valiant Spirit** in Halls of Honor A (npc 211017, 90% spawn, texture 0, no
+  summon vs 211119, 10%, texture 2, summons). The client never knows the
+  `npc_types.id`, so appearance is the only client-side signal. The overlay
+  consumes `target_texture` / `target_gender` / `target_size` when a Zeal
+  build reports them (not in 1.4.8); until then it labels each candidate with
+  its spawn chance and what differs (texture, gender, size, summon/enrage…).
+  Roughly 100 same-name groups differ in nothing the client can see (e.g.
+  `a_crystalline_arachnae`, `a_soldier_of_marr`) — a hard limit.
 - **What remains:** a Vex Thal boss first targeted from 250+ units away, or
   dragged to roughly the midpoint between its two possible spawn points, stays
   ambiguous and the overlay shows both loot tables, as before — **until the

@@ -979,3 +979,35 @@ func TestNPCTracker_ValiantSpiritVariantsAreDistinguishable(t *testing.T) {
 		t.Errorf("211017 Distinguish = %v, want no summon + texture 0", plain.Distinguish)
 	}
 }
+
+func descWithAppearance(name string, level, class, race, texture, gender int, size float64) *zealpipe.TargetDescriptors {
+	d := descAt(name, level, class, race, false, 0, 0)
+	d.HasAppearance, d.Texture, d.Gender, d.Size = true, texture, gender, size
+	return d
+}
+
+// A Valiant Spirit rows match on every pre-appearance descriptor, so texture
+// is the only thing that resolves them.
+func TestNPCTracker_AppearanceResolvesValiantSpirit(t *testing.T) {
+	const name = "A Valiant Spirit"
+	tests := []struct {
+		name string
+		desc *zealpipe.TargetDescriptors
+		want []int
+	}{
+		{"texture 0 is the non-summoner", descWithAppearance(name, 62, 1, 323, 0, 2, 12), []int{211017}},
+		{"texture 2 is the summoner", descWithAppearance(name, 62, 1, 323, 2, 2, 12), []int{211119}},
+		{"unmatched texture keeps both", descWithAppearance(name, 62, 1, 323, 7, 2, 12), []int{211017, 211119}},
+		{"older Zeal without appearance keeps both", descAt(name, 62, 1, 323, false, 0, 0), []int{211017, 211119}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := newRealDBTracker(t)
+			tr.SetPipePlayerSnapshot(211, 0, 0, 0)
+			st := targetWithDesc(tr, 4242, tt.desc)
+			if got := variantIDs(st); !sameIDs(got, tt.want) {
+				t.Errorf("resolved to %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

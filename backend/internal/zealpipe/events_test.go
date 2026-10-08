@@ -130,6 +130,13 @@ func TestDecodePlayerTargetDescriptors(t *testing.T) {
 		`"target_level":66,"target_class":9,"target_race":145,"target_loc":{"x":318,"y":141,"z":130}}`
 	noLoc := `{"zone":158,"location":{"x":-300,"y":141,"z":130},"heading":0,"autoattack":false,` +
 		`"target_id":77,"target_name":"a gnoll","target_type":2,"target_level":12,"target_class":1,"target_race":39}`
+	appearance := `{"zone":211,"location":{"x":1,"y":2,"z":3},"heading":0,"autoattack":false,` +
+		`"target_id":9,"target_name":"A Valiant Spirit","target_type":1,"target_level":62,"target_class":1,` +
+		`"target_race":323,"target_texture":2,"target_gender":2,"target_size":12,` +
+		`"target_equipment":[0,0,0,0,0,0,0,0,0]}`
+	partialAppearance := `{"zone":211,"location":{"x":1,"y":2,"z":3},"heading":0,"autoattack":false,` +
+		`"target_id":9,"target_name":"x","target_type":1,"target_level":62,"target_class":1,"target_race":323,` +
+		`"target_texture":2}`
 	stock147 := `{"zone":158,"location":{"x":1,"y":2,"z":3},"heading":0,"autoattack":false,"target_id":77}`
 
 	tests := []struct {
@@ -146,6 +153,13 @@ func TestDecodePlayerTargetDescriptors(t *testing.T) {
 		}, 18, true},
 		{"loc withheld beyond 250", noLoc, true, TargetDescriptors{
 			Name: "a gnoll", Type: TargetTypeNPCCorpse, Level: 12, Class: 1, Race: 39,
+		}, 0, false},
+		{"appearance", appearance, true, TargetDescriptors{
+			Name: "A Valiant Spirit", Type: TargetTypeNPC, Level: 62, Class: 1, Race: 323,
+			HasAppearance: true, Texture: 2, Gender: 2, Size: 12,
+		}, 0, false},
+		{"partial appearance is ignored", partialAppearance, true, TargetDescriptors{
+			Name: "x", Type: TargetTypeNPC, Level: 62, Class: 1, Race: 323,
 		}, 0, false},
 		{"stock v1.4.7", stock147, false, TargetDescriptors{}, 0, false},
 	}

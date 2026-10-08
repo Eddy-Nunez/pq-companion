@@ -215,6 +215,10 @@ type SpawnPoint struct {
 type NPCVariant struct {
 	NPC         NPC          `json:"npc"`
 	SpawnPoints []SpawnPoint `json:"spawn_points,omitempty"`
+	// Texture and Gender are npc_types.texture/gender, filled by the overlay
+	// (GetVariantTraits) for matching against the live target's appearance.
+	Texture int `json:"-"`
+	Gender  int `json:"-"`
 }
 
 // FactionHit represents a single faction's standing change when an NPC is killed.

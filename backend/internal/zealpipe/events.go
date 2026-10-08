@@ -90,6 +90,14 @@ type Player struct {
 	TargetClass *int      `json:"target_class,omitempty"` // EQ class id, same numbering as npc_types.class
 	TargetRace  *int      `json:"target_race,omitempty"`  // EQ race id, same numbering as npc_types.race
 	TargetLoc   *Location `json:"target_loc,omitempty"`
+
+	// Target appearance (a later Zeal addition). Separates same-name,
+	// same-level/class/race rows that differ only in how they render.
+	// TargetSize is the model height scale (npc_types.size).
+	TargetTexture   *int     `json:"target_texture,omitempty"`
+	TargetGender    *int     `json:"target_gender,omitempty"`
+	TargetSize      *float64 `json:"target_size,omitempty"`
+	TargetEquipment []int    `json:"target_equipment,omitempty"`
 }
 
 // Target entity types reported in Player.TargetType (Zeal EntityTypes).
@@ -116,6 +124,13 @@ type TargetDescriptors struct {
 	GameX    float64
 	GameY    float64
 	Z        float64
+
+	// HasAppearance is true when this Zeal build reported texture, gender and
+	// size (all three or none). Texture/Gender/Size are meaningless otherwise.
+	HasAppearance bool
+	Texture       int
+	Gender        int
+	Size          float64
 }
 
 // TargetDescriptors returns the target descriptors carried by this snapshot,
@@ -137,6 +152,12 @@ func (p Player) TargetDescriptors() *TargetDescriptors {
 	}
 	if p.TargetType != nil {
 		d.Type = *p.TargetType
+	}
+	if p.TargetTexture != nil && p.TargetGender != nil && p.TargetSize != nil {
+		d.HasAppearance = true
+		d.Texture = *p.TargetTexture
+		d.Gender = *p.TargetGender
+		d.Size = *p.TargetSize
 	}
 	if p.TargetLoc != nil {
 		d.LocKnown = true
