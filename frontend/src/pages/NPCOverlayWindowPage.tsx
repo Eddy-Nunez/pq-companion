@@ -625,7 +625,7 @@ function NPCContent({
         {((npc && (npc.raid_target === 1 || npc.rare_spawn === 1)) ||
           (sections.distance && dist?.has_descriptors)) && (
           <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-            {sections.distance && dist && <NPCDistanceChip dist={dist} />}
+            {sections.distance && dist && <NPCDistanceChip dist={dist} size="md" />}
             {npc?.raid_target === 1 && (
               <span style={{ backgroundColor: '#7c3aed', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 3, padding: '2px 6px' }}>RAID</span>
             )}

@@ -40,24 +40,46 @@ function rangeLine(label: string, distance: number, range: number): string {
 // NPCDistanceChip shows the live player→target distance, coloured against the
 // user's configured cast range. Renders nothing when this Zeal build doesn't
 // report target info, and "n/a" when Zeal withheld the position (250+ away).
+//
+// size 'md' matches the popout overlay's stat chips (LV, class, resists: 12px
+// value, 10px uppercase label); 'sm' matches the dashboard panel's 10px badges.
 export default function NPCDistanceChip({
   dist,
+  size = 'sm',
 }: {
   dist: NPCTargetDistance
+  size?: 'sm' | 'md'
 }): React.ReactElement | null {
   if (!dist.has_descriptors) return null
 
+  const md = size === 'md'
   const base: React.CSSProperties = {
     display: 'inline-flex',
     alignItems: 'baseline',
     gap: 4,
     borderRadius: 3,
-    padding: '1px 6px',
-    fontSize: 10,
+    padding: md ? '3px 7px' : '1px 6px',
+    fontSize: md ? 12 : 10,
+    lineHeight: md ? 1.4 : undefined,
     fontWeight: 600,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: md ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
     fontVariantNumeric: 'tabular-nums',
   }
+  const label = (text: string): React.ReactNode =>
+    md ? (
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 500,
+          textTransform: 'uppercase',
+          color: 'rgba(255,255,255,0.4)',
+        }}
+      >
+        {text}
+      </span>
+    ) : (
+      `${text} `
+    )
 
   if (dist.distance == null) {
     return (
@@ -65,7 +87,8 @@ export default function NPCDistanceChip({
         style={{ ...base, color: MUTED }}
         title="Target is 250+ units away. Zeal only reports a target's position within 250 units."
       >
-        Dist n/a
+        {label('Dist')}
+        n/a
       </span>
     )
   }
@@ -81,9 +104,17 @@ export default function NPCDistanceChip({
 
   return (
     <span style={{ ...base, color: rangeColor(d, dist.castRange) }} title={lines.join('\n')}>
-      Dist {d}
+      {label('Dist')}
+      {d}
       {dist.rangedRange > 0 && (
-        <span style={{ color: rangeColor(d, dist.rangedRange), fontWeight: 500 }}>
+        <span
+          style={{
+            color: rangeColor(d, dist.rangedRange),
+            fontWeight: 500,
+            fontSize: md ? 10 : undefined,
+            textTransform: md ? 'uppercase' : undefined,
+          }}
+        >
           · rng
         </span>
       )}
