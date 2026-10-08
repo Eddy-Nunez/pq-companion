@@ -139,7 +139,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 	kokoroH := &kokoroHandler{cfgMgr: cfgMgr, svc: kokorotts.NewService(filepath.Dir(cfgMgr.Path()))}
 	sandboxH := &sandboxHandler{sb: sb, cfgMgr: cfgMgr}
 	savedQueryH := &savedQueryHandler{store: savedQueryStore, cfgMgr: cfgMgr}
-	popflagH := &popflagHandler{store: popflagStore, hub: hub, mgr: cfgMgr}
+	popflagH := &popflagHandler{store: popflagStore, hub: hub, mgr: cfgMgr, charStore: charStore}
 	changelogH := &changelogHandler{entries: changelogEntries}
 	emotesH := &emotesHandler{service: emoteService}
 	mapsH := &mapsHandler{store: mapStore, annotations: mapAnnotations, cfg: cfgMgr}
@@ -400,6 +400,8 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 		// route always works; per-character routes need user.db (store != nil).
 		r.Route("/popflags", func(r chi.Router) {
 			r.Get("/dataset", popflagH.dataset)
+			r.Get("/summary", popflagH.summary)
+			r.Get("/export", popflagH.export)
 			r.Get("/{character}", popflagH.get)
 			r.Post("/{character}/seer/preview", popflagH.seerPreview)
 			r.Post("/{character}/seer/scan", popflagH.seerScan)

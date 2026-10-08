@@ -12,6 +12,7 @@ import { usePersistentState } from '../hooks/usePersistentState'
 import CharacterSubTabs from '../components/CharacterSubTabs'
 import ImportSeerModal from '../components/ImportSeerModal'
 import { PopFlagRow } from '../components/PopFlagRow'
+import PopFlagOverviewGrid from '../components/PopFlagOverviewGrid'
 
 // Flow view is lazy — it's only needed once a user switches off the checklist.
 const PoPFlagFlowPanel = lazy(() => import('./PoPFlagFlowPanel'))
@@ -196,6 +197,10 @@ function TierCard({
 export default function PoPFlaggingPage(): React.ReactElement {
   const { active } = useActiveCharacter()
   const [viewedCharacter, setViewedCharacter] = useState('')
+  // The "All" tab (overview grid). Tracked separately from viewedCharacter
+  // because '' there means "no character → dataset preview", which the
+  // default-to-active effect below would otherwise bounce back to the active char.
+  const [showAll, setShowAll] = useState(false)
   const [resolved, setResolved] = useState<PoPResolved | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -293,6 +298,33 @@ export default function PoPFlaggingPage(): React.ReactElement {
       flags: byTier.get(t.tier ?? 0) ?? [],
     }))
   }, [resolved])
+
+  const onSelectTab = (name: string): void => {
+    if (name === '') {
+      setShowAll(true)
+    } else {
+      setShowAll(false)
+      setViewedCharacter(name)
+    }
+  }
+
+  if (showAll) {
+    return (
+      <div className="flex h-full flex-col">
+        <div
+          className="flex items-center gap-2 border-b px-4 py-2.5 shrink-0"
+          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface)' }}
+        >
+          <Flag size={16} style={{ color: 'var(--color-primary)' }} />
+          <span className="text-sm font-semibold" style={{ color: 'var(--color-foreground)' }}>
+            PoP Flags
+          </span>
+        </div>
+        <CharacterSubTabs value="" onChange={onSelectTab} allowAll />
+        <PopFlagOverviewGrid onSelectCharacter={onSelectTab} />
+      </div>
+    )
+  }
 
   if (loading && !resolved) {
     return (
@@ -395,7 +427,7 @@ export default function PoPFlaggingPage(): React.ReactElement {
       </div>
 
       {/* Per-character switcher */}
-      <CharacterSubTabs value={viewedCharacter} onChange={setViewedCharacter} />
+      <CharacterSubTabs value={viewedCharacter} onChange={onSelectTab} allowAll />
 
       {!canToggle && (
         <p className="px-4 py-2 text-[11px] shrink-0" style={{ color: 'var(--color-muted)' }}>

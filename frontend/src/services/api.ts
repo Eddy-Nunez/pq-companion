@@ -39,7 +39,7 @@ import type {
   ZoneLockoutsResponse,
 } from '../types/lockouts'
 import type {
-  PoPResolved, PoPFlagDatasetResponse, SeerPreviewResponse, SeerScanResponse,
+  PoPResolved, PoPFlagDatasetResponse, PoPSummaryResponse, PoPExport, SeerPreviewResponse, SeerScanResponse,
   PopFlagsPreviewResponse, PopFlagsScanResponse,
 } from '../types/popflag'
 import type { Backup, BackupsResponse } from '../types/backup'
@@ -1173,6 +1173,19 @@ export function getKeyringForCharacter(name: string): Promise<KeyringCharacterRe
 
 export function getPopFlagDataset(): Promise<PoPFlagDatasetResponse> {
   return get<PoPFlagDatasetResponse>('/api/popflags/dataset')
+}
+
+export function getPopFlagSummary(): Promise<PoPSummaryResponse> {
+  return get<PoPSummaryResponse>('/api/popflags/summary')
+}
+
+// exportPopFlags fetches the versioned JSON envelope for importing PoP
+// progression into other tools. Omit names for every character.
+export function exportPopFlags(names?: string[]): Promise<PoPExport> {
+  const q = names && names.length > 0
+    ? `?characters=${encodeURIComponent(names.join(','))}`
+    : ''
+  return get<PoPExport>(`/api/popflags/export${q}`)
 }
 
 export function getPopFlags(character: string): Promise<PoPResolved> {

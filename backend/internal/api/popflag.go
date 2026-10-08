@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/character"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/config"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/popflag"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/ws"
@@ -23,6 +24,9 @@ type popflagHandler struct {
 	store *popflag.Store
 	hub   *ws.Hub
 	mgr   *config.Manager
+	// charStore supplies the visible/hidden character list for the overview
+	// grid; nil-safe (falls back to characters with stored flag rows).
+	charStore *character.Store
 }
 
 // WSEventPopflagSnapshot is broadcast after a Seer reading (paste-in or

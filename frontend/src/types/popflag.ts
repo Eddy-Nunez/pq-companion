@@ -67,6 +67,56 @@ export interface PoPFlagDatasetResponse {
   flags: PoPFlag[]
 }
 
+// ── All-characters overview + export ─────────────────────────────────────────
+
+export interface PoPSummaryZone {
+  key: string // full zone name; matches PoPProgress.key
+  label: string // short label, e.g. "PoJ"
+  tier: number
+}
+
+export interface PoPSummaryFlag {
+  id: string
+  done: boolean
+  source?: string
+  locked: boolean
+}
+
+export interface PoPSummaryCharacter {
+  name: string
+  done: number
+  total: number
+  tiers: PoPProgress[]
+  zones: PoPProgress[]
+  flags: PoPSummaryFlag[]
+}
+
+export interface PoPSummaryResponse {
+  characters: PoPSummaryCharacter[]
+  zones: PoPSummaryZone[]
+}
+
+// PoPExport is the versioned JSON envelope from GET /api/popflags/export.
+export interface PoPExport {
+  kind: 'pq-companion.popflags'
+  version: number
+  exported_at: string
+  characters: Array<{
+    name: string
+    done: number
+    total: number
+    zones: Record<string, { done: number; total: number }>
+    flags: Array<{
+      id: string
+      tier: number
+      zone: string
+      label: string
+      done: boolean
+      source?: string
+    }>
+  }>
+}
+
 export interface SeerDetected {
   id: string
   label: string
