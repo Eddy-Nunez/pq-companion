@@ -289,6 +289,13 @@ func distance(a, b any) (float64, bool) {
 	return math.Sqrt(sum), true
 }
 
+// appearanceKeys are the optional appearance fields (a later Zeal addition).
+// They print when present but their absence is not a fault: v1.4.8 and
+// earlier don't send them.
+var appearanceKeys = map[string]bool{
+	"target_texture": true, "target_gender": true, "target_size": true, "target_equipment": true,
+}
+
 // missingKeys lists target descriptors absent from a payload that does have a
 // target_id — i.e. the Zeal build predates the target-descriptor change.
 // target_loc alone being absent is not a fault on a build that has the
@@ -296,7 +303,7 @@ func distance(a, b any) (float64, bool) {
 func missingKeys(p map[string]any) []string {
 	var missing []string
 	for _, k := range targetKeys {
-		if k == "target_id" || (k == "target_loc" && hasDescriptors(p)) {
+		if k == "target_id" || (k == "target_loc" && hasDescriptors(p)) || appearanceKeys[k] {
 			continue
 		}
 		if _, ok := p[k]; !ok {
