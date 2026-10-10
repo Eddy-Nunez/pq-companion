@@ -649,7 +649,7 @@ export function getZoneByShortName(shortName: string): Promise<Zone> {
 // ── Charm Pet Finder (developer-tab feature) ───────────────────────────────────
 
 // CharmSpellOption is one selectable charm spell for a class. restriction is
-// "", "animal", or "undead".
+// "", "animal", "undead", or "summoned".
 export interface CharmSpellOption {
   spell_id: number
   name: string

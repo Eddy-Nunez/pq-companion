@@ -1,4 +1,4 @@
-// Package charm models Project Quarm's four charm-capable classes and their
+// Package charm models Project Quarm's five charm-capable classes and their
 // charm spell lines, plus the small amount of level-scaling math the charm pet
 // finder needs to present a zone's charmable NPCs.
 //
@@ -22,6 +22,7 @@ const (
 	classDruid       = 5
 	classBard        = 7
 	classNecromancer = 10
+	classMagician    = 12
 	classEnchanter   = 13
 )
 
@@ -40,13 +41,17 @@ const (
 	RestrictAnimal
 	// RestrictUndead is the necromancer charm line — undead only.
 	RestrictUndead
+	// RestrictSummoned is the magician charm (Call of the Arch Mage) —
+	// summoned body types (elementals) only.
+	RestrictSummoned
 )
 
 // EQMacEmu (spdat.h) target-type ids seen on the charm line. Single-target
-// charm (5) carries no body gate; the animal/undead target types do.
+// charm (5) carries no body gate; the animal/undead/summoned target types do.
 const (
-	ttAnimal = 9
-	ttUndead = 10
+	ttAnimal   = 9
+	ttUndead   = 10
+	ttSummoned = 11
 )
 
 // RestrictionForTargetType maps a charm spell's targettype to its body gate.
@@ -56,19 +61,23 @@ func RestrictionForTargetType(tt int) BodyRestriction {
 		return RestrictAnimal
 	case ttUndead:
 		return RestrictUndead
+	case ttSummoned:
+		return RestrictSummoned
 	default:
 		return RestrictNone
 	}
 }
 
 // String renders a restriction as the lowercase token the API/UI use ("",
-// "animal", "undead").
+// "animal", "undead", "summoned").
 func (r BodyRestriction) String() string {
 	switch r {
 	case RestrictAnimal:
 		return "animal"
 	case RestrictUndead:
 		return "undead"
+	case RestrictSummoned:
+		return "summoned"
 	default:
 		return ""
 	}
@@ -79,17 +88,25 @@ const (
 	bodyUndead         = 3
 	bodySummonedUndead = 8
 	bodyAnimal         = 21
+	bodySummoned       = 24
+	bodySummoned2      = 27
+	bodySummoned3      = 28
 )
 
 // BodyTypeAllowed reports whether an NPC body type can be charmed under a
 // restriction. Animal charms hit Animal; undead charms hit Undead (including the
-// Summoned Undead variant); unrestricted charms hit anything.
+// Summoned Undead variant); summoned charms hit the three Summoned body types,
+// mirroring EQMacEmu's ST_Summoned target check (zone/spells.cpp) — that's
+// where Quarm's elementals live. Unrestricted charms hit anything.
 func BodyTypeAllowed(r BodyRestriction, bodytype int) bool {
 	switch r {
 	case RestrictAnimal:
 		return bodytype == bodyAnimal
 	case RestrictUndead:
 		return bodytype == bodyUndead || bodytype == bodySummonedUndead
+	case RestrictSummoned:
+		return bodytype == bodySummoned || bodytype == bodySummoned2 ||
+			bodytype == bodySummoned3
 	default:
 		return true
 	}
@@ -173,6 +190,11 @@ var catalog = map[int][]string{
 	classBard: {
 		"Solon's Song of the Sirens", "Solon's Bewitching Bravura", "Call of the Banshee",
 	},
+	// Planes of Power level-65 spell (spell 3484, targettype 11 = summoned,
+	// charms up to level 60). Players often call it "Call of the Arch Magus".
+	classMagician: {
+		"Call of the Arch Mage",
+	},
 }
 
 // direCharmDBNames are the three quarm.db spell names the Dire Charm AA casts,
@@ -198,7 +220,7 @@ var grantedLevels = map[string]int{
 
 // Classes returns the charm-capable class indices, highest-tier line last.
 func Classes() []int {
-	return []int{classEnchanter, classNecromancer, classDruid, classBard}
+	return []int{classEnchanter, classNecromancer, classDruid, classBard, classMagician}
 }
 
 // IsCharmClass reports whether a class index has a charm line.

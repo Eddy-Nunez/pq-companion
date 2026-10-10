@@ -13,12 +13,15 @@ import {
 } from '../services/api'
 import type { Zone } from '../types/zone'
 
-// The four charm-capable classes, in the spells_new / eqstat 0-based ordering.
+// The charm-capable classes, in the spells_new / eqstat 0-based ordering.
+// Magician's only charm is the level-65 PoP spell Call of the Arch Mage
+// (summoned/elemental targets only).
 const CHARM_CLASSES = [
   { idx: 13, name: 'Enchanter' },
   { idx: 10, name: 'Necromancer' },
   { idx: 5, name: 'Druid' },
   { idx: 7, name: 'Bard' },
+  { idx: 12, name: 'Magician' },
 ]
 const ENCHANTER = 13
 

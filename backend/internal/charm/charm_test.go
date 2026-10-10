@@ -84,6 +84,12 @@ func TestBodyTypeAllowed(t *testing.T) {
 		{"undead allows undead", RestrictUndead, bodyUndead, true},
 		{"undead allows summoned undead", RestrictUndead, bodySummonedUndead, true},
 		{"undead rejects animal", RestrictUndead, bodyAnimal, false},
+		{"summoned allows summoned", RestrictSummoned, bodySummoned, true},
+		{"summoned allows summoned2", RestrictSummoned, bodySummoned2, true},
+		{"summoned allows summoned3", RestrictSummoned, bodySummoned3, true},
+		{"summoned rejects humanoid mephit", RestrictSummoned, 1, false},
+		{"summoned rejects monster", RestrictSummoned, 23, false},
+		{"summoned rejects summoned undead", RestrictSummoned, bodySummonedUndead, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -102,6 +108,7 @@ func TestRestrictionForTargetType(t *testing.T) {
 		{5, RestrictNone},
 		{9, RestrictAnimal},
 		{10, RestrictUndead},
+		{11, RestrictSummoned},
 		{0, RestrictNone},
 	}
 	for _, tt := range tests {
