@@ -2369,11 +2369,25 @@ ipcMain.handle('window:set-minimize-to-tray', (_event, enabled: boolean) => {
 // Scales the whole main-window UI like a browser zoom (issue #130). Clamped to
 // a sane range so the UI can't be zoomed into uselessness. Applied to the
 // calling window's webContents so it works regardless of which window asks.
+//
+// Chromium keys zoom by URL, and for file:// (packaged builds) that key is the
+// full URL including the #route — so every in-app navigation silently dropped
+// the main window back to 100%. Remember the requested factor per webContents
+// and re-assert it after each same-document navigation.
+const requestedZoom = new WeakMap<Electron.WebContents, number>()
 ipcMain.handle('window:set-zoom', (event, factor: number) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win || win.isDestroyed()) return
   const clamped = Math.max(0.7, Math.min(2.0, factor || 1))
-  win.webContents.setZoomFactor(clamped)
+  const wc = win.webContents
+  if (!requestedZoom.has(wc)) {
+    wc.on('did-navigate-in-page', () => {
+      const f = requestedZoom.get(wc)
+      if (f !== undefined && wc.getZoomFactor() !== f) wc.setZoomFactor(f)
+    })
+  }
+  requestedZoom.set(wc, clamped)
+  wc.setZoomFactor(clamped)
 })
 
 // ── IPC handlers — synthetic window dragging ─────────────────────────────────

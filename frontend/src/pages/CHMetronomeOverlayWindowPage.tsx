@@ -408,8 +408,8 @@ export default function CHMetronomeOverlayWindowPage(): React.ReactElement {
     <div
       {...rootInteractionProps}
       style={{
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        height: '100%',
         backgroundColor: `rgba(10,10,12,${chrome ? opacity : 0})`,
         // The CAST NOW flash border is a functional cue, so it stays visible
         // even while the fade-when-inactive chrome is hidden.

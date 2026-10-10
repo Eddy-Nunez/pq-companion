@@ -307,6 +307,9 @@ export function ZoneMap({
   depthSlot,
 }: ZoneMapProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  // Mouse coords are viewport px, but the canvas math is in CSS px; they
+  // differ by the popout overlay's CSS zoom (1 in the main window).
+  const cssZoom = (): number => canvasRef.current?.currentCSSZoom || 1
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const [view, setView] = useState({ zoom: 1, panX: 0, panY: 0 })
   const fill = height === 'fill'
@@ -484,7 +487,10 @@ export function ZoneMap({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const dpr = window.devicePixelRatio || 1
+    // currentCSSZoom: a popout overlay's per-window zoom (useOverlayZoom) is
+    // CSS zoom, which devicePixelRatio doesn't include — fold it in so the
+    // backing store stays crisp when the overlay is scaled up.
+    const dpr = (window.devicePixelRatio || 1) * (canvas.currentCSSZoom || 1)
     canvas.width = size.w * dpr
     canvas.height = size.h * dpr
     const ctx = canvas.getContext('2d')
@@ -788,8 +794,9 @@ export function ZoneMap({
     const handler = (e: WheelEvent): void => {
       e.preventDefault()
       const rect = canvas.getBoundingClientRect()
-      const mx = e.clientX - rect.left
-      const my = e.clientY - rect.top
+      const z = canvas.currentCSSZoom || 1
+      const mx = (e.clientX - rect.left) / z
+      const my = (e.clientY - rect.top) / z
       setView((v) => {
         // Zoom toward the cursor rather than the centre, so you can dive into
         // a corner without chasing it with the pan.
@@ -835,8 +842,9 @@ export function ZoneMap({
           drag.current = { x: e.clientX, y: e.clientY, panX: view.panX, panY: view.panY }
         }}
         onPointerMove={(e) => {
+          const z = cssZoom()
           const rect = canvasRef.current?.getBoundingClientRect()
-          if (rect) setHover(toMap(e.clientX - rect.left, e.clientY - rect.top))
+          if (rect) setHover(toMap((e.clientX - rect.left) / z, (e.clientY - rect.top) / z))
           // Snapshot the drag origin before calling setView. The updater runs
           // during a later render pass, by which time onPointerUp may already
           // have cleared drag.current — dereferencing it in there threw and,
@@ -844,8 +852,8 @@ export function ZoneMap({
           // a black screen.
           const d = drag.current
           if (!d) return
-          const dx = e.clientX - d.x
-          const dy = e.clientY - d.y
+          const dx = (e.clientX - d.x) / z
+          const dy = (e.clientY - d.y) / z
           // Release follow before moving, or the recentre effect undoes this
           // pan on the very next position frame.
           if (followPlayer && Math.hypot(dx, dy) > 3) onUserPan?.()
@@ -867,8 +875,9 @@ export function ZoneMap({
           if (moved) return
           const rect = canvasRef.current?.getBoundingClientRect()
           if (!rect) return
-          const mx = e.clientX - rect.left
-          const my = e.clientY - rect.top
+          const cz = cssZoom()
+          const mx = (e.clientX - rect.left) / cz
+          const my = (e.clientY - rect.top) / cz
           const hit = hitTest(mx, my)
           if (hit) {
             onPOIClick?.(hit)

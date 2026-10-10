@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 
 // Expose a safe, typed API to the renderer — no direct Node/Electron access
 contextBridge.exposeInMainWorld('electron', {
@@ -51,6 +51,10 @@ contextBridge.exposeInMainWorld('electron', {
     dragStart: (): Promise<void> => ipcRenderer.invoke('window:drag:start'),
     dragEnd: (): Promise<void> => ipcRenderer.invoke('window:drag:end'),
     setZoom: (factor: number): Promise<void> => ipcRenderer.invoke('window:set-zoom', factor),
+    // This window's current Chromium (Electron) zoom factor. Popout overlays
+    // read it to cancel out zoom that leaks in from same-origin windows (see
+    // useOverlayZoom).
+    getZoom: (): number => webFrame.getZoomFactor(),
     setMinimizeToTray: (enabled: boolean): Promise<void> =>
       ipcRenderer.invoke('window:set-minimize-to-tray', enabled)
   },

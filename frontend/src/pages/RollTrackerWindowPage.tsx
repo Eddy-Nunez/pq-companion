@@ -528,8 +528,8 @@ export default function RollTrackerWindowPage(): React.ReactElement {
     <div
       {...rootInteractionProps}
       style={{
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        height: '100%',
         backgroundColor: `rgba(10,10,12,${chrome ? opacity : 0})`,
         border: `1px solid rgba(255,255,255,${chrome ? 0.12 : 0})`,
         transition: 'background-color 0.4s ease, border-color 0.4s ease',

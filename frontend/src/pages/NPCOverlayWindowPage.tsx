@@ -775,8 +775,8 @@ export default function NPCOverlayWindowPage(): React.ReactElement {
     <div
       {...rootInteractionProps}
       style={{
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: `rgba(10,10,12,${chrome ? opacity : 0})`,
