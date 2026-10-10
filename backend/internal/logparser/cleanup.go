@@ -3,6 +3,7 @@ package logparser
 import (
 	"archive/zip"
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -11,17 +12,14 @@ import (
 	"time"
 )
 
-const (
-	// LogSizeWarningThreshold is the file size (bytes) above which a cleanup
-	// notification is shown in the UI.
-	LogSizeWarningThreshold = 75 * 1024 * 1024 // 75 MB
-
-	// purgeKeepDays is how many days of log entries the cleanup keeps when
-	// trimming the live log. 30 days matches the Chat History retention default
-	// and the typical backfill window, so trimming won't drop entries the
-	// trackers still expect to be able to backfill.
-	purgeKeepDays = 30
-)
+// TrimOptions selects how BackupAndPurge shortens the live log. Exactly one
+// of KeepDays / KeepBytes is used: KeepBytes when it is > 0, else KeepDays.
+type TrimOptions struct {
+	// KeepDays keeps entries newer than this many days.
+	KeepDays int
+	// KeepBytes keeps the newest whole lines fitting in this many bytes.
+	KeepBytes int64
+}
 
 // FileInfo holds metadata about an EQ log file.
 type FileInfo struct {
@@ -33,8 +31,9 @@ type FileInfo struct {
 
 // GetFileInfo returns the size and timestamp range for the given log file.
 // It reads only the first few lines (for oldest) and the last 32 KB (for newest),
-// so it is fast even on very large files.
-func GetFileInfo(path string) (FileInfo, error) {
+// so it is fast even on very large files. LargeFile is set when the size is at
+// least warnBytes; warnBytes <= 0 disables the flag.
+func GetFileInfo(path string, warnBytes int64) (FileInfo, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return FileInfo{}, err
@@ -43,7 +42,7 @@ func GetFileInfo(path string) (FileInfo, error) {
 	size := fi.Size()
 	info := FileInfo{
 		SizeBytes: size,
-		LargeFile: size >= LogSizeWarningThreshold,
+		LargeFile: warnBytes > 0 && size >= warnBytes,
 	}
 
 	f, err := openShared(path)
@@ -86,9 +85,9 @@ func GetFileInfo(path string) (FileInfo, error) {
 }
 
 // BackupAndPurge atomically backs up the log file and rewrites it keeping
-// only the most recent purgeKeepDays days of entries.
+// only the most recent entries selected by opts.
 // Returns the path to the backup file.
-func BackupAndPurge(logPath string) (string, error) {
+func BackupAndPurge(logPath string, opts TrimOptions) (string, error) {
 	dir := filepath.Dir(logPath)
 	base := filepath.Base(logPath)
 	name := strings.TrimSuffix(base, ".txt")
@@ -112,19 +111,25 @@ func BackupAndPurge(logPath string) (string, error) {
 		return backupPath, fmt.Errorf("verify backup: %w", err)
 	}
 
-	// Step 3: Filter lines to the past purgeKeepDays days.
-	cutoff := time.Now().AddDate(0, 0, -purgeKeepDays)
-	kept, err := filterLines(logPath, cutoff)
+	// Step 3: Select the entries to keep.
+	var content []byte
+	if opts.KeepBytes > 0 {
+		content, err = tailLines(logPath, opts.KeepBytes)
+	} else {
+		var kept []string
+		kept, err = filterLines(logPath, time.Now().AddDate(0, 0, -opts.KeepDays))
+		joined := strings.Join(kept, "\n")
+		if len(kept) > 0 {
+			joined += "\n"
+		}
+		content = []byte(joined)
+	}
 	if err != nil {
 		return backupPath, fmt.Errorf("filter lines: %w", err)
 	}
 
 	// Step 4: Rewrite original with filtered content.
-	content := strings.Join(kept, "\n")
-	if len(kept) > 0 {
-		content += "\n"
-	}
-	if err := os.WriteFile(logPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(logPath, content, 0644); err != nil {
 		return backupPath, fmt.Errorf("rewrite log: %w", err)
 	}
 
@@ -208,4 +213,38 @@ func filterLines(path string, cutoff time.Time) ([]string, error) {
 		}
 	}
 	return kept, sc.Err()
+}
+
+// tailLines returns the newest whole lines of path that fit in maxBytes. When
+// the cut lands mid-line, the partial line is dropped so the kept log starts
+// on a clean timestamped entry.
+func tailLines(path string, maxBytes int64) ([]byte, error) {
+	f, err := openShared(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	start := fi.Size() - maxBytes
+	if start <= 0 {
+		return io.ReadAll(f)
+	}
+	// Read one byte early so a cut that lands exactly on a line boundary
+	// keeps that whole line.
+	if _, err := f.Seek(start-1, io.SeekStart); err != nil {
+		return nil, err
+	}
+	buf, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	i := bytes.IndexByte(buf, '\n')
+	if i < 0 {
+		return nil, nil
+	}
+	return buf[i+1:], nil
 }

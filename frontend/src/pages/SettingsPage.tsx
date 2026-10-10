@@ -15,8 +15,8 @@ import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverri
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, updateConfig, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
 import { renderChangelogBody } from '../components/WhatsNewModal'
-import type { Config, DPSClassColors, NPCOverlaySections, TimerAlertPref } from '../types/config'
-import { DEFAULT_DPS_CLASS_COLORS, DEFAULT_NPC_OVERLAY_SECTIONS } from '../types/config'
+import type { Config, DPSClassColors, LogTrimSettings, NPCOverlaySections, TimerAlertPref } from '../types/config'
+import { DEFAULT_DPS_CLASS_COLORS, DEFAULT_LOG_TRIM, DEFAULT_NPC_OVERLAY_SECTIONS } from '../types/config'
 import { withTimerAlertDefaults } from '../lib/timerAlerts'
 import { OVERLAY_DEFS, resolveLockedMode } from '../lib/overlays'
 import type { OverlayName, LockedMode } from '../lib/overlays'
@@ -433,6 +433,9 @@ export default function SettingsPage(): React.ReactElement {
   const [logInfoLoading, setLogInfoLoading] = useState(false)
   const [cleanupState, setCleanupState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [cleanupResult, setCleanupResult] = useState<string | null>(null)
+  // Size of the live log right after Archive & Trim, so the result can say
+  // whether the trim got it under the warning threshold.
+  const [trimmedSize, setTrimmedSize] = useState<number | null>(null)
   // "Restore overlays on launch" — persisted in Electron userData (not the Go
   // config), since it's read at boot before the backend port is resolved.
   const [restoreOverlaysOnLaunch, setRestoreOverlaysOnLaunch] = useState(false)
@@ -687,9 +690,13 @@ export default function SettingsPage(): React.ReactElement {
       setCleanupState('done')
       setLogLargeFile(false)
       setLogFileInfo(null)
+      setTrimmedSize(null)
       // Re-poll size after purge
       getLogStatus()
-        .then((s) => setLogLargeFile(s.large_file))
+        .then((s) => {
+          setLogLargeFile(s.large_file)
+          setTrimmedSize(s.size_bytes)
+        })
         .catch(() => null)
     } catch (err) {
       setCleanupResult((err as Error).message)
@@ -703,6 +710,21 @@ export default function SettingsPage(): React.ReactElement {
   // so the button doesn't invite the click in the first place.
   const logRecentlyActive =
     !!logFileInfo?.newest_entry && Date.now() - new Date(logFileInfo.newest_entry).getTime() < 2 * 60 * 1000
+
+  const logTrim: LogTrimSettings = config?.log_trim ?? DEFAULT_LOG_TRIM
+  function setLogTrim(patch: Partial<LogTrimSettings>): void {
+    if (config) setConfig({ ...config, log_trim: { ...logTrim, ...patch } })
+  }
+
+  // The warning threshold is configurable, so re-check the large-file flag
+  // once a changed threshold has been saved.
+  const savedWarnMB = originalConfig?.log_trim?.warn_mb
+  useEffect(() => {
+    if (savedWarnMB === undefined) return
+    getLogStatus()
+      .then((s) => setLogLargeFile(s.large_file))
+      .catch(() => null)
+  }, [savedWarnMB])
 
   const developerMode = config?.preferences?.developer_mode ?? false
 
@@ -3400,8 +3422,75 @@ export default function SettingsPage(): React.ReactElement {
             )}
           </h2>
           <p className="mb-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-            Archives the current EverQuest log file to a <code className="font-mono">.bak.zip</code> next to it, then trims the live log to the last 30 days of entries. Files over 75 MB are flagged for cleanup. Unrelated to the EQ Config Backups tab — that one protects your <code className="font-mono">.ini</code> files.
+            Archives the current EverQuest log file to a <code className="font-mono">.bak.zip</code> next to it, then trims the live log using the settings below. Unrelated to the EQ Config Backups tab — that one protects your <code className="font-mono">.ini</code> files.
           </p>
+
+          {/* Trim settings */}
+          <div className="mb-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--color-foreground)' }}>
+              <span>Keep the last</span>
+              <input
+                type="number"
+                min={1}
+                value={logTrim.mode === 'size' ? logTrim.keep_mb : logTrim.keep_days}
+                onChange={(e) => {
+                  const n = Math.max(1, parseInt(e.target.value, 10) || 1)
+                  setLogTrim(logTrim.mode === 'size' ? { keep_mb: n } : { keep_days: n })
+                }}
+                className="w-20 rounded px-2 py-1 text-xs"
+                style={{
+                  backgroundColor: 'var(--color-surface-2)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                }}
+              />
+              <select
+                value={logTrim.mode}
+                onChange={(e) => setLogTrim({ mode: e.target.value as LogTrimSettings['mode'] })}
+                className="rounded px-2 py-1 text-xs"
+                style={{
+                  backgroundColor: 'var(--color-surface-2)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                }}
+              >
+                <option value="days">days of entries</option>
+                <option value="size">MB of newest entries</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--color-foreground)' }}>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={logTrim.warn_mb > 0}
+                  onChange={(e) => setLogTrim({ warn_mb: e.target.checked ? DEFAULT_LOG_TRIM.warn_mb : -1 })}
+                />
+                Flag log files larger than
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={logTrim.warn_mb > 0 ? logTrim.warn_mb : DEFAULT_LOG_TRIM.warn_mb}
+                disabled={logTrim.warn_mb <= 0}
+                onChange={(e) => setLogTrim({ warn_mb: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                className="w-20 rounded px-2 py-1 text-xs"
+                style={{
+                  backgroundColor: 'var(--color-surface-2)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                  opacity: logTrim.warn_mb <= 0 ? 0.5 : 1,
+                }}
+              />
+              <span>MB</span>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+              {logTrim.mode === 'days'
+                ? 'Melee classes log many more lines per day than casters, so a day window can still leave a large file. Switch to MB to cap the size directly.'
+                : 'Trimming by size may keep less than 30 days, which limits how far back Log Backfill can reach.'}
+              {logTrim.mode === 'size' && logTrim.warn_mb > 0 && logTrim.keep_mb >= logTrim.warn_mb &&
+                ' The kept size is at or above the warning threshold, so the log will stay flagged after trimming.'}
+            </p>
+          </div>
 
           {/* Load file info */}
           {!logFileInfo && cleanupState === 'idle' && (
@@ -3494,6 +3583,15 @@ export default function SettingsPage(): React.ReactElement {
               <p className="text-xs font-mono break-all" style={{ color: 'var(--color-muted-foreground)' }}>
                 {cleanupResult}
               </p>
+              {trimmedSize !== null && (
+                <p className="text-xs" style={{ color: logLargeFile ? '#f97316' : 'var(--color-muted-foreground)' }}>
+                  Live log is now {(trimmedSize / 1024 / 1024).toFixed(1)} MB.
+                  {logLargeFile && logTrim.mode === 'days' &&
+                    ` That's still over the ${logTrim.warn_mb} MB warning — try fewer days, or keep a fixed number of MB instead.`}
+                  {logLargeFile && logTrim.mode === 'size' &&
+                    ` That's still over the ${logTrim.warn_mb} MB warning — lower the kept MB or raise the warning threshold.`}
+                </p>
+              )}
               <button
                 onClick={() => { setCleanupState('idle'); setCleanupResult(null) }}
                 className="mt-2 flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium"

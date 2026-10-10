@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Settings, Search, ChevronLeft, ChevronRight, ChevronDown, Star } from 'lucide-react'
 import { getLogStatus } from '../services/api'
+import { useWebSocket } from '../hooks/useWebSocket'
+import { WSEvent } from '../lib/wsEvents'
 import CharacterSwitcher from './CharacterSwitcher'
 import { useHistoryNav } from '../hooks/useHistoryNav'
 import { useWindowDrag } from '../hooks/useWindowDrag'
@@ -98,6 +100,15 @@ export default function Sidebar({ onSearchClick }: SidebarProps): React.ReactEle
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [])
+
+  // The large-log threshold is configurable (Settings > Logs), so re-check
+  // when config changes rather than waiting for the next 10-minute poll.
+  useWebSocket((msg) => {
+    if (msg.type !== WSEvent.ConfigUpdated) return
+    getLogStatus()
+      .then((s) => setLogLargeFile(s.large_file))
+      .catch(() => null)
+  })
 
   return (
     <aside

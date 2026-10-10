@@ -46,7 +46,7 @@ func (h *logHandler) status(w http.ResponseWriter, r *http.Request) {
 	var sizeBytes int64
 	var largeFile bool
 	if s.FileExists && s.FilePath != "" {
-		if fi, err := logparser.GetFileInfo(s.FilePath); err == nil {
+		if fi, err := logparser.GetFileInfo(s.FilePath, h.warnBytes()); err == nil {
 			sizeBytes = fi.SizeBytes
 			largeFile = fi.LargeFile
 		}
@@ -89,7 +89,7 @@ func (h *logHandler) info(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fi, err := logparser.GetFileInfo(s.FilePath)
+	fi, err := logparser.GetFileInfo(s.FilePath, h.warnBytes())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not read log file")
 		return
@@ -131,8 +131,30 @@ func (h *logHandler) browse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// cleanup handles POST /api/log/cleanup — backs up the log file and purges
-// entries older than the retention window (see logparser.purgeKeepDays).
+// warnBytes is the configured large-log threshold (0 = warning disabled).
+func (h *logHandler) warnBytes() int64 {
+	return h.mgr.Get().LogTrim.WarnBytes()
+}
+
+// trimOptions maps the configured Archive & Trim mode onto logparser options.
+func (h *logHandler) trimOptions() logparser.TrimOptions {
+	lt := h.mgr.Get().LogTrim
+	if lt.Mode == config.LogTrimModeSize {
+		mb := lt.KeepMB
+		if mb <= 0 {
+			mb = config.DefaultLogTrimKeepMB
+		}
+		return logparser.TrimOptions{KeepBytes: int64(mb) * 1024 * 1024}
+	}
+	days := lt.KeepDays
+	if days <= 0 {
+		days = config.DefaultLogTrimKeepDays
+	}
+	return logparser.TrimOptions{KeepDays: days}
+}
+
+// cleanup handles POST /api/log/cleanup — backs up the log file and trims it
+// to the configured window (Config.LogTrim: last N days or last N MB).
 func (h *logHandler) cleanup(w http.ResponseWriter, r *http.Request) {
 	s := h.tailer.Status()
 	if !s.FileExists || s.FilePath == "" {
@@ -140,12 +162,12 @@ func (h *logHandler) cleanup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if fi, err := logparser.GetFileInfo(s.FilePath); err == nil && !fi.NewestEntry.IsZero() && time.Since(fi.NewestEntry) < liveWriteWindow {
+	if fi, err := logparser.GetFileInfo(s.FilePath, 0); err == nil && !fi.NewestEntry.IsZero() && time.Since(fi.NewestEntry) < liveWriteWindow {
 		writeError(w, http.StatusConflict, "log file was written to in the last couple minutes — camp out of EverQuest before archiving, since it still has the file open")
 		return
 	}
 
-	backupPath, err := logparser.BackupAndPurge(s.FilePath)
+	backupPath, err := logparser.BackupAndPurge(s.FilePath, h.trimOptions())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

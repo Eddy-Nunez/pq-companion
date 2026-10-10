@@ -487,6 +487,23 @@ export interface DPSClassColors {
   unknown: string
 }
 
+// How Archive & Trim shortens the live log: keep the last keep_days days of
+// entries, or the newest keep_mb megabytes. warn_mb is the size at which the
+// log is flagged as large; a negative value disables the warning.
+export interface LogTrimSettings {
+  mode: 'days' | 'size'
+  keep_days: number
+  keep_mb: number
+  warn_mb: number
+}
+
+export const DEFAULT_LOG_TRIM: LogTrimSettings = {
+  mode: 'days',
+  keep_days: 30,
+  keep_mb: 50,
+  warn_mb: 75,
+}
+
 export const DEFAULT_DPS_CLASS_COLORS: DPSClassColors = {
   warrior: '#C79C6E',
   cleric: '#FFFFFF',
@@ -522,6 +539,8 @@ export interface Config {
   // negative value (-1) keeps chat forever. 0 is coerced to the default
   // server-side.
   chat_retention_days: number
+  // Settings > Logs Archive & Trim window and large-log warning threshold.
+  log_trim: LogTrimSettings
   // App version the user last saw the "what's new" popup for. Empty means
   // "never stamped" (fresh install) — the popup is skipped in that case.
   last_seen_changelog_version: string

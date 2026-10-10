@@ -21,7 +21,7 @@ func TestBackupAndPurge(t *testing.T) {
 		t.Fatalf("write log: %v", err)
 	}
 
-	backupPath, err := BackupAndPurge(logPath)
+	backupPath, err := BackupAndPurge(logPath, TrimOptions{KeepDays: 30})
 	if err != nil {
 		t.Fatalf("BackupAndPurge: %v", err)
 	}
@@ -67,5 +67,40 @@ func TestBackupAndPurge(t *testing.T) {
 	}
 	if !strings.Contains(string(trimmed), "new line") {
 		t.Errorf("trimmed log missing new line: %q", trimmed)
+	}
+}
+
+func TestBackupAndPurgeKeepBytes(t *testing.T) {
+	ts := "[" + time.Now().Format("Mon Jan 02 15:04:05 2006") + "] "
+	lines := []string{ts + "line one", ts + "line two", ts + "line three"}
+	original := strings.Join(lines, "\n") + "\n"
+
+	tests := []struct {
+		name      string
+		keepBytes int64
+		want      string
+	}{
+		{"larger than file keeps everything", 1 << 20, original},
+		{"cut on line boundary keeps that line", int64(len(lines[2]) + 1), lines[2] + "\n"},
+		{"cut mid-line drops the partial line", int64(len(lines[2]) + 5), lines[2] + "\n"},
+		{"too small for any whole line", 3, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "eqlog_Test_pq.proj.txt")
+			if err := os.WriteFile(logPath, []byte(original), 0644); err != nil {
+				t.Fatalf("write log: %v", err)
+			}
+			if _, err := BackupAndPurge(logPath, TrimOptions{KeepBytes: tt.keepBytes}); err != nil {
+				t.Fatalf("BackupAndPurge: %v", err)
+			}
+			got, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("read trimmed log: %v", err)
+			}
+			if string(got) != tt.want {
+				t.Errorf("trimmed = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

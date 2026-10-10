@@ -77,6 +77,58 @@ type Config struct {
 	// can't tell a missing field from an explicit 0, so applyDefaults treats 0
 	// as "use the default"; "keep forever" is stored as -1.
 	ChatRetentionDays int `yaml:"chat_retention_days" json:"chat_retention_days"`
+
+	// LogTrim configures Settings > Logs "Archive & Trim" and the large-log
+	// warning threshold.
+	LogTrim LogTrimSettings `yaml:"log_trim" json:"log_trim"`
+}
+
+// Log trim modes for LogTrimSettings.Mode.
+const (
+	LogTrimModeDays = "days" // keep the last KeepDays days of entries
+	LogTrimModeSize = "size" // keep the newest KeepMB megabytes of the file
+)
+
+// Defaults for LogTrimSettings. 30 days matches the Chat History retention
+// default and the typical backfill window; 75 MB is the long-standing
+// warning threshold.
+const (
+	DefaultLogTrimKeepDays = 30
+	DefaultLogTrimKeepMB   = 50
+	DefaultLogWarnMB       = 75
+)
+
+// LogTrimSettings controls how Archive & Trim shortens the live EQ log and
+// when the UI flags the log as large. Melee classes log far more lines per
+// day than casters, so a fixed day window can leave a monk's log well over
+// the warning threshold — size mode lets them trim by bytes instead.
+type LogTrimSettings struct {
+	// Mode is LogTrimModeDays or LogTrimModeSize. Empty means days.
+	Mode string `yaml:"mode" json:"mode"`
+
+	// KeepDays is how many days of entries days-mode keeps. 0 = default.
+	KeepDays int `yaml:"keep_days" json:"keep_days"`
+
+	// KeepMB is how many megabytes of the newest entries size-mode keeps.
+	// 0 = default.
+	KeepMB int `yaml:"keep_mb" json:"keep_mb"`
+
+	// WarnMB is the file size above which the log is flagged as large.
+	// 0 = default; a negative value disables the warning.
+	WarnMB int `yaml:"warn_mb" json:"warn_mb"`
+}
+
+// WarnBytes returns the large-log threshold in bytes, or 0 when the warning
+// is disabled.
+func (s LogTrimSettings) WarnBytes() int64 {
+	if s.WarnMB < 0 {
+		return 0
+	}
+	mb := s.WarnMB
+	if mb == 0 {
+		mb = DefaultLogWarnMB
+	}
+	return int64(mb) * 1024 * 1024
 }
 
 // BackupSettings configures automatic backup behaviour.
@@ -1152,7 +1204,13 @@ func defaults() Config {
 		},
 		CHChain:           DefaultCHChainSettings(),
 		ChatRetentionDays: 30,
-		DPSClassColors:    DefaultDPSClassColors(),
+		LogTrim: LogTrimSettings{
+			Mode:     LogTrimModeDays,
+			KeepDays: DefaultLogTrimKeepDays,
+			KeepMB:   DefaultLogTrimKeepMB,
+			WarnMB:   DefaultLogWarnMB,
+		},
+		DPSClassColors: DefaultDPSClassColors(),
 	}
 }
 
@@ -1266,6 +1324,24 @@ func applyDefaults(cfg *Config) bool {
 	// (keep forever).
 	if cfg.ChatRetentionDays == 0 {
 		cfg.ChatRetentionDays = 30
+		changed = true
+	}
+	// Log trim: same "0 means use the default" convention. WarnMB < 0 is a
+	// deliberate "never warn" and is left alone.
+	if cfg.LogTrim.Mode != LogTrimModeDays && cfg.LogTrim.Mode != LogTrimModeSize {
+		cfg.LogTrim.Mode = LogTrimModeDays
+		changed = true
+	}
+	if cfg.LogTrim.KeepDays <= 0 {
+		cfg.LogTrim.KeepDays = DefaultLogTrimKeepDays
+		changed = true
+	}
+	if cfg.LogTrim.KeepMB <= 0 {
+		cfg.LogTrim.KeepMB = DefaultLogTrimKeepMB
+		changed = true
+	}
+	if cfg.LogTrim.WarnMB == 0 {
+		cfg.LogTrim.WarnMB = DefaultLogWarnMB
 		changed = true
 	}
 	// TTS speaking rate: backfill configs that predate the setting so the
