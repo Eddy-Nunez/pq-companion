@@ -72,9 +72,11 @@ export function useFilteredTimers(): {
     [scoped, config.respectThresholds, thresholds],
   )
 
+  // Without the pipe the roster is just the active player, which would make
+  // every group read "1 / 1" — the view shows a "needs Zeal" hint instead.
   const roster = useMemo(
-    () => (config.showMissing ? party.names : []),
-    [config.showMissing, party.names],
+    () => (config.showMissing && party.zealConnected ? party.names : []),
+    [config.showMissing, party.zealConnected, party.names],
   )
   const groups = useMemo(
     () => applyTimerFilter(timers ?? [], config, {
