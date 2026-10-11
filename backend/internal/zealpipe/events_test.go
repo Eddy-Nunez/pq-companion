@@ -433,3 +433,22 @@ func TestCleanTargetName(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeDeath(t *testing.T) {
+	d, err := DecodeDeath(`{"spawn_id":1234,"name":"a gnoll pup","type":1,"level":12,"killer_id":567,"killer_name":"Soandso"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SpawnID != 1234 || d.Name != "a gnoll pup" || d.Type == nil || *d.Type != 1 ||
+		d.Level == nil || *d.Level != 12 || d.KillerID != 567 || d.KillerName != "Soandso" {
+		t.Errorf("unexpected decode: %+v", d)
+	}
+	// Unknown spawn, no killer: optional fields absent.
+	d, err = DecodeDeath(`{"spawn_id":9,"killer_id":0}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SpawnID != 9 || d.Name != "" || d.Type != nil || d.KillerID != 0 {
+		t.Errorf("unexpected decode: %+v", d)
+	}
+}

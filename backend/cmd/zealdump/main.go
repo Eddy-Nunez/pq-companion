@@ -11,6 +11,7 @@
 //	go run ./cmd/zealdump -raw       # every player payload, verbatim
 //	go run ./cmd/zealdump -every     # every tick, not just on change
 //	go run ./cmd/zealdump -types     # count envelopes per type; sample per type
+//	go run ./cmd/zealdump -deaths    # one line per death event (type 7)
 //	go run ./cmd/zealdump -file cap  # replay a capture instead of dialing
 //
 // To keep a capture for later: go run ./cmd/zealdump -raw > capture.txt
@@ -32,6 +33,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/jasonsoprovich/pq-companion/backend/internal/zealpipe"
 )
@@ -65,6 +67,7 @@ func main() {
 	raw := flag.Bool("raw", false, "print every player payload verbatim")
 	every := flag.Bool("every", false, "print every tick, not just when the target changes")
 	types := flag.Bool("types", false, "count envelopes per type; print one sample payload per type (diagnoses which message types a Zeal build actually emits — e.g. raid/type 5)")
+	deaths := flag.Bool("deaths", false, "print one line per death event (type 7, proposed Zeal PR) instead of target changes")
 	pipeName := flag.String("pipe", "", "pipe to read (default: first one discovered)")
 	fromFile := flag.String("file", "", "read a saved capture instead of dialing a pipe")
 	flag.Parse()
@@ -86,7 +89,60 @@ func main() {
 	}
 	defer conn.Close()
 
+	if *deaths {
+		runDeaths(ctx, conn)
+		return
+	}
 	run(ctx, conn, *raw, *every, *types)
+}
+
+// runDeaths prints one line per death event with a running total, so a
+// tester can compare the count against the "has been slain" lines in the
+// EQ log for the same stretch of play.
+func runDeaths(ctx context.Context, conn io.Reader) {
+	fmt.Println("waiting for death events (type 7). Ctrl+C to stop.")
+	n := 0
+	dec := json.NewDecoder(conn)
+	for ctx.Err() == nil {
+		var env zealpipe.Envelope
+		if err := dec.Decode(&env); err != nil {
+			if !errors.Is(err, io.EOF) && ctx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "\nread ended: %v\n", err)
+			}
+			break
+		}
+		if env.Type != zealpipe.MsgDeath {
+			continue
+		}
+		n++
+		fmt.Printf("%s #%d %s\n", time.Now().Format("15:04:05"), n, formatDeath(env.Data))
+	}
+	fmt.Printf("\n%d death events\n", n)
+}
+
+// formatDeath renders one death payload as a single line.
+func formatDeath(payload string) string {
+	d, err := zealpipe.DecodeDeath(payload)
+	if err != nil {
+		return "undecodable: " + payload
+	}
+	name := d.Name
+	if name == "" {
+		name = "(unknown spawn)"
+	}
+	typ := "?"
+	if d.Type != nil {
+		typ = spawnTypeNames[*d.Type]
+	}
+	lvl := "?"
+	if d.Level != nil {
+		lvl = fmt.Sprint(*d.Level)
+	}
+	killer := "no killer"
+	if d.KillerID != 0 {
+		killer = fmt.Sprintf("killer=%d %s", d.KillerID, d.KillerName)
+	}
+	return fmt.Sprintf("id=%d name=%s type=%s level=%s %s", d.SpawnID, name, typ, lvl, killer)
 }
 
 // dialPipe discovers and opens a live Zeal pipe, exiting with a diagnostic if

@@ -286,6 +286,20 @@ type GroupMember struct {
 	ZoneID  *int      `json:"zone_id,omitempty"`    // PipeVerbose only
 }
 
+// Death is a MsgDeath (type 7) payload: Zeal forwards every OP_Death the
+// server sends, which covers every death in the zone — not just the ones
+// the client prints a "has been slain" line for. Name/Type/Level/KillerName
+// are omitted when the client didn't know the spawn; KillerID is 0 when the
+// server reported no killer (e.g. a DoT tick).
+type Death struct {
+	SpawnID    int    `json:"spawn_id"`
+	Name       string `json:"name,omitempty"`
+	Type       *int   `json:"type,omitempty"`
+	Level      *int   `json:"level,omitempty"`
+	KillerID   int    `json:"killer_id"`
+	KillerName string `json:"killer_name,omitempty"`
+}
+
 // Location is a 3D world position, with Zeal's field names.
 //
 // Read GameX/GameY rather than these fields directly — see the methods below.
@@ -383,6 +397,15 @@ func DecodeRaid(payload string) ([]RaidMember, error) {
 		return nil, fmt.Errorf("zealpipe: decode raid: %w", err)
 	}
 	return members, nil
+}
+
+// DecodeDeath parses a MsgDeath (type 7) payload.
+func DecodeDeath(payload string) (Death, error) {
+	var d Death
+	if err := json.Unmarshal([]byte(payload), &d); err != nil {
+		return d, fmt.Errorf("zealpipe: decode death: %w", err)
+	}
+	return d, nil
 }
 
 // DecodeGroup parses a MsgGroup (type 6) payload — an array of GroupMember.

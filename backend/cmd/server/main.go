@@ -1535,6 +1535,18 @@ func main() {
 			// see spelltimer.Engine.keyTargetTokenLocked.
 			timerEngine.SetPipeTargetID(p.TargetID)
 			return
+		case zealpipe.MsgDeath:
+			// A death anywhere in the zone, by spawn id. The log's "has been
+			// slain" lines miss most raid kills, which left spawn-id-tagged
+			// detrimental timers (only cleared by exact id) running on dead
+			// mobs. Proposed Zeal PR — never arrives on released builds.
+			d, err := zealpipe.DecodeDeath(env.Data)
+			if err != nil {
+				slog.Debug("zealpipe: decode death failed", "err", err)
+				return
+			}
+			timerEngine.HandlePipeDeath(d.SpawnID, d.Name)
+			return
 		case zealpipe.MsgGroup:
 			// Groupmates' live map positions. Only members Zeal resolved in the
 			// player's own zone carry loc — that's exactly the set we can place

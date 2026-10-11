@@ -265,6 +265,19 @@ type pendingKill struct {
 	at   time.Time
 }
 
+// pipeDeath is one Zeal pipe death event, kept for pipeDeathWindow — see
+// Engine.pipeDeaths.
+type pipeDeath struct {
+	name string // normalizeNPCName(name)
+	at   time.Time
+}
+
+// pipeDeathWindow is how far apart a pipe death event and a log kill line
+// for the same death may land. The pipe normally wins (Zeal forwards the
+// packet before the client prints the chat line, which the tailer then
+// polls), but a lagging pipe tick can reorder them.
+const pipeDeathWindow = 3 * time.Second
+
 // keyTargetTokenLocked returns targetName as-is, or targetName with a
 // disambiguating "#id:<spawnid>" suffix appended, when this StartExternal
 // call can be confidently attributed to the active character's own very
@@ -594,6 +607,12 @@ type Engine struct {
 	// pendingKill and resolvePendingKillsLocked.
 	pendingKills []pendingKill
 
+	// pipeDeaths records recent death events from the Zeal pipe (see
+	// HandlePipeDeath) so an ambiguous log-driven kill of the same name,
+	// arriving just before or after, is recognised as already resolved
+	// instead of flagging the surviving same-named timers MaybeDead.
+	pipeDeaths []pipeDeath
+
 	// pipeBuffSlots is the most recent self-buff slot snapshot from the pipe
 	// (Buff0..14, plus 15..20 from game.dll). Stored as a set keyed by spell
 	// name. Used for divergence logging against the engine's active self-buff
@@ -845,6 +864,7 @@ func (e *Engine) Handle(ev logparser.LogEvent) {
 		e.mu.Lock()
 		e.aliveSeenIDs = make(map[int]time.Time)
 		e.pendingKills = nil
+		e.pipeDeaths = nil
 		e.lastAliveClearedID = 0
 		e.mu.Unlock()
 
@@ -2561,6 +2581,12 @@ func (e *Engine) resolvePendingKillsLocked(now time.Time) {
 	}
 	kept := e.pendingKills[:0]
 	for _, pk := range e.pendingKills {
+		if e.pipeDeathNearLocked(pk.name, pk.at) {
+			// The pipe reported this death by spawn id, so HandlePipeDeath
+			// already removed exactly the right timer and the same-named
+			// survivors are known to be alive.
+			continue
+		}
 		anyTagged := false
 		settle := now.Sub(pk.at) >= killEvidenceGrace
 		for k, t := range e.timers {
@@ -2584,6 +2610,79 @@ func (e *Engine) resolvePendingKillsLocked(now time.Time) {
 		}
 	}
 	e.pendingKills = kept
+}
+
+// HandlePipeDeath handles a Zeal pipe death event: the server tells every
+// client in the zone about every death, so unlike the log's "has been
+// slain" lines — which, in a large raid, only show up for a fraction of the
+// kills (54 lines for ~150 deaths in one measured Crypt of Decay session) —
+// this reaches every timer bound to a mob that died.
+//
+// A spawn-id-tagged timer is removed only on an exact id match, so a
+// same-named mob dying elsewhere leaves it alone. An untagged timer falls
+// back to the same name match removeOnKill uses for a log kill (charm
+// excepted, for the same reason). Unlike removeOnKill there is no orphan
+// sweep of target-less detrimentals: deaths arrive for every mob in the
+// zone, and wiping those on each one would make the sweep's known
+// collateral (an unrelated add clearing a boss debuff) constant.
+func (e *Engine) HandlePipeDeath(spawnID int, name string) {
+	if spawnID <= 0 {
+		return
+	}
+	norm := normalizeNPCName(name)
+	now := time.Now()
+	e.mu.Lock()
+	removed := 0
+	for k, t := range e.timers {
+		if t.Stacked {
+			continue
+		}
+		var match bool
+		if id := parseKeyTargetID(k); id != 0 {
+			match = id == spawnID
+		} else {
+			match = norm != "" && !t.IsCharm && normalizeNPCName(t.TargetName) == norm
+		}
+		if match {
+			delete(e.timers, k)
+			removed++
+		}
+	}
+	delete(e.aliveSeenIDs, spawnID)
+	if norm != "" {
+		kept := e.pipeDeaths[:0]
+		for _, d := range e.pipeDeaths {
+			if now.Sub(d.at) <= pipeDeathWindow {
+				kept = append(kept, d)
+			}
+		}
+		e.pipeDeaths = append(kept, pipeDeath{name: norm, at: now})
+	}
+	var snap TimerState
+	if removed > 0 {
+		snap = e.snapshot(now)
+	}
+	e.mu.Unlock()
+
+	if removed > 0 {
+		slog.Debug("timer-debug: removed timers on pipe death",
+			"target", name, "spawn_id", spawnID, "removed", removed)
+		e.hub.Broadcast(ws.Event{Type: WSEventTimers, Data: snap})
+	}
+}
+
+// pipeDeathNearLocked reports whether the pipe reported a death of name
+// within pipeDeathWindow of at. Caller must hold e.mu.
+func (e *Engine) pipeDeathNearLocked(name string, at time.Time) bool {
+	for _, d := range e.pipeDeaths {
+		if d.name != name {
+			continue
+		}
+		if diff := d.at.Sub(at); diff <= pipeDeathWindow && diff >= -pipeDeathWindow {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeNPCName returns a lowercased, trimmed form of an NPC name with any

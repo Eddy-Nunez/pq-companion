@@ -32,6 +32,8 @@ const (
 	//                               group/rank always, loc/hp for in-zone members
 	MsgGroup PipeMessageType = 6 // group roster (DecodeGroup) — name/loc always,
 	//                              hp/class/level only under "/pipe verbose on"
+	MsgDeath PipeMessageType = 7 // one death anywhere in the zone (DecodeDeath);
+	//                              proposed Zeal PR, absent on released builds
 )
 
 // String returns a human-readable name for logging.
@@ -51,6 +53,8 @@ func (t PipeMessageType) String() string {
 		return "raid"
 	case MsgGroup:
 		return "group"
+	case MsgDeath:
+		return "death"
 	default:
 		return "unknown"
 	}
