@@ -4281,6 +4281,7 @@ const OVERLAY_POPOUT_TOGGLE: Record<OverlayName, () => void> = {
   dps:          () => { window.electron?.overlay?.toggleDPS() },
   hps:          () => { window.electron?.overlay?.toggleHPS() },
   buffTimer:    () => { window.electron?.overlay?.toggleBuffTimer() },
+  filteredTimer: () => { window.electron?.overlay?.toggleFilteredTimer() },
   detrimTimer:  () => { window.electron?.overlay?.toggleDetrimTimer() },
   customTimer:  () => { window.electron?.overlay?.toggleCustomTimer() },
   npc:          () => { window.electron?.overlay?.toggleNPC() },

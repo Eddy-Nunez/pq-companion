@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, Monitor, MonitorPlay, RotateCcw, ExternalLink, Layers, X, Crosshair, ChevronDown, Move, ListChecks, Trash2, Hourglass } from 'lucide-react'
 import type { OverlayName } from '../lib/overlays'
 import BuffTimerPanel from '../components/overlays/BuffTimerPanel'
+import FilteredTimerPanel from '../components/overlays/FilteredTimerPanel'
 import DetrimTimerPanel from '../components/overlays/DetrimTimerPanel'
 import DPSPanel from '../components/overlays/DPSPanel'
 import HPSPanel from '../components/overlays/HPSPanel'
@@ -83,6 +84,7 @@ const PANEL_POPOUT: Record<DashboardPanelKey, { name: OverlayName; toggle: () =>
   liveMap:     { name: 'liveMap',      toggle: () => { window.electron?.overlay?.toggleLiveMap() } },
   zoneLockouts: { name: 'zoneLockouts', toggle: () => { window.electron?.overlay?.toggleZoneLockouts() } },
   raidReadiness: { name: 'raidReadiness', toggle: () => { window.electron?.overlay?.toggleRaidReadiness() } },
+  filtered:    { name: 'filteredTimer', toggle: () => { window.electron?.overlay?.toggleFilteredTimer() } },
 }
 
 // Compact square icon button for the manager's per-overlay rows.
@@ -811,6 +813,17 @@ export default function OverlaysDashboard(): React.ReactElement {
             defaultHeight={layout.buff.height}
             snapGridSize={SNAP_GRID}
             onLayoutChange={handleLayoutChange('buff')}
+          />
+        )}
+        {layout.filtered.visible && (
+          <FilteredTimerPanel
+            key={`filtered-${layoutVersion}`}
+            defaultX={layout.filtered.x}
+            defaultY={layout.filtered.y}
+            defaultWidth={layout.filtered.width}
+            defaultHeight={layout.filtered.height}
+            snapGridSize={SNAP_GRID}
+            onLayoutChange={handleLayoutChange('filtered')}
           />
         )}
         {layout.detrim.visible && (

@@ -27,6 +27,7 @@ export type OverlayName =
   | 'liveMap'
   | 'zoneLockouts'
   | 'raidReadiness'
+  | 'filteredTimer'
 
 /**
  * How an overlay behaves while locked.
@@ -66,6 +67,7 @@ export const OVERLAY_DEFS: { name: OverlayName; label: string }[] = [
   { name: 'hps', label: 'HPS Meter' },
   { name: 'buffTimer', label: 'Buff Timers' },
   { name: 'detrimTimer', label: 'Detrimental Timers' },
+  { name: 'filteredTimer', label: 'Filtered Timers' },
   { name: 'customTimer', label: 'Custom Timers' },
   { name: 'npc', label: 'NPC Info' },
   { name: 'threat', label: 'Threat Meter' },

@@ -1411,6 +1411,39 @@ These are inherent to log-file parsing and affect multiple features:
 
 ---
 
+## 21. Filtered Timers overlay
+
+### 21.1 "Missing" list can't see buffs you didn't track
+
+- **Limitation:** The beneficial "by spell" view's *Show missing* list
+  marks a group/raid member as missing a spell whenever the app has no
+  timer for that spell on them. Someone who got the buff from another
+  caster out of range, before the app started, or while the scope was
+  `self`/`cast_by_me` shows up as "missing" even though they have it.
+- **Root cause:** The list is a diff of the Zeal roster against the
+  spell-timer engine's timers. Timers exist only for land messages the
+  engine saw and accepted under the tracking scope (§2, §11.2). Nothing in
+  the log or the pipe reports another player's buff list.
+- **Sources checked:** Log (land messages only, range-limited and
+  scope-filtered), Zeal (raid roster via MsgRaid, in-zone groupmates via
+  MsgGroup; no buff list for other players).
+- **Could a future data source fix this?** Partially. A Zeal field
+  exposing groupmates' buff slots would make the group case exact. Raid
+  members outside the group would still be unknown.
+
+### 21.2 No caster attribution on other players' debuffs
+
+- **Limitation:** The detrimental "by mob" view can't show who cast each
+  debuff (e.g. "Slow — cast by Fatlady"), except your own.
+- **Root cause:** Other players' casts log only as "Soandso begins to cast
+  a spell." with no spell name (§2), and land messages don't carry the
+  caster either.
+- **Sources checked:** Log (caster-less land text), Zeal (local client only).
+- **Could a future data source fix this?** No, not with the current Zeal
+  pipe, which reports only the local client's casts.
+
+---
+
 ## Template for new entries
 
 ```

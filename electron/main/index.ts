@@ -277,7 +277,7 @@ function audioMimeType(ext: string): string {
 
 // ── Overlay bounds persistence ────────────────────────────────────────────────
 
-type OverlayName = 'dps' | 'hps' | 'buffTimer' | 'detrimTimer' | 'customTimer' | 'trigger' | 'npc' | 'threat' | 'rollTracker' | 'respawnTimer' | 'chChain' | 'chMetronome' | 'discordVoice' | 'liveMap' | 'zoneLockouts' | 'raidReadiness'
+type OverlayName = 'dps' | 'hps' | 'buffTimer' | 'detrimTimer' | 'customTimer' | 'trigger' | 'npc' | 'threat' | 'rollTracker' | 'respawnTimer' | 'chChain' | 'chMetronome' | 'discordVoice' | 'liveMap' | 'zoneLockouts' | 'raidReadiness' | 'filteredTimer'
 type Bounds = { x: number; y: number; width: number; height: number }
 
 // A window's identity for bounds/lock persistence and the generic per-window
@@ -317,6 +317,7 @@ const OVERLAY_DEFAULTS: Record<Exclude<OverlayName, 'trigger'>, Bounds> = {
   discordVoice: { x: 0, y: 0, width: 220, height: 340 },
   zoneLockouts: { x: 0, y: 0, width: 300, height: 320 },
   raidReadiness: { x: 0, y: 0, width: 280, height: 260 },
+  filteredTimer: { x: 0, y: 0, width: 300, height: 380 },
 }
 
 function boundsFilePath(): string {
@@ -758,6 +759,7 @@ let mainWindow: BrowserWindow | null = null
 let dpsOverlayWindow: BrowserWindow | null = null
 let hpsOverlayWindow: BrowserWindow | null = null
 let buffTimerWindow: BrowserWindow | null = null
+let filteredTimerWindow: BrowserWindow | null = null
 let chChainWindow: BrowserWindow | null = null
 let chMetronomeWindow: BrowserWindow | null = null
 let liveMapWindow: BrowserWindow | null = null
@@ -1427,6 +1429,61 @@ function createBuffTimerOverlay(): void {
 
   buffTimerWindow.on('closed', () => {
     buffTimerWindow = null
+  })
+}
+
+// ── Filtered Timers overlay window ────────────────────────────────────────────
+
+function createFilteredTimerOverlay(): void {
+  if (filteredTimerWindow && !filteredTimerWindow.isDestroyed()) {
+    filteredTimerWindow.focus()
+    return
+  }
+
+  const { x, y, width, height } = getRestoredBounds('filteredTimer', OVERLAY_DEFAULTS.filteredTimer)
+  filteredTimerWindow = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    minWidth: 240,
+    minHeight: 140,
+    transparent: true,
+    backgroundColor: '#00000000',
+    frame: false,
+    resizable: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false, // show after ready-to-show to avoid blank-frame flash
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    },
+  })
+
+  filteredTimerWindow.once('ready-to-show', () => {
+    filteredTimerWindow?.show()
+  })
+
+  filteredTimerWindow.setAlwaysOnTop(true, 'screen-saver')
+  filteredTimerWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  windowToOverlayName.set(filteredTimerWindow, 'filteredTimer')
+  applyInitialOverlayInput(filteredTimerWindow, 'filteredTimer')
+  trackOverlayBounds('filteredTimer', filteredTimerWindow)
+
+  if (isDev) {
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173'
+    filteredTimerWindow.loadURL(`${rendererUrl}/#/filtered-timer-window`)
+  } else {
+    filteredTimerWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: '/filtered-timer-window',
+    })
+  }
+
+  filteredTimerWindow.on('closed', () => {
+    filteredTimerWindow = null
   })
 }
 
@@ -2546,6 +2603,24 @@ ipcMain.handle('overlay:bufftimer:toggle', () => {
   }
 })
 
+ipcMain.handle('overlay:filteredtimer:open', () => {
+  createFilteredTimerOverlay()
+})
+
+ipcMain.handle('overlay:filteredtimer:close', () => {
+  if (filteredTimerWindow && !filteredTimerWindow.isDestroyed()) {
+    filteredTimerWindow.close()
+  }
+})
+
+ipcMain.handle('overlay:filteredtimer:toggle', () => {
+  if (filteredTimerWindow && !filteredTimerWindow.isDestroyed()) {
+    filteredTimerWindow.close()
+  } else {
+    createFilteredTimerOverlay()
+  }
+})
+
 ipcMain.handle('overlay:chchain:open', () => {
   createCHChainOverlay()
 })
@@ -2936,6 +3011,7 @@ function userPopoutWindows(): BrowserWindow[] {
     discordVoiceOverlayWindow,
     zoneLockoutsWindow,
     raidReadinessWindow,
+    filteredTimerWindow,
   ].filter((w): w is BrowserWindow => !!w && !w.isDestroyed())
   return [...fixed, ...customTimerGroupWindows.values()].filter((w) => !w.isDestroyed())
 }
@@ -2979,6 +3055,7 @@ ipcMain.handle('overlay:popouts:open-all', (_event, panels?: PopoutRequestEntry[
   if (wants('discordVoice') && (!discordVoiceOverlayWindow || discordVoiceOverlayWindow.isDestroyed())) createDiscordVoiceOverlay()
   if (wants('zoneLockouts') && (!zoneLockoutsWindow || zoneLockoutsWindow.isDestroyed())) createZoneLockoutsOverlay()
   if (wants('raidReadiness') && (!raidReadinessWindow || raidReadinessWindow.isDestroyed())) createRaidReadinessOverlay()
+  if (wants('filtered') && (!filteredTimerWindow || filteredTimerWindow.isDestroyed())) createFilteredTimerOverlay()
   for (const g of groupWants) {
     const win = customTimerGroupWindows.get(g.id)
     if (!win || win.isDestroyed()) createCustomTimerGroupOverlay(g.id, g.name)
@@ -3074,6 +3151,7 @@ function overlayWindowByName(name: WindowKey): BrowserWindow | null {
     case 'discordVoice': return discordVoiceOverlayWindow
     case 'zoneLockouts': return zoneLockoutsWindow
     case 'raidReadiness': return raidReadinessWindow
+    case 'filteredTimer': return filteredTimerWindow
     default: return null
   }
 }
@@ -3097,6 +3175,7 @@ function createOverlayByName(name: OverlayName): void {
     case 'discordVoice': createDiscordVoiceOverlay(); break
     case 'zoneLockouts': createZoneLockoutsOverlay(); break
     case 'raidReadiness': createRaidReadinessOverlay(); break
+    case 'filteredTimer': createFilteredTimerOverlay(); break
     default: break
   }
 }
