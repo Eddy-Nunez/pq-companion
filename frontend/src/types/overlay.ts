@@ -24,7 +24,8 @@ export interface TargetVariant {
   npc: NPC
   special_abilities: SpecialAbility[]
   caster_summary?: NPCCasterSummary
-  // spawn_chance is the row's spawnentry weight (0-100) in the current zone;
+  // spawn_chance is the row's share (percent) of its spawn group in the
+  // current zone, normalized the same way as the Zones → NPCs tab;
   // distinguish lists what sets it apart from sibling rows ("summons",
   // "texture 2"). Both only present on multi-variant results.
   spawn_chance?: number

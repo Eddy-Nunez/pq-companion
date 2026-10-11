@@ -62,6 +62,10 @@ export interface ZoneNPCSpawn {
   min_pct: number
   max_pct: number
   points: number
+  // Set when the NPC is in the zone's spawn data but can't currently spawn:
+  // every entry is locked to another era, or its spawn weight is 0. The
+  // pct/points fields are 0 then.
+  inactive?: 'other_era' | 'zero_weight'
 }
 
 export interface ZoneDropItem {

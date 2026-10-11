@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -12,10 +13,11 @@ import (
 type VariantTraits struct {
 	Texture int
 	Gender  int
-	// SpawnChance is the highest spawnentry.chance the row has in the zone
-	// (0-100), or -1 when it has no spawnentry in that zone (script-spawned
-	// rows, or an unknown zone).
-	SpawnChance int
+	// SpawnChance is the row's highest spawn-group share in the zone, in
+	// percent and normalized the same way as the Zones tab (see
+	// npcSpawnShares), or -1 when no current-era spawn point there can roll
+	// it (script-spawned rows, other-era variants, or an unknown zone).
+	SpawnChance float64
 }
 
 // GetVariantTraits returns VariantTraits for the given npc_types ids. zone is
@@ -52,30 +54,17 @@ func (db *DB) GetVariantTraits(ids []int, zone string) (map[int]VariantTraits, e
 		return nil, fmt.Errorf("iterate variant traits: %w", err)
 	}
 
-	q := fmt.Sprintf(`
-		SELECT se.npcID, MAX(se.chance)
-		FROM spawnentry se
-		WHERE se.npcID IN (%s)`, strings.Join(ph, ","))
-	qargs := args
-	if zone != "" {
-		q += ` AND se.spawngroupID IN (SELECT spawngroupID FROM spawn2 WHERE zone = ?)`
-		qargs = append(append([]any{}, args...), zone)
-	}
-	q += ` GROUP BY se.npcID`
-	crow, err := db.Query(q, qargs...)
+	shares, err := db.npcSpawnShares(zone, ids)
 	if err != nil {
 		return nil, fmt.Errorf("get variant spawn chance: %w", err)
 	}
-	defer crow.Close()
-	for crow.Next() {
-		var id, chance int
-		if err := crow.Scan(&id, &chance); err != nil {
-			return nil, fmt.Errorf("scan variant spawn chance: %w", err)
-		}
-		if t, ok := out[id]; ok {
-			t.SpawnChance = chance
-			out[id] = t
+	for _, sh := range shares {
+		if t, ok := out[sh.NPCID]; ok {
+			// One decimal is plenty for a hint and keeps 1/3-style shares
+			// from rendering as 33.333333%.
+			t.SpawnChance = math.Round(sh.MaxPct*10) / 10
+			out[sh.NPCID] = t
 		}
 	}
-	return out, crow.Err()
+	return out, nil
 }

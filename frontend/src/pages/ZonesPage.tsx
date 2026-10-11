@@ -541,6 +541,8 @@ function fmtPct(p: number): string {
 // spawnLabel summarizes an NPC's spawn-group share, e.g. "20% spawn · 4 pts"
 // or "5–50% spawn" when its groups disagree.
 function spawnLabel(s: ZoneNPCSpawn): string {
+  if (s.inactive === 'other_era') return 'Other era'
+  if (s.inactive === 'zero_weight') return 'Never rolls'
   const lo = fmtPct(s.min_pct)
   const hi = fmtPct(s.max_pct)
   const pct = lo === hi ? hi : `${lo.replace('%', '')}–${hi}`
@@ -554,9 +556,9 @@ function npcSortValue(
 ): number | string {
   switch (key) {
     case 'spawn':
-      // Script-spawned and era-inactive NPCs have no share; they sort as
-      // rarer than anything a spawn point can roll.
-      return spawns.get(npc.id)?.max_pct ?? -1
+      // Script-spawned and inactive NPCs have no share (inactive rows carry
+      // 0); both sort as rarer than anything a spawn point can roll.
+      return spawns.get(npc.id)?.max_pct || -1
     case 'level':
       // Ranged spawns sort by their top level, with the floor as a
       // tie-breaker baked into the fraction.
@@ -586,6 +588,7 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
   const [minLevel, setMinLevel] = useCachedState('zones.npcs.minLevel', '')
   const [maxLevel, setMaxLevel] = useCachedState('zones.npcs.maxLevel', '')
   const [hideTrivial, setHideTrivial] = useCachedState('zones.npcs.hideTrivial', false)
+  const [showInactive, setShowInactive] = useCachedState('zones.npcs.showInactive', false)
   const [spawns, setSpawns] = useState<Map<number, ZoneNPCSpawn>>(new Map())
 
   useEffect(() => {
@@ -622,6 +625,7 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
       if (lo !== null && top < lo) return false
       if (hi !== null && npc.level > hi) return false
       if (hideTrivial && (npc.hp <= 0 || npc.level <= 0 || npc.class <= 0)) return false
+      if (!showInactive && spawns.get(npc.id)?.inactive) return false
       return true
     })
     return rows.sort(
@@ -631,7 +635,7 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
         sort.desc,
       ),
     )
-  }, [npcs, filter, minLevel, maxLevel, hideTrivial, sort, spawns])
+  }, [npcs, filter, minLevel, maxLevel, hideTrivial, showInactive, sort, spawns])
 
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
@@ -679,6 +683,22 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
           />
           Hide trivial
         </label>
+        <label
+          className="flex cursor-pointer items-center gap-1 text-xs"
+          style={{ color: 'var(--color-muted-foreground)' }}
+          title={
+            'Show NPCs listed in this zone that cannot spawn right now — rows' +
+            ' locked to another era (mostly old-model variants), or with a' +
+            ' spawn weight of 0'
+          }
+        >
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={(e) => setShowInactive(e.target.checked)}
+          />
+          Show inactive
+        </label>
       </Toolbar>
       {(filtered || total > npcs.length) && (
         <p className="mb-2 text-[11px]" style={{ color: 'var(--color-muted)' }}>
@@ -702,6 +722,7 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
                 style={{
                   borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
                   borderLeft: '2px solid transparent',
+                  opacity: spawn?.inactive ? 0.5 : undefined,
                 }}
                 onMouseEnter={(e) => {
                   ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
@@ -721,9 +742,16 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
                     {spawn && (
                       <span
                         title={
-                          'Chance a spawn point rolls this NPC (its share of the' +
-                          ' spawn group), and how many spawn points can roll it.' +
-                          ' Not a loot chance.'
+                          spawn.inactive === 'other_era'
+                            ? 'Only spawns in another era — every spawn entry' +
+                              ' for this row is expansion-locked out of the' +
+                              ' current one'
+                            : spawn.inactive === 'zero_weight'
+                              ? 'In a spawn group with weight 0, so the' +
+                                ' server never picks it'
+                              : 'Chance a spawn point rolls this NPC (its' +
+                                ' share of the spawn group), and how many' +
+                                ' spawn points can roll it. Not a loot chance.'
                         }
                       >
                         {' · '}

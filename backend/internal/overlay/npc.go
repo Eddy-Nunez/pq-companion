@@ -57,10 +57,11 @@ type TargetVariant struct {
 	// a literal null to a frontend whose type says the array is always there.
 	SpecialAbilities []db.SpecialAbility  `json:"special_abilities"`
 	CasterSummary    *db.NPCCasterSummary `json:"caster_summary,omitempty"`
-	// SpawnChance is the row's spawnentry weight (0-100) in the current zone.
+	// SpawnChance is the row's share (percent) of its spawn group in the
+	// current zone, normalized over the era-active entries.
 	// Only set on multi-variant results, where it tells same-looking rows
 	// apart (a 90% row vs a 10% summoner).
-	SpawnChance *int `json:"spawn_chance,omitempty"`
+	SpawnChance *float64 `json:"spawn_chance,omitempty"`
 	// Distinguish lists what sets this row apart from its siblings — texture,
 	// gender, size and differing key abilities ("summons", "texture 2").
 	Distinguish []string `json:"distinguish,omitempty"`

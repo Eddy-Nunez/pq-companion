@@ -22,6 +22,17 @@ func activeContentClause(alias string) string {
 		currentExpansion))
 }
 
+// Reasons a zone NPC has no spawn share (ZoneNPCSpawn.Inactive).
+const (
+	// SpawnInactiveOtherEra: every spawn entry or point for the NPC is
+	// expansion-gated out of the current era (typically a pre-Luclin model
+	// variant that was swapped for a newer row).
+	SpawnInactiveOtherEra = "other_era"
+	// SpawnInactiveZeroWeight: the NPC is in an active group but with chance
+	// 0, so the server's roll never picks it.
+	SpawnInactiveZeroWeight = "zero_weight"
+)
+
 // ZoneNPCSpawn is how likely an NPC is to be the one a spawn point rolls, in
 // one zone. This is a different number from any loot chance: it's the NPC's
 // share of its spawn group, not a drop rate.
@@ -33,10 +44,12 @@ type ZoneNPCSpawn struct {
 	MaxPct float64 `json:"max_pct"`
 	// Points is how many spawn points in the zone can roll this NPC.
 	Points int `json:"points"`
+	// Inactive is set (to a SpawnInactive* reason) when the NPC is in the
+	// zone's spawn data but can't currently spawn; the other fields are zero.
+	Inactive string `json:"inactive,omitempty"`
 }
 
-// GetZoneNPCSpawns returns spawn chances for every NPC that a spawn point in
-// the zone can roll in the current era.
+// npcSpawnShares computes spawn shares for the current era.
 //
 // The server picks a group member with a weighted roll over the eligible
 // entries' chance values (SpawnGroup::GetNPCType), so a share is
@@ -45,12 +58,40 @@ type ZoneNPCSpawn struct {
 // era-gated variants (a Classic and a Luclin row for the same slot).
 // Day/night-gated entries (mintime/maxtime) are counted as always competing,
 // so shares in those groups are an all-day average.
-func (db *DB) GetZoneNPCSpawns(shortName string) ([]ZoneNPCSpawn, error) {
+//
+// zone scopes to one zone's spawn points ("" = every zone). ids, when
+// non-empty, limits the result to those NPCs.
+func (db *DB) npcSpawnShares(zone string, ids []int) ([]ZoneNPCSpawn, error) {
+	var ptsWhere []string
+	var args []any
+	if zone != "" {
+		ptsWhere = append(ptsWhere, "s2.zone = ?")
+		args = append(args, zone)
+	}
+	idFilter := ""
+	if len(ids) > 0 {
+		idFilter = strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+		ptsWhere = append(ptsWhere,
+			"s2.spawngroupID IN (SELECT spawngroupID FROM spawnentry WHERE npcID IN ("+idFilter+"))")
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+	ptsWhere = append(ptsWhere, activeContentClause("s2"))
+
+	final := "e.chance > 0"
+	if idFilter != "" {
+		final += " AND e.npcID IN (" + idFilter + ")"
+		for _, id := range ids {
+			args = append(args, id)
+		}
+	}
+
 	q := `
 		WITH pts AS (
 			SELECT s2.id, s2.spawngroupID
 			FROM spawn2 s2
-			WHERE s2.zone = ? AND ` + activeContentClause("s2") + `
+			WHERE ` + strings.Join(ptsWhere, " AND ") + `
 		),
 		ents AS (
 			SELECT se.spawngroupID, se.npcID, se.chance
@@ -69,11 +110,11 @@ func (db *DB) GetZoneNPCSpawns(shortName string) ([]ZoneNPCSpawn, error) {
 		FROM ents e
 		JOIN tot ON tot.spawngroupID = e.spawngroupID
 		JOIN pts p ON p.spawngroupID = e.spawngroupID
-		WHERE e.chance > 0
+		WHERE ` + final + `
 		GROUP BY e.npcID`
-	rows, err := db.Query(q, shortName)
+	rows, err := db.Query(q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("get zone npc spawns %q: %w", shortName, err)
+		return nil, fmt.Errorf("npc spawn shares: %w", err)
 	}
 	defer rows.Close()
 
@@ -81,9 +122,53 @@ func (db *DB) GetZoneNPCSpawns(shortName string) ([]ZoneNPCSpawn, error) {
 	for rows.Next() {
 		var s ZoneNPCSpawn
 		if err := rows.Scan(&s.NPCID, &s.MinPct, &s.MaxPct, &s.Points); err != nil {
-			return nil, fmt.Errorf("scan zone npc spawn: %w", err)
+			return nil, fmt.Errorf("scan npc spawn share: %w", err)
 		}
 		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// GetZoneNPCSpawns returns spawn shares for every NPC in the zone's spawn
+// data: a share for each NPC a spawn point can roll in the current era, and
+// an Inactive row for each one that is listed but can't spawn.
+func (db *DB) GetZoneNPCSpawns(shortName string) ([]ZoneNPCSpawn, error) {
+	out, err := db.npcSpawnShares(shortName, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get zone npc spawns %q: %w", shortName, err)
+	}
+	active := make(map[int]bool, len(out))
+	for _, s := range out {
+		active[s.NPCID] = true
+	}
+
+	// Every NPC the zone's spawn chain references in any era, and whether any
+	// of its entries is live now — live-but-unrolled means zero weight.
+	rows, err := db.Query(`
+		SELECT se.npcID,
+		       MAX(CASE WHEN `+activeContentClause("se")+` AND `+activeContentClause("s2")+`
+		                THEN 1 ELSE 0 END)
+		FROM spawnentry se
+		JOIN spawn2 s2 ON s2.spawngroupID = se.spawngroupID
+		WHERE s2.zone = ?
+		GROUP BY se.npcID`, shortName)
+	if err != nil {
+		return nil, fmt.Errorf("get zone inactive npcs %q: %w", shortName, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, live int
+		if err := rows.Scan(&id, &live); err != nil {
+			return nil, fmt.Errorf("scan zone inactive npc: %w", err)
+		}
+		if active[id] {
+			continue
+		}
+		reason := SpawnInactiveOtherEra
+		if live == 1 {
+			reason = SpawnInactiveZeroWeight
+		}
+		out = append(out, ZoneNPCSpawn{NPCID: id, Inactive: reason})
 	}
 	return out, rows.Err()
 }

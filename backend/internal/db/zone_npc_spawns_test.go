@@ -50,18 +50,60 @@ func TestGetZoneNPCSpawns(t *testing.T) {
 		})
 	}
 
-	// Group 2017's a_bat (2317) is gated to max_expansion 2.9, so it must not
-	// be counted from that group in the PoP era.
+	// Group 2017's a_bat (2317) is gated to max_expansion 2.9 in every group
+	// it's in, so in the PoP era it comes back as an other-era row, not a
+	// share.
 	spawns, err := d.GetZoneNPCSpawns("qeynos2")
 	if err != nil {
 		t.Fatalf("GetZoneNPCSpawns: %v", err)
 	}
+	sawGated := false
 	for _, s := range spawns {
+		if s.Inactive != "" {
+			if s.Points != 0 || s.MaxPct != 0 {
+				t.Errorf("inactive npc %d carries a share: %+v", s.NPCID, s)
+			}
+			if s.NPCID == 2317 {
+				sawGated = true
+				if s.Inactive != db.SpawnInactiveOtherEra {
+					t.Errorf("npc 2317 inactive = %q, want %q", s.Inactive, db.SpawnInactiveOtherEra)
+				}
+			}
+			continue
+		}
 		if s.MinPct <= 0 || s.MaxPct > 100 {
 			t.Errorf("npc %d share out of range: [%.2f, %.2f]", s.NPCID, s.MinPct, s.MaxPct)
 		}
 		if s.NPCID == 2317 {
 			t.Errorf("era-gated npc 2317 should be inactive, got %+v", s)
 		}
+	}
+	if !sawGated {
+		t.Error("era-gated npc 2317 missing from inactive rows")
+	}
+}
+
+// TestGetVariantTraitsSpawnChanceNormalized checks the NPC overlay's variant
+// hint uses the same normalized share as the Zones tab, not the raw weight.
+func TestGetVariantTraitsSpawnChanceNormalized(t *testing.T) {
+	d := openTestDB(t)
+	traits, err := d.GetVariantTraits([]int{2017, 2317}, "qeynos2")
+	if err != nil {
+		t.Fatalf("GetVariantTraits: %v", err)
+	}
+	spawns, err := d.GetZoneNPCSpawns("qeynos2")
+	if err != nil {
+		t.Fatalf("GetZoneNPCSpawns: %v", err)
+	}
+	for _, s := range spawns {
+		if s.NPCID == 2017 {
+			want := float64(int(s.MaxPct*10+0.5)) / 10
+			if traits[2017].SpawnChance != want {
+				t.Errorf("2017 SpawnChance = %v, want %v (zones tab max share)", traits[2017].SpawnChance, want)
+			}
+		}
+	}
+	if traits[2317].SpawnChance != -1 {
+		t.Errorf("other-era 2317 SpawnChance = %v, want -1", traits[2317].SpawnChance)
 	}
 }
