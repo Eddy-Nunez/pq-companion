@@ -7,6 +7,8 @@
 # intentionally keep in tree. A parent-level `/docs/` rule would hide the
 # whole directory and make `!` exceptions unreachable, so ignore contents instead.
 /docs/*
+# Personal Obsidian vault of follow-up notes; never committed.
+/docs/pq-companion/
 !/docs/db-pipeline.md
 !/docs/enum-audit.md
 !/docs/database-test-plan.md
