@@ -55,6 +55,15 @@ export interface ZoneForageItem {
   level: number
 }
 
+// How likely an NPC is to be the one a spawn point rolls in a zone — its
+// share of its spawn group(s), not a loot chance.
+export interface ZoneNPCSpawn {
+  npc_id: number
+  min_pct: number
+  max_pct: number
+  points: number
+}
+
 export interface ZoneDropItem {
   item_id: number
   item_name: string

@@ -12,6 +12,7 @@ import {
   getZoneForage,
   getZoneGroundSpawns,
   getZoneLockouts,
+  getZoneNPCSpawns,
   getZoneRaw,
   searchZones,
 } from '../services/api'
@@ -21,7 +22,14 @@ import { ZoneMapPanel } from '../components/maps/ZoneMapPanel'
 import { useHasMap } from '../hooks/useMapZones'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
 import type { NPC } from '../types/npc'
-import type { Zone, ZoneConnection, ZoneDropItem, ZoneForageItem, ZoneGroundSpawn } from '../types/zone'
+import type {
+  Zone,
+  ZoneConnection,
+  ZoneDropItem,
+  ZoneForageItem,
+  ZoneGroundSpawn,
+  ZoneNPCSpawn,
+} from '../types/zone'
 import type { ZoneLockoutBoss } from '../types/lockouts'
 import { className, npcDisplayName, npcLevelLabel } from '../lib/npcHelpers'
 import { zoneExpansionName } from '../lib/enumsCache'
@@ -515,17 +523,40 @@ function OverviewTab({ zone }: { zone: Zone }): React.ReactElement {
 
 // ── Tab: NPCs ──────────────────────────────────────────────────────────────────
 
-type NPCSortKey = 'name' | 'level' | 'hp' | 'class'
+type NPCSortKey = 'name' | 'level' | 'hp' | 'class' | 'spawn'
 
 const NPC_SORT_OPTIONS: SortOption<NPCSortKey>[] = [
   { key: 'name', label: 'Name', defaultDesc: false },
   { key: 'level', label: 'Level', defaultDesc: true },
   { key: 'hp', label: 'HP', defaultDesc: true },
   { key: 'class', label: 'Class', defaultDesc: false },
+  { key: 'spawn', label: 'Spawn %', defaultDesc: true },
 ]
 
-function npcSortValue(npc: NPC, key: NPCSortKey): number | string {
+function fmtPct(p: number): string {
+  if (p >= 10 || Number.isInteger(p)) return `${Math.round(p)}%`
+  return `${p.toFixed(1)}%`
+}
+
+// spawnLabel summarizes an NPC's spawn-group share, e.g. "20% spawn · 4 pts"
+// or "5–50% spawn" when its groups disagree.
+function spawnLabel(s: ZoneNPCSpawn): string {
+  const lo = fmtPct(s.min_pct)
+  const hi = fmtPct(s.max_pct)
+  const pct = lo === hi ? hi : `${lo.replace('%', '')}–${hi}`
+  return `${pct} spawn · ${s.points} pt${s.points === 1 ? '' : 's'}`
+}
+
+function npcSortValue(
+  npc: NPC,
+  key: NPCSortKey,
+  spawns: Map<number, ZoneNPCSpawn>,
+): number | string {
   switch (key) {
+    case 'spawn':
+      // Script-spawned and era-inactive NPCs have no share; they sort as
+      // rarer than anything a spawn point can roll.
+      return spawns.get(npc.id)?.max_pct ?? -1
     case 'level':
       // Ranged spawns sort by their top level, with the floor as a
       // tie-breaker baked into the fraction.
@@ -555,6 +586,7 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
   const [minLevel, setMinLevel] = useCachedState('zones.npcs.minLevel', '')
   const [maxLevel, setMaxLevel] = useCachedState('zones.npcs.maxLevel', '')
   const [hideTrivial, setHideTrivial] = useCachedState('zones.npcs.hideTrivial', false)
+  const [spawns, setSpawns] = useState<Map<number, ZoneNPCSpawn>>(new Map())
 
   useEffect(() => {
     setLoading(true)
@@ -566,6 +598,17 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false))
+    // Spawn shares are supplementary — if they fail the list still works.
+    let stale = false
+    setSpawns(new Map())
+    getZoneNPCSpawns(shortName)
+      .then((rows) => {
+        if (!stale) setSpawns(new Map(rows.map((r) => [r.npc_id, r])))
+      })
+      .catch(() => {})
+    return () => {
+      stale = true
+    }
   }, [shortName])
 
   const visible = useMemo(() => {
@@ -583,12 +626,12 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
     })
     return rows.sort(
       compareBy(
-        (n) => npcSortValue(n, sort.key),
+        (n) => npcSortValue(n, sort.key, spawns),
         (n) => npcDisplayName(n),
         sort.desc,
       ),
     )
-  }, [npcs, filter, minLevel, maxLevel, hideTrivial, sort])
+  }, [npcs, filter, minLevel, maxLevel, hideTrivial, sort, spawns])
 
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
@@ -649,44 +692,59 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
           className="rounded border"
           style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
         >
-          {visible.map((npc, i) => (
-            <button
-              key={npc.id}
-              onClick={() => navigate(`/npcs?select=${npc.id}`)}
-              className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
-              style={{
-                borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
-                borderLeft: '2px solid transparent',
-              }}
-              onMouseEnter={(e) => {
-                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
-                ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
-              }}
-              onMouseLeave={(e) => {
-                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-                ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
-              }}
-            >
-              <div className="flex flex-col">
-                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-                  {npcDisplayName(npc)}
-                </span>
-                <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                  {className(npc.class)}
-                </span>
-              </div>
-              <div className="ml-4 shrink-0 text-right">
-                <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                  Lv {npcLevelLabel(npc)}
-                </span>
-                {npc.hp > 0 && (
-                  <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                    {npc.hp.toLocaleString()} HP
-                  </div>
-                )}
-              </div>
-            </button>
-          ))}
+          {visible.map((npc, i) => {
+            const spawn = spawns.get(npc.id)
+            return (
+              <button
+                key={npc.id}
+                onClick={() => navigate(`/npcs?select=${npc.id}`)}
+                className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
+                style={{
+                  borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
+                  borderLeft: '2px solid transparent',
+                }}
+                onMouseEnter={(e) => {
+                  ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
+                  ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
+                }}
+                onMouseLeave={(e) => {
+                  ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+                  ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
+                }}
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                    {npcDisplayName(npc)}
+                  </span>
+                  <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                    {className(npc.class)}
+                    {spawn && (
+                      <span
+                        title={
+                          'Chance a spawn point rolls this NPC (its share of the' +
+                          ' spawn group), and how many spawn points can roll it.' +
+                          ' Not a loot chance.'
+                        }
+                      >
+                        {' · '}
+                        {spawnLabel(spawn)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="ml-4 shrink-0 text-right">
+                  <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                    Lv {npcLevelLabel(npc)}
+                  </span>
+                  {npc.hp > 0 && (
+                    <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                      {npc.hp.toLocaleString()} HP
+                    </div>
+                  )}
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

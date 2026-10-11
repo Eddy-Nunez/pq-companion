@@ -8,7 +8,14 @@ import type {
 } from '../types/map'
 import type { BuffStatDelta, Spell, SpellCrossRefs, ShoppingRoute, ShoppingRouteOptions } from '../types/spell'
 import type { EmoteColumnsPatch, EmoteStatus, SpellEmote, SpellEmoteDiff } from '../types/emote'
-import type { Zone, ZoneConnection, ZoneGroundSpawn, ZoneForageItem, ZoneDropItem } from '../types/zone'
+import type {
+  Zone,
+  ZoneConnection,
+  ZoneGroundSpawn,
+  ZoneForageItem,
+  ZoneDropItem,
+  ZoneNPCSpawn,
+} from '../types/zone'
 import type {
   ZealInventoryResponse,
   ZealSpellbookResponse,
@@ -780,6 +787,10 @@ export function getZoneNPCLocations(shortName: string): Promise<ZoneNPCLocation[
 
 export function getZoneForage(shortName: string): Promise<ZoneForageItem[]> {
   return get<ZoneForageItem[]>(`/api/zones/short/${encodeURIComponent(shortName)}/forage`)
+}
+
+export function getZoneNPCSpawns(shortName: string): Promise<ZoneNPCSpawn[]> {
+  return get<ZoneNPCSpawn[]>(`/api/zones/short/${encodeURIComponent(shortName)}/npc-spawns`)
 }
 
 export type ZoneDropsSort = 'item' | 'npc' | 'chance'
