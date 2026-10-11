@@ -784,13 +784,24 @@ func (e *Engine) Handle(ev logparser.LogEvent) {
 		e.mu.Unlock()
 
 	case logparser.EventSpellFade:
-		// "Your X spell has worn off." — fires only on the active player.
+		// "Your X spell has worn off." — the caster's notice that one of
+		// THEIR spells faded from someone else, in practice a detrimental on
+		// a mob (mez break, tash/slow expiry). The line names no target, so
+		// see removeFadedDetrimental for how the instance is picked. A
+		// self-keyed timer is still tried first for back-compat.
 		data, ok := ev.Data.(logparser.SpellFadeData)
 		if !ok || data.SpellName == "" {
 			return
 		}
-		target := e.activePlayerName()
-		e.removeTimer(timerKey(data.SpellName, target))
+		key := timerKey(data.SpellName, e.activePlayerName())
+		e.mu.Lock()
+		_, self := e.timers[key]
+		e.mu.Unlock()
+		if self {
+			e.removeTimer(key)
+			return
+		}
+		e.removeFadedDetrimental(data.SpellName)
 
 	case logparser.EventSpellFadeFrom:
 		// "Tashanian effect fades from Soandso." — target is in the event.
@@ -2485,6 +2496,41 @@ func (e *Engine) removeOnKill(target string, viaCorpseTarget bool, trustPipeTarg
 			"known_dead_id", knownDeadID,
 			"queued_ambiguous", knownDeadID == 0 && taggedSurvivor)
 	}
+}
+
+// removeFadedDetrimental handles "Your X spell has worn off." for a
+// detrimental the active character cast on a mob. EQ names no target, so:
+// spawn-id-tagged instances (always the player's own casts — see
+// keyTargetTokenLocked) are preferred over untagged ones, which may belong
+// to another caster under the "anyone" scope; among those, the
+// soonest-expiring instance is dropped — exact for a natural expiry, a
+// best guess for an early mez break with several mobs mezzed at once.
+func (e *Engine) removeFadedDetrimental(spellName string) {
+	self := normalizeNPCName(e.activePlayerName())
+	e.mu.Lock()
+	var best string
+	var bestExp time.Time
+	bestTagged := false
+	for k, t := range e.timers {
+		if t.Stacked || t.IsCharm || !isDetrimentalCategory(t.Category) ||
+			!strings.EqualFold(t.SpellName, spellName) ||
+			normalizeNPCName(t.TargetName) == self {
+			continue
+		}
+		tagged := parseKeyTargetID(k) != 0
+		if best != "" && bestTagged && !tagged {
+			continue
+		}
+		if best == "" || (tagged && !bestTagged) || t.ExpiresAt.Before(bestExp) {
+			best, bestExp, bestTagged = k, t.ExpiresAt, tagged
+		}
+	}
+	e.mu.Unlock()
+	if best == "" {
+		slog.Debug("timer-debug: worn-off matched no detrimental timer", "spell", spellName)
+		return
+	}
+	e.removeTimer(best)
 }
 
 // resolvePendingKillsLocked settles the ambiguous-kill queue removeOnKill

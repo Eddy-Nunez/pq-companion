@@ -1016,9 +1016,9 @@ func keysOf(m map[string]*ActiveTimer) []string {
 	return ks
 }
 
-// SpellFade ("Your X spell has worn off.") only fires for the active player,
-// so the engine must remove the timer keyed by (spell, active-player-name).
-// A timer for the same spell on a different target must survive.
+// SpellFade ("Your X spell has worn off.") removes a timer keyed by (spell,
+// active-player-name) first when one exists. A buff timer for the same
+// spell on a different target must survive.
 func TestHandle_SpellFade_RemovesActivePlayerEntryOnly(t *testing.T) {
 	e := newTestEngine() // charCtx returns ("/eq", "Osui")
 	now := time.Now()
@@ -1041,6 +1041,53 @@ func TestHandle_SpellFade_RemovesActivePlayerEntryOnly(t *testing.T) {
 	}
 	if _, ok := e.timers[timerKey("Visions of Grandeur", "Tank")]; !ok {
 		t.Error("other-target entry should have been preserved")
+	}
+}
+
+// "Your Apathy spell has worn off." is the caster's notice for a mez on a
+// MOB, not a self-buff (every such line in a real raid log names a
+// detrimental). It must drop one of the player's own spawn-id-tagged
+// instances — the soonest-expiring — and leave an untagged (possibly
+// another enchanter's) instance and the second tagged one alone.
+func TestHandle_SpellFade_DropsOwnDetrimentalOnMob(t *testing.T) {
+	e := newTestEngine()
+	now := time.Now()
+	add := func(key, target string, exp time.Duration) {
+		e.timers[key] = &ActiveTimer{
+			ID: key, SpellName: "Apathy", TargetName: target, Category: CategoryMez,
+			CastAt: now, StartsAt: now, ExpiresAt: now.Add(exp),
+		}
+	}
+	soon := timerKey("Apathy", "Knight of Decay"+targetIDKeySep+"100")
+	later := timerKey("Apathy", "Knight of Decay"+targetIDKeySep+"200")
+	other := timerKey("Apathy", "Priest of Decay")
+	add(soon, "Knight of Decay", 20*time.Second)
+	add(later, "Knight of Decay", 50*time.Second)
+	add(other, "Priest of Decay", 5*time.Second)
+
+	e.Handle(logparser.LogEvent{
+		Type: logparser.EventSpellFade,
+		Data: logparser.SpellFadeData{SpellName: "Apathy"},
+	})
+
+	if _, ok := e.timers[soon]; ok {
+		t.Error("soonest-expiring tagged instance should have been removed")
+	}
+	if _, ok := e.timers[later]; !ok {
+		t.Error("other tagged instance should have been preserved")
+	}
+	if _, ok := e.timers[other]; !ok {
+		t.Error("untagged instance should be preserved while a tagged one exists")
+	}
+
+	// With no tagged instance left the untagged one is the only candidate.
+	delete(e.timers, later)
+	e.Handle(logparser.LogEvent{
+		Type: logparser.EventSpellFade,
+		Data: logparser.SpellFadeData{SpellName: "Apathy"},
+	})
+	if _, ok := e.timers[other]; ok {
+		t.Error("untagged instance should have been removed")
 	}
 }
 
