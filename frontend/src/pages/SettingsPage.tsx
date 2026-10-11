@@ -29,6 +29,7 @@ import {
 import type { LogFileInfo } from '../types/logEvent'
 import { applyContrast } from '../hooks/useHighContrast'
 import { applyZoom } from '../hooks/useZoom'
+import { OVERLAY_ZOOM_MAX, OVERLAY_ZOOM_MIN } from '../hooks/useOverlayZoom'
 import { speakTextForTest, stopTestPlayback } from '../services/audio'
 import type { ZealInstallStatus, ZealPipeStatus } from '../types/zeal'
 import type { QuarmClientStatus, QuarmFileStatus, EqwStatus } from '../types/quarm'
@@ -502,6 +503,33 @@ export default function SettingsPage(): React.ReactElement {
   useWebSocket((msg: WsMessage) => {
     if (msg.type !== WSEvent.ZealConnected && msg.type !== WSEvent.ZealDisconnected) return
     getZealPipeStatus().then(setPipeStatus).catch(() => null)
+  })
+
+  // Overlay windows save their own zoom (Ctrl+scroll — see useOverlayZoom).
+  // Pull that in so the sliders track it, and fold it into the saved baseline
+  // too, so the next autosave of an unrelated setting can't write the stale
+  // value back. A slider the user has moved here but not yet saved wins.
+  useWebSocket((msg: WsMessage) => {
+    if (msg.type !== WSEvent.ConfigUpdated) return
+    getConfig()
+      .then((srv) => {
+        const next = srv.preferences.overlay_zoom_factors
+        const base = originalConfigRef.current?.preferences.overlay_zoom_factors
+        if (JSON.stringify(next) === JSON.stringify(base)) return
+        const withZoom = (c: Config | null): Config | null =>
+          c && {
+            ...c,
+            preferences: { ...c.preferences, overlay_zoom_factors: next },
+          }
+        setConfig((c) =>
+          JSON.stringify(c?.preferences.overlay_zoom_factors) ===
+          JSON.stringify(base)
+            ? withZoom(c)
+            : c,
+        )
+        setOriginalConfig(withZoom)
+      })
+      .catch(() => null)
   })
 
   function flashSaveState(state: SaveState, ms = 2500): void {
@@ -2048,6 +2076,7 @@ export default function SettingsPage(): React.ReactElement {
               Scale each popout overlay window independently — useful when an
               overlay is hard to read at your game resolution. Applies to the
               popped-out windows; dashboard cards follow the App Zoom above.
+              You can also hold Ctrl and scroll over an overlay to resize it.
             </p>
             <div className="mt-2">
               {OVERLAY_DEFS.filter((o) => o.name !== 'hps' || DEV_HPS).map((o) => {
@@ -2067,8 +2096,8 @@ export default function SettingsPage(): React.ReactElement {
                     </div>
                     <input
                       type="range"
-                      min={80}
-                      max={150}
+                      min={OVERLAY_ZOOM_MIN * 100}
+                      max={OVERLAY_ZOOM_MAX * 100}
                       step={5}
                       value={Math.round(factor * 100)}
                       onChange={(e) => {
