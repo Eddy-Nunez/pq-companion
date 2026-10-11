@@ -2793,21 +2793,75 @@ const zoneDropsFrom = `
 		WHERE s2.zone = ?
 	) AND n.loottable_id > 0`
 
+// ZoneDropsOptions controls sorting and filtering for GetZoneDrops.
+type ZoneDropsOptions struct {
+	// Sort is one of "item" (default), "npc", or "chance".
+	Sort string
+	// Desc reverses the primary sort direction.
+	Desc bool
+	// Query is a case-insensitive substring matched against the item name
+	// or the NPC name.
+	Query string
+	// MinChance drops rows whose effective drop rate is below this percent.
+	MinChance float64
+}
+
+// zoneDropsOrder maps ZoneDropsOptions.Sort to a fixed ORDER BY prefix so no
+// caller-supplied text ever reaches the SQL. Each gets stable tie-breakers.
+var zoneDropsOrder = map[string]string{
+	"item":   "item_name %s, npc_name, chance DESC",
+	"npc":    "npc_name %s, item_name, chance DESC",
+	"chance": "chance %s, item_name, npc_name",
+}
+
 // GetZoneDrops returns items dropped by NPCs in the given zone, paginated.
-func (db *DB) GetZoneDrops(shortName string, limit, offset int) (*SearchResult[ZoneDropItem], error) {
+// Chance is the effective per-kill drop rate (loottable_entries.probability ×
+// lootdrop_entries.chance), matching the item page's "Dropped by" rate. An
+// item in several of one NPC's lootdrops collapses to a single row carrying
+// its best rate.
+func (db *DB) GetZoneDrops(shortName string, opts ZoneDropsOptions, limit, offset int) (*SearchResult[ZoneDropItem], error) {
+	orderFmt, ok := zoneDropsOrder[opts.Sort]
+	if !ok {
+		orderFmt = zoneDropsOrder["item"]
+	}
+	dir := "ASC"
+	if opts.Desc {
+		dir = "DESC"
+	}
+
+	where := ""
+	args := []any{shortName}
+	if q := strings.TrimSpace(opts.Query); q != "" {
+		// NPC names store underscores where the UI shows spaces.
+		where = ` AND (i.Name LIKE ? ESCAPE '\' OR n.name LIKE ? ESCAPE '\')`
+		args = append(args,
+			"%"+escapeLike(q)+"%",
+			"%"+escapeLike(strings.ReplaceAll(q, " ", "_"))+"%",
+		)
+	}
+	having := ""
+	if opts.MinChance > 0 {
+		having = " HAVING chance >= ?"
+	}
+
+	grouped := `
+		SELECT lde.item_id, i.Name AS item_name, n.id, n.name AS npc_name,
+		       ROUND(MAX(CAST(lte.probability AS REAL) * lde.chance / 100.0), 2) AS chance
+		` + zoneDropsFrom + where + `
+		GROUP BY lde.item_id, n.id` + having
+	if opts.MinChance > 0 {
+		args = append(args, opts.MinChance)
+	}
+
 	var total int
-	if err := db.QueryRow(
-		"SELECT COUNT(*) FROM (SELECT DISTINCT lde.item_id, n.id "+zoneDropsFrom+")",
-		shortName,
-	).Scan(&total); err != nil {
+	if err := db.QueryRow("SELECT COUNT(*) FROM ("+grouped+")", args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count zone drops %q: %w", shortName, err)
 	}
 
-	rows, err := db.Query(`
-		SELECT DISTINCT lde.item_id, i.Name, n.id, n.name, lde.chance
-		`+zoneDropsFrom+`
-		ORDER BY i.Name, n.name
-		LIMIT ? OFFSET ?`, shortName, limit, offset)
+	rows, err := db.Query(
+		grouped+" ORDER BY "+fmt.Sprintf(orderFmt, dir)+" LIMIT ? OFFSET ?",
+		append(args, limit, offset)...,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("get zone drops %q: %w", shortName, err)
 	}

@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCachedState } from '../hooks/useCachedState'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Search, X } from 'lucide-react'
 import {
   getNPCsByZone,
   getZone,
@@ -15,6 +15,7 @@ import {
   getZoneRaw,
   searchZones,
 } from '../services/api'
+import type { ZoneDropsOptions, ZoneDropsSort } from '../services/api'
 import RawDataModal from '../components/RawDataModal'
 import { ZoneMapPanel } from '../components/maps/ZoneMapPanel'
 import { useHasMap } from '../hooks/useMapZones'
@@ -302,6 +303,132 @@ function ErrorState({ message }: { message: string }): React.ReactElement {
   )
 }
 
+// ── List toolbar (sort + filter controls shared by the list tabs) ─────────────
+
+const controlStyle: React.CSSProperties = {
+  backgroundColor: 'var(--color-surface-2)',
+  borderColor: 'var(--color-border)',
+  color: 'var(--color-foreground)',
+}
+
+function Toolbar({ children }: { children: React.ReactNode }): React.ReactElement {
+  return <div className="mb-2 flex flex-wrap items-center gap-2">{children}</div>
+}
+
+function FilterInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+}): React.ReactElement {
+  return (
+    <div
+      className="flex min-w-40 flex-1 items-center gap-1.5 rounded border px-2 py-0.5"
+      style={controlStyle}
+    >
+      <Search size={12} style={{ color: 'var(--color-muted)' }} className="shrink-0" />
+      <input
+        type="text"
+        className="flex-1 bg-transparent text-xs outline-none placeholder:text-(--color-muted)"
+        style={{ color: 'var(--color-foreground)' }}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+      />
+      {value && (
+        <button onClick={() => onChange('')} className="shrink-0">
+          <X size={11} style={{ color: 'var(--color-muted)' }} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+interface SortOption<K extends string> {
+  key: K
+  label: string
+  // Direction applied when this key is picked; numeric columns read best
+  // largest-first, names alphabetically.
+  defaultDesc: boolean
+}
+
+interface SortState<K extends string> {
+  key: K
+  desc: boolean
+}
+
+function SortControl<K extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: SortOption<K>[]
+  value: SortState<K>
+  onChange: (v: SortState<K>) => void
+}): React.ReactElement {
+  return (
+    <div className="flex items-center gap-1">
+      <label
+        className="text-[10px] font-semibold uppercase tracking-widest"
+        style={{ color: 'var(--color-muted)' }}
+      >
+        Sort
+      </label>
+      <select
+        className="rounded border px-1.5 py-0.5 text-xs outline-none"
+        style={controlStyle}
+        value={value.key}
+        onChange={(e) => {
+          const opt = options.find((o) => o.key === e.target.value)
+          if (opt) onChange({ key: opt.key, desc: opt.defaultDesc })
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={() => onChange({ ...value, desc: !value.desc })}
+        className="rounded border p-1"
+        style={controlStyle}
+        title={value.desc ? 'Descending' : 'Ascending'}
+      >
+        {value.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+      </button>
+    </div>
+  )
+}
+
+// compareBy builds a comparator for one sort key, falling back to name so
+// equal values keep a stable, readable order.
+function compareBy<T>(
+  get: (row: T) => number | string,
+  name: (row: T) => string,
+  desc: boolean,
+): (a: T, b: T) => number {
+  return (a, b) => {
+    const av = get(a)
+    const bv = get(b)
+    let c =
+      typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv))
+    if (desc) c = -c
+    return c !== 0 ? c : name(a).localeCompare(name(b))
+  }
+}
+
+function parseLevel(raw: string): number | null {
+  const n = parseInt(raw, 10)
+  return Number.isFinite(n) ? n : null
+}
+
 // ── Tab: Overview ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ zone }: { zone: Zone }): React.ReactElement {
@@ -388,17 +515,51 @@ function OverviewTab({ zone }: { zone: Zone }): React.ReactElement {
 
 // ── Tab: NPCs ──────────────────────────────────────────────────────────────────
 
+type NPCSortKey = 'name' | 'level' | 'hp' | 'class'
+
+const NPC_SORT_OPTIONS: SortOption<NPCSortKey>[] = [
+  { key: 'name', label: 'Name', defaultDesc: false },
+  { key: 'level', label: 'Level', defaultDesc: true },
+  { key: 'hp', label: 'HP', defaultDesc: true },
+  { key: 'class', label: 'Class', defaultDesc: false },
+]
+
+function npcSortValue(npc: NPC, key: NPCSortKey): number | string {
+  switch (key) {
+    case 'level':
+      // Ranged spawns sort by their top level, with the floor as a
+      // tie-breaker baked into the fraction.
+      return Math.max(npc.level, npc.max_level) + npc.level / 1000
+    case 'hp':
+      return npc.hp
+    case 'class':
+      return className(npc.class)
+    default:
+      return npcDisplayName(npc).toLowerCase()
+  }
+}
+
 function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
   const navigate = useNavigate()
   const [npcs, setNpcs] = useState<NPC[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Sort/filter persist across zone switches so comparing zones keeps the
+  // same view.
+  const [sort, setSort] = useCachedState<SortState<NPCSortKey>>('zones.npcs.sort', {
+    key: 'name',
+    desc: false,
+  })
+  const [filter, setFilter] = useCachedState('zones.npcs.filter', '')
+  const [minLevel, setMinLevel] = useCachedState('zones.npcs.minLevel', '')
+  const [maxLevel, setMaxLevel] = useCachedState('zones.npcs.maxLevel', '')
+  const [hideTrivial, setHideTrivial] = useCachedState('zones.npcs.hideTrivial', false)
 
   useEffect(() => {
     setLoading(true)
     setError(null)
-    getNPCsByZone(shortName, 200, 0)
+    getNPCsByZone(shortName)
       .then((res) => {
         setNpcs(res.items ?? [])
         setTotal(res.total)
@@ -407,60 +568,127 @@ function NPCsTab({ shortName }: { shortName: string }): React.ReactElement {
       .finally(() => setLoading(false))
   }, [shortName])
 
+  const visible = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    const lo = parseLevel(minLevel)
+    const hi = parseLevel(maxLevel)
+    const rows = npcs.filter((npc) => {
+      if (q && !npcDisplayName(npc).toLowerCase().includes(q)) return false
+      // A ranged spawn passes if any part of its range overlaps the filter.
+      const top = Math.max(npc.level, npc.max_level)
+      if (lo !== null && top < lo) return false
+      if (hi !== null && npc.level > hi) return false
+      if (hideTrivial && (npc.hp <= 0 || npc.level <= 0 || npc.class <= 0)) return false
+      return true
+    })
+    return rows.sort(
+      compareBy(
+        (n) => npcSortValue(n, sort.key),
+        (n) => npcDisplayName(n),
+        sort.desc,
+      ),
+    )
+  }, [npcs, filter, minLevel, maxLevel, hideTrivial, sort])
+
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
   if (npcs.length === 0) return <EmptyState message="No spawn data found." />
 
+  const filtered = visible.length !== npcs.length
+
   return (
     <div>
-      {total > npcs.length && (
+      <Toolbar>
+        <FilterInput value={filter} onChange={setFilter} placeholder="Filter NPCs…" />
+        <div className="flex items-center gap-1">
+          <label
+            className="text-[10px] font-semibold uppercase tracking-widest"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            Lv
+          </label>
+          {[
+            { v: minLevel, set: setMinLevel, ph: 'min' },
+            { v: maxLevel, set: setMaxLevel, ph: 'max' },
+          ].map(({ v, set, ph }) => (
+            <input
+              key={ph}
+              type="text"
+              inputMode="numeric"
+              className="w-10 rounded border px-1 py-0.5 text-center text-xs outline-none placeholder:text-(--color-muted)"
+              style={controlStyle}
+              placeholder={ph}
+              value={v}
+              onChange={(e) => set(e.target.value.replace(/\D/g, ''))}
+            />
+          ))}
+        </div>
+        <SortControl options={NPC_SORT_OPTIONS} value={sort} onChange={setSort} />
+        <label
+          className="flex cursor-pointer items-center gap-1 text-xs"
+          style={{ color: 'var(--color-muted-foreground)' }}
+          title="Hide entries with no HP, level, or class (script helpers, placeholders)"
+        >
+          <input
+            type="checkbox"
+            checked={hideTrivial}
+            onChange={(e) => setHideTrivial(e.target.checked)}
+          />
+          Hide trivial
+        </label>
+      </Toolbar>
+      {(filtered || total > npcs.length) && (
         <p className="mb-2 text-[11px]" style={{ color: 'var(--color-muted)' }}>
-          Showing {npcs.length} of {total.toLocaleString()}
+          Showing {visible.length.toLocaleString()} of {total.toLocaleString()}
         </p>
       )}
-      <div
-        className="rounded border"
-        style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-      >
-        {npcs.map((npc, i) => (
-          <button
-            key={npc.id}
-            onClick={() => navigate(`/npcs?select=${npc.id}`)}
-            className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
-            style={{
-              borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
-              borderLeft: '2px solid transparent',
-            }}
-            onMouseEnter={(e) => {
-              ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
-              ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
-            }}
-            onMouseLeave={(e) => {
-              ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-              ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
-            }}
-          >
-            <div className="flex flex-col">
-              <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-                {npcDisplayName(npc)}
-              </span>
-              <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                {className(npc.class)}
-              </span>
-            </div>
-            <div className="ml-4 shrink-0 text-right">
-              <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                Lv {npcLevelLabel(npc)}
-              </span>
-              {npc.hp > 0 && (
-                <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                  {npc.hp.toLocaleString()} HP
-                </div>
-              )}
-            </div>
-          </button>
-        ))}
-      </div>
+      {visible.length === 0 ? (
+        <EmptyState message="No NPCs match these filters." />
+      ) : (
+        <div
+          className="rounded border"
+          style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+        >
+          {visible.map((npc, i) => (
+            <button
+              key={npc.id}
+              onClick={() => navigate(`/npcs?select=${npc.id}`)}
+              className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
+              style={{
+                borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
+                borderLeft: '2px solid transparent',
+              }}
+              onMouseEnter={(e) => {
+                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
+                ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
+              }}
+              onMouseLeave={(e) => {
+                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+                ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
+              }}
+            >
+              <div className="flex flex-col">
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  {npcDisplayName(npc)}
+                </span>
+                <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                  {className(npc.class)}
+                </span>
+              </div>
+              <div className="ml-4 shrink-0 text-right">
+                <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                  Lv {npcLevelLabel(npc)}
+                </span>
+                {npc.hp > 0 && (
+                  <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                    {npc.hp.toLocaleString()} HP
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -536,6 +764,14 @@ function ConnectionsTab({ shortName }: { shortName: string }): React.ReactElemen
 
 const ZONE_DROPS_PAGE_SIZE = 100
 
+const DROP_SORT_OPTIONS: SortOption<ZoneDropsSort>[] = [
+  { key: 'item', label: 'Item', defaultDesc: false },
+  { key: 'npc', label: 'NPC', defaultDesc: false },
+  { key: 'chance', label: 'Drop %', defaultDesc: true },
+]
+
+const DROP_MIN_CHANCE_OPTIONS = [0, 1, 5, 10, 25, 50, 100]
+
 function DropsTab({ shortName }: { shortName: string }): React.ReactElement {
   const navigate = useNavigate()
   const [drops, setDrops] = useState<ZoneDropItem[]>([])
@@ -543,14 +779,33 @@ function DropsTab({ shortName }: { shortName: string }): React.ReactElement {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sort, setSort] = useCachedState<SortState<ZoneDropsSort>>('zones.drops.sort', {
+    key: 'item',
+    desc: false,
+  })
+  const [filter, setFilter] = useCachedState('zones.drops.filter', '')
+  const [minChance, setMinChance] = useCachedState('zones.drops.minChance', 0)
+  // Big zones run to ~19k rows, so sorting and filtering happen server-side;
+  // the text filter is debounced to avoid a request per keystroke.
+  const [debouncedFilter, setDebouncedFilter] = useState(filter)
   // Monotonic token so a slow earlier request can't clobber a newer one.
   const seqRef = useRef(0)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFilter(filter), 300)
+    return () => clearTimeout(t)
+  }, [filter])
+
+  const opts = useMemo<ZoneDropsOptions>(
+    () => ({ sort: sort.key, desc: sort.desc, q: debouncedFilter, minChance }),
+    [sort, debouncedFilter, minChance],
+  )
 
   useEffect(() => {
     const seq = ++seqRef.current
     setLoading(true)
     setError(null)
-    getZoneDrops(shortName, ZONE_DROPS_PAGE_SIZE, 0)
+    getZoneDrops(shortName, opts, ZONE_DROPS_PAGE_SIZE, 0)
       .then((res) => {
         if (seq !== seqRef.current) return
         setDrops(res.items ?? [])
@@ -558,12 +813,12 @@ function DropsTab({ shortName }: { shortName: string }): React.ReactElement {
       })
       .catch((err: Error) => { if (seq === seqRef.current) setError(err.message) })
       .finally(() => { if (seq === seqRef.current) setLoading(false) })
-  }, [shortName])
+  }, [shortName, opts])
 
   function loadMore() {
     const seq = seqRef.current
     setLoadingMore(true)
-    getZoneDrops(shortName, ZONE_DROPS_PAGE_SIZE, drops.length)
+    getZoneDrops(shortName, opts, ZONE_DROPS_PAGE_SIZE, drops.length)
       .then((res) => {
         if (seq !== seqRef.current) return
         setDrops((prev) => [...prev, ...(res.items ?? [])])
@@ -573,22 +828,173 @@ function DropsTab({ shortName }: { shortName: string }): React.ReactElement {
       .finally(() => { if (seq === seqRef.current) setLoadingMore(false) })
   }
 
-  if (loading) return <LoadingState />
-  if (error) return <ErrorState message={error} />
-  if (drops.length === 0) return <EmptyState message="No drops found." />
+  const filtering = debouncedFilter.trim() !== '' || minChance > 0
+  // Without any filter an empty result means the zone has no loot at all, so
+  // the controls would be useless — show the plain empty state instead.
+  if (!loading && !error && drops.length === 0 && !filtering) {
+    return <EmptyState message="No drops found." />
+  }
 
   const hasMore = !loading && drops.length < total
 
   return (
     <div>
+      <Toolbar>
+        <FilterInput value={filter} onChange={setFilter} placeholder="Filter by item or NPC…" />
+        <div className="flex items-center gap-1">
+          <label
+            className="text-[10px] font-semibold uppercase tracking-widest"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            Min
+          </label>
+          <select
+            className="rounded border px-1.5 py-0.5 text-xs outline-none"
+            style={controlStyle}
+            value={String(minChance)}
+            onChange={(e) => setMinChance(Number(e.target.value))}
+          >
+            {DROP_MIN_CHANCE_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c === 0 ? 'Any %' : `${c}%`}
+              </option>
+            ))}
+          </select>
+        </div>
+        <SortControl options={DROP_SORT_OPTIONS} value={sort} onChange={setSort} />
+      </Toolbar>
+      {!loading && !error && (
+        <p className="mb-2 text-[11px]" style={{ color: 'var(--color-muted)' }}>
+          {total.toLocaleString()} drop{total === 1 ? '' : 's'}
+          {filtering ? ' match' : ''}
+        </p>
+      )}
+      {loading ? (
+        <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : drops.length === 0 ? (
+        <EmptyState message="No drops match these filters." />
+      ) : (
+        <div
+          className="rounded border"
+          style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+        >
+          {drops.map((d, i) => (
+            <button
+              key={`${d.item_id}-${d.npc_id}`}
+              onClick={() => navigate(`/items?select=${d.item_id}`)}
+              className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
+              style={{
+                borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
+                borderLeft: '2px solid transparent',
+              }}
+              onMouseEnter={(e) => {
+                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
+                ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
+              }}
+              onMouseLeave={(e) => {
+                ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+                ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
+              }}
+            >
+              <div className="flex flex-col">
+                <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+                  {d.item_name}
+                </span>
+                <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                  {npcNameDisplay(d.npc_name)}
+                </span>
+              </div>
+              {d.chance > 0 && (
+                <span className="ml-4 shrink-0 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                  {d.chance.toFixed(2)}%
+                </span>
+              )}
+            </button>
+          ))}
+          {hasMore && (
+            <div className="px-3 py-2">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full rounded border py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+                style={{
+                  backgroundColor: 'var(--color-surface)',
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-muted-foreground)',
+                }}
+              >
+                {loadingMore ? 'Loading…' : `Show more (${(total - drops.length).toLocaleString()} remaining)`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Tab: Ground Spawns ─────────────────────────────────────────────────────────
+
+type GroundSortKey = 'name' | 'respawn'
+
+const GROUND_SORT_OPTIONS: SortOption<GroundSortKey>[] = [
+  { key: 'name', label: 'Name', defaultDesc: false },
+  { key: 'respawn', label: 'Respawn', defaultDesc: false },
+]
+
+function GroundSpawnsTab({ shortName }: { shortName: string }): React.ReactElement {
+  const navigate = useNavigate()
+  const [spawns, setSpawns] = useState<ZoneGroundSpawn[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sort, setSort] = useCachedState<SortState<GroundSortKey>>(
+    'zones.ground.sort',
+    { key: 'name', desc: false },
+  )
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    getZoneGroundSpawns(shortName)
+      .then(setSpawns)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [shortName])
+
+  const sorted = useMemo(
+    () =>
+      [...spawns].sort(
+        compareBy(
+          (g) =>
+            sort.key === 'respawn'
+              ? g.respawn_timer
+              : (g.item_name || g.name).toLowerCase(),
+          (g) => g.item_name || g.name,
+          sort.desc,
+        ),
+      ),
+    [spawns, sort],
+  )
+
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState message={error} />
+  if (spawns.length === 0) return <EmptyState message="No ground spawns found." />
+
+  return (
+    <div>
+      <Toolbar>
+        <SortControl options={GROUND_SORT_OPTIONS} value={sort} onChange={setSort} />
+      </Toolbar>
       <div
         className="rounded border"
         style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
       >
-        {drops.map((d, i) => (
+        {sorted.map((g, i) => (
           <button
-            key={`${d.item_id}-${d.npc_id}`}
-            onClick={() => navigate(`/items?select=${d.item_id}`)}
+            key={g.id}
+            onClick={() => g.item_id > 0 && navigate(`/items?select=${g.item_id}`)}
             className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
             style={{
               borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
@@ -605,117 +1011,49 @@ function DropsTab({ shortName }: { shortName: string }): React.ReactElement {
           >
             <div className="flex flex-col">
               <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-                {d.item_name}
+                {g.item_name || g.name}
               </span>
-              <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                {npcNameDisplay(d.npc_name)}
-              </span>
+              {g.item_name && g.name && g.name !== g.item_name && (
+                <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                  {g.name}
+                </span>
+              )}
             </div>
-            {d.chance > 0 && (
-              <span className="ml-4 shrink-0 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                {d.chance.toFixed(2)}%
-              </span>
-            )}
+            <div className="ml-4 shrink-0 text-right">
+              <div className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                {formatRespawn(g.respawn_timer)}
+              </div>
+              {g.max_allowed > 1 && (
+                <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
+                  ×{g.max_allowed}
+                </div>
+              )}
+            </div>
           </button>
         ))}
-        {hasMore && (
-          <div className="px-3 py-2">
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full rounded border py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
-              style={{
-                backgroundColor: 'var(--color-surface)',
-                borderColor: 'var(--color-border)',
-                color: 'var(--color-muted-foreground)',
-              }}
-            >
-              {loadingMore ? 'Loading…' : `Show more (${(total - drops.length).toLocaleString()} remaining)`}
-            </button>
-          </div>
-        )}
       </div>
-    </div>
-  )
-}
-
-// ── Tab: Ground Spawns ─────────────────────────────────────────────────────────
-
-function GroundSpawnsTab({ shortName }: { shortName: string }): React.ReactElement {
-  const navigate = useNavigate()
-  const [spawns, setSpawns] = useState<ZoneGroundSpawn[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    setError(null)
-    getZoneGroundSpawns(shortName)
-      .then(setSpawns)
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [shortName])
-
-  if (loading) return <LoadingState />
-  if (error) return <ErrorState message={error} />
-  if (spawns.length === 0) return <EmptyState message="No ground spawns found." />
-
-  return (
-    <div
-      className="rounded border"
-      style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-    >
-      {spawns.map((g, i) => (
-        <button
-          key={g.id}
-          onClick={() => g.item_id > 0 && navigate(`/items?select=${g.item_id}`)}
-          className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
-          style={{
-            borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
-            borderLeft: '2px solid transparent',
-          }}
-          onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
-            ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
-          }}
-          onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-            ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
-          }}
-        >
-          <div className="flex flex-col">
-            <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-              {g.item_name || g.name}
-            </span>
-            {g.item_name && g.name && g.name !== g.item_name && (
-              <span className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                {g.name}
-              </span>
-            )}
-          </div>
-          <div className="ml-4 shrink-0 text-right">
-            <div className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-              {formatRespawn(g.respawn_timer)}
-            </div>
-            {g.max_allowed > 1 && (
-              <div className="text-[11px]" style={{ color: 'var(--color-muted)' }}>
-                ×{g.max_allowed}
-              </div>
-            )}
-          </div>
-        </button>
-      ))}
     </div>
   )
 }
 
 // ── Tab: Forage ────────────────────────────────────────────────────────────────
 
+type ForageSortKey = 'name' | 'chance'
+
+const FORAGE_SORT_OPTIONS: SortOption<ForageSortKey>[] = [
+  { key: 'name', label: 'Name', defaultDesc: false },
+  { key: 'chance', label: 'Chance', defaultDesc: true },
+]
+
 function ForageTab({ shortName }: { shortName: string }): React.ReactElement {
   const navigate = useNavigate()
   const [items, setItems] = useState<ZoneForageItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sort, setSort] = useCachedState<SortState<ForageSortKey>>(
+    'zones.forage.sort',
+    { key: 'chance', desc: true },
+  )
 
   useEffect(() => {
     setLoading(true)
@@ -726,41 +1064,58 @@ function ForageTab({ shortName }: { shortName: string }): React.ReactElement {
       .finally(() => setLoading(false))
   }, [shortName])
 
+  const sorted = useMemo(
+    () =>
+      [...items].sort(
+        compareBy(
+          (f) => (sort.key === 'chance' ? f.chance : f.item_name.toLowerCase()),
+          (f) => f.item_name,
+          sort.desc,
+        ),
+      ),
+    [items, sort],
+  )
+
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
   if (items.length === 0) return <EmptyState message="No forageable items found." />
 
   return (
-    <div
-      className="rounded border"
-      style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
-    >
-      {items.map((f, i) => (
-        <button
-          key={f.id}
-          onClick={() => navigate(`/items?select=${f.item_id}`)}
-          className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
-          style={{
-            borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
-            borderLeft: '2px solid transparent',
-          }}
-          onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
-            ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
-          }}
-          onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-            ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
-          }}
-        >
-          <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
-            {f.item_name}
-          </span>
-          <span className="ml-4 shrink-0 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-            {f.chance}%
-          </span>
-        </button>
-      ))}
+    <div>
+      <Toolbar>
+        <SortControl options={FORAGE_SORT_OPTIONS} value={sort} onChange={setSort} />
+      </Toolbar>
+      <div
+        className="rounded border"
+        style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+      >
+        {sorted.map((f, i) => (
+          <button
+            key={f.id}
+            onClick={() => navigate(`/items?select=${f.item_id}`)}
+            className="flex w-full cursor-pointer items-baseline justify-between px-3 py-1.5 text-left transition-colors"
+            style={{
+              borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
+              borderLeft: '2px solid transparent',
+            }}
+            onMouseEnter={(e) => {
+              ;(e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-surface-2)'
+              ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'var(--color-primary)'
+            }}
+            onMouseLeave={(e) => {
+              ;(e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+              ;(e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'
+            }}
+          >
+            <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+              {f.item_name}
+            </span>
+            <span className="ml-4 shrink-0 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+              {f.chance}%
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

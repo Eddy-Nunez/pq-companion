@@ -48,8 +48,10 @@ func (h *zonesHandler) getNPCsByShortName(w http.ResponseWriter, r *http.Request
 	name := chi.URLParam(r, "name")
 	limit := queryInt(r, "limit", 100)
 	offset := queryInt(r, "offset", 0)
-	if limit > 200 {
-		limit = 200
+	// The Zones → NPCs tab loads a zone's full roster in one go so it can
+	// sort and filter client-side; the busiest zone (sseru) is ~410 NPCs.
+	if limit > 1000 {
+		limit = 1000
 	}
 	result, err := h.db.GetNPCsByZone(name, limit, offset)
 	if err != nil {
@@ -154,7 +156,18 @@ func (h *zonesHandler) getDrops(w http.ResponseWriter, r *http.Request) {
 		limit = 500
 	}
 	offset := queryInt(r, "offset", 0)
-	result, err := h.db.GetZoneDrops(name, limit, offset)
+	query := r.URL.Query()
+	opts := db.ZoneDropsOptions{
+		Sort:  query.Get("sort"),
+		Desc:  query.Get("dir") == "desc",
+		Query: query.Get("q"),
+	}
+	if raw := query.Get("min_chance"); raw != "" {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil {
+			opts.MinChance = v
+		}
+	}
+	result, err := h.db.GetZoneDrops(name, opts, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -756,7 +756,7 @@ export function globalSearch(q: string, limit = 5): Promise<GlobalSearchResult> 
 
 export function getNPCsByZone(
   shortName: string,
-  limit = 200,
+  limit = 1000,
   offset = 0,
 ): Promise<SearchResult<NPC>> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
@@ -782,12 +782,28 @@ export function getZoneForage(shortName: string): Promise<ZoneForageItem[]> {
   return get<ZoneForageItem[]>(`/api/zones/short/${encodeURIComponent(shortName)}/forage`)
 }
 
+export type ZoneDropsSort = 'item' | 'npc' | 'chance'
+
+export interface ZoneDropsOptions {
+  sort?: ZoneDropsSort
+  desc?: boolean
+  // Substring matched against item name or NPC name.
+  q?: string
+  // Minimum effective drop rate, in percent.
+  minChance?: number
+}
+
 export function getZoneDrops(
   shortName: string,
+  opts: ZoneDropsOptions = {},
   limit = 100,
   offset = 0,
 ): Promise<SearchResult<ZoneDropItem>> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (opts.sort) params.set('sort', opts.sort)
+  if (opts.desc) params.set('dir', 'desc')
+  if (opts.q?.trim()) params.set('q', opts.q.trim())
+  if (opts.minChance && opts.minChance > 0) params.set('min_chance', String(opts.minChance))
   return get<SearchResult<ZoneDropItem>>(
     `/api/zones/short/${encodeURIComponent(shortName)}/drops?${params}`,
   )
