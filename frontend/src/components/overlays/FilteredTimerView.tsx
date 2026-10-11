@@ -195,6 +195,17 @@ function FilterBar({
           />
           Under 1 min
         </label>
+        <label
+          style={labelStyle}
+          title="Hide timers until they cross the global or per-trigger display threshold, like the Buff and Detrimental overlays"
+        >
+          <input
+            type="checkbox"
+            checked={config.respectThresholds}
+            onChange={(e) => update({ respectThresholds: e.target.checked })}
+          />
+          Use display thresholds
+        </label>
         {config.type === 'beneficial' && config.viewBy === 'spell' && (
           <label style={labelStyle} title="List group/raid members missing each spell (needs the Zeal pipe)">
             <input

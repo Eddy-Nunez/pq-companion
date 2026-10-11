@@ -30,6 +30,10 @@ export interface FilteredTimerConfig {
   underOneMin: boolean
   // Beneficial spell view only: list roster members missing each spell.
   showMissing: boolean
+  // Apply the global / per-trigger display thresholds the Buff and
+  // Detrimental overlays use. Off by default: this window's point is to show
+  // the picked spells regardless of time left.
+  respectThresholds: boolean
 }
 
 export const DEFAULT_FILTERED_TIMER_CONFIG: FilteredTimerConfig = {
@@ -40,6 +44,7 @@ export const DEFAULT_FILTERED_TIMER_CONFIG: FilteredTimerConfig = {
   selectedSpells: [],
   underOneMin: false,
   showMissing: false,
+  respectThresholds: false,
 }
 
 export const DETRIM_CATEGORIES = new Set<TimerCategory>(['debuff', 'dot', 'mez', 'stun'])
@@ -53,6 +58,11 @@ export interface FilterContext {
   // Live group/raid roster (including the active player) for the missing
   // list; empty when no roster is available.
   roster: string[]
+  // Timers to check the missing list against, before any time-based
+  // filtering (display thresholds, "under 1 min"). A buff that's hidden
+  // because it still has plenty of time left is held, not missing.
+  // Defaults to the `timers` argument.
+  holders?: ActiveTimer[]
 }
 
 export interface TimerGroup {
@@ -136,7 +146,7 @@ export function applyTimerFilter(
   // group, so the missing list can show the whole roster.
   const wantMissing =
     cfg.showMissing && cfg.type === 'beneficial' && cfg.viewBy === 'spell' && ctx.roster.length > 0
-  if (wantMissing && cfg.underOneMin === false) {
+  if (wantMissing) {
     const want = target ? [target] : cfg.onlySelected ? cfg.selectedSpells : []
     for (const s of want) {
       const gk = s.toLowerCase()
@@ -144,10 +154,14 @@ export function applyTimerFilter(
     }
   }
 
+  const holders = (ctx.holders ?? timers).filter((t) => matchesType(t, cfg.type))
   const out = [...groups.values()]
   for (const g of out) {
     g.rows.sort(byRemaining)
-    if (wantMissing) g.missing = missingFrom(g.rows, ctx.roster, ctx.activePlayer)
+    if (wantMissing) {
+      const held = holders.filter((t) => sameName(t.spell_name, g.title))
+      g.missing = missingFrom(held, ctx.roster, ctx.activePlayer)
+    }
   }
   // Most urgent group first, then name — rowless groups sink to the bottom.
   return out.sort((a, b) => {

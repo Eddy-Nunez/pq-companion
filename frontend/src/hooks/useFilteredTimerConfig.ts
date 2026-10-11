@@ -29,6 +29,7 @@ function readStored(): FilteredTimerConfig {
         : [],
       underOneMin: v.underOneMin === true,
       showMissing: v.showMissing === true,
+      respectThresholds: v.respectThresholds === true,
     }
   } catch {
     return DEFAULT_FILTERED_TIMER_CONFIG

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useWebSocket } from './useWebSocket'
 import { useActivePlayerName } from './useActivePlayerName'
-import { useHideOtherCharacterTimers, passesCharacterScope } from './useDisplayThresholds'
+import {
+  useDisplayThresholds,
+  passesThreshold,
+  useHideOtherCharacterTimers,
+  passesCharacterScope,
+} from './useDisplayThresholds'
 import { useFilteredTimerConfig } from './useFilteredTimerConfig'
 import { usePartyRoster } from './usePartyRoster'
 import { useCurrentTargetName } from './useCurrentTargetName'
@@ -15,10 +20,11 @@ import type { ActiveTimer, TimerState } from '../types/timer'
  * panel and the popout window: the live timer feed, the persisted filter
  * config, and the grouped result.
  *
- * Deliberately ignores the global per-category display thresholds — this
- * window has its own "under 1 min" filter, and its whole point is to show
- * the spells you picked regardless of how long they have left. The "hide
- * other characters' timers" setting still applies.
+ * Ignores the global / per-trigger display thresholds unless the window's
+ * own "Use display thresholds" toggle is on — this window has its own
+ * "under 1 min" filter, and its point is to show the spells you picked
+ * regardless of how long they have left. The "hide other characters'
+ * timers" setting always applies.
  */
 export function useFilteredTimers(): {
   timers: ActiveTimer[] | null
@@ -35,6 +41,7 @@ export function useFilteredTimers(): {
   const [state, setState] = useState<TimerState | null>(null)
   const activePlayer = useActivePlayerName()
   const hideOtherCharacters = useHideOtherCharacterTimers()
+  const thresholds = useDisplayThresholds()
   const { config, update, collapsed, toggleCollapsed } = useFilteredTimerConfig()
   const party = usePartyRoster(activePlayer)
   const currentTarget = useCurrentTargetName()
@@ -48,12 +55,21 @@ export function useFilteredTimers(): {
   }, [])
   const wsState = useWebSocket(handleMessage)
 
-  const timers = useMemo(
+  // `scoped` feeds the missing list, which must ignore display thresholds;
+  // `timers` is what the rows and dropdowns show.
+  const scoped = useMemo(
     () =>
       state === null
         ? null
         : (state.timers ?? []).filter((t) => passesCharacterScope(t, hideOtherCharacters, activePlayer)),
     [state, hideOtherCharacters, activePlayer],
+  )
+  const timers = useMemo(
+    () =>
+      scoped === null || !config.respectThresholds
+        ? scoped
+        : scoped.filter((t) => passesThreshold(t, thresholds)),
+    [scoped, config.respectThresholds, thresholds],
   )
 
   const roster = useMemo(
@@ -61,8 +77,13 @@ export function useFilteredTimers(): {
     [config.showMissing, party.names],
   )
   const groups = useMemo(
-    () => applyTimerFilter(timers ?? [], config, { activePlayer, currentTarget, roster }),
-    [timers, config, activePlayer, currentTarget, roster],
+    () => applyTimerFilter(timers ?? [], config, {
+        activePlayer,
+        currentTarget,
+        roster,
+        holders: scoped ?? [],
+      }),
+    [timers, scoped, config, activePlayer, currentTarget, roster],
   )
 
   return {
