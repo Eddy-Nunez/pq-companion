@@ -452,3 +452,19 @@ func TestDecodeDeath(t *testing.T) {
 		t.Errorf("unexpected decode: %+v", d)
 	}
 }
+
+// Payloads that aren't shaped like a death are rejected, so a different
+// message that ever takes type 7 can't delete timers on living mobs.
+func TestDecodeDeath_RejectsOtherShapes(t *testing.T) {
+	for _, payload := range []string{
+		`[{"spawn_id":5,"killer_id":1}]`,  // array, like the roster messages
+		`{"spawn_id":5,"name":"a gnoll"}`, // spawn-style object, no killer_id
+		`{"killer_id":3}`,                 // no spawn_id
+		`{"spawn_id":0,"killer_id":3}`,    // invalid id
+		`not json`,
+	} {
+		if _, err := DecodeDeath(payload); err == nil {
+			t.Errorf("expected %s to be rejected", payload)
+		}
+	}
+}

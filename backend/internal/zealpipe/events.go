@@ -399,11 +399,29 @@ func DecodeRaid(payload string) ([]RaidMember, error) {
 	return members, nil
 }
 
-// DecodeDeath parses a MsgDeath (type 7) payload.
+// DecodeDeath parses a MsgDeath (type 7) payload. Type 7 comes from a Zeal
+// PR that may be declined or renumbered, and a later upstream message could
+// take the number instead, so the payload must look like a death — an object
+// with both spawn_id and killer_id, and a positive spawn id — or it's
+// rejected. Acting on some other message as a death would delete timers on
+// living mobs.
 func DecodeDeath(payload string) (Death, error) {
 	var d Death
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &keys); err != nil {
+		return d, fmt.Errorf("zealpipe: decode death: %w", err)
+	}
+	if _, ok := keys["spawn_id"]; !ok {
+		return d, fmt.Errorf("zealpipe: decode death: no spawn_id")
+	}
+	if _, ok := keys["killer_id"]; !ok {
+		return d, fmt.Errorf("zealpipe: decode death: no killer_id")
+	}
 	if err := json.Unmarshal([]byte(payload), &d); err != nil {
 		return d, fmt.Errorf("zealpipe: decode death: %w", err)
+	}
+	if d.SpawnID <= 0 {
+		return d, fmt.Errorf("zealpipe: decode death: spawn_id %d", d.SpawnID)
 	}
 	return d, nil
 }
