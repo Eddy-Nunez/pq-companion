@@ -3144,10 +3144,15 @@ func (e *Engine) snapshot(now time.Time) TimerState {
 	// Pinned timers float to the top as a group — set via Trigger.Pinned, this
 	// keeps raid/boss timers visible without them shifting down the list as
 	// unrelated timers count lower. Within each group (pinned, then unpinned),
-	// sort ascending by remaining time so the most urgent timer leads.
+	// MaybeDead rows sink below live ones so a raid's worth of possibly-dead
+	// debuffs can't push the live timers off the overlay, then sort ascending
+	// by remaining time so the most urgent timer leads.
 	less := func(a, b ActiveTimer) bool {
 		if a.Pinned != b.Pinned {
 			return a.Pinned
+		}
+		if a.MaybeDead != b.MaybeDead {
+			return b.MaybeDead
 		}
 		return a.RemainingSeconds < b.RemainingSeconds
 	}

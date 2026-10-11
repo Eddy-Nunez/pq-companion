@@ -86,3 +86,19 @@ func TestHandlePipeDeath_SuppressesMaybeDead(t *testing.T) {
 		}
 	}
 }
+
+// MaybeDead rows sort below live ones even when they'd expire sooner.
+func TestSnapshot_MaybeDeadSinks(t *testing.T) {
+	e := spawnIDEngine(t)
+	now := time.Now()
+	e.timers["a"] = &ActiveTimer{ID: "a", SpellName: "a", TargetName: "x",
+		Category: CategoryDebuff, MaybeDead: true, CastAt: now, StartsAt: now,
+		ExpiresAt: now.Add(10 * time.Second)}
+	e.timers["b"] = &ActiveTimer{ID: "b", SpellName: "b", TargetName: "x",
+		Category: CategoryDebuff, CastAt: now, StartsAt: now,
+		ExpiresAt: now.Add(time.Minute)}
+	got := e.snapshot(now).Timers
+	if len(got) != 2 || got[0].ID != "b" || got[1].ID != "a" {
+		t.Errorf("expected live timer first, got %v", got)
+	}
+}
