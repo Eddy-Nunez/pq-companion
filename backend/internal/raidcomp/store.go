@@ -226,7 +226,7 @@ func (s *Store) migrate() error {
 			}
 		}
 	}
-	return nil
+	return s.migrateSnapshots()
 }
 
 // EnsureSeed seeds the taxonomy (always). Encounters are no longer

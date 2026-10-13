@@ -1,9 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { RefreshCw, Users, AlertTriangle } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { RefreshCw, Users, AlertTriangle, Camera, History, X } from 'lucide-react'
 import { useLiveRaidRoster } from '../hooks/useLiveRaidRoster'
-import { getRaidTaxonomy } from '../services/api'
+import {
+  getRaidTaxonomy,
+  getRaidRosterSnapshots,
+  getRaidRosterSnapshot,
+  createRaidRosterSnapshot,
+  renameRaidRosterSnapshot,
+  deleteRaidRosterSnapshot,
+} from '../services/api'
 import RosterStatusBanner from '../components/raids/RosterStatusBanner'
-import type { RaidTaxonomy, RaidRosterMember, ClassCode } from '../types/raid'
+import RaidMembersView from '../components/raids/RaidMembersView'
+import RosterSnapshotHistory, { formatSnapshotTime } from '../components/raids/RosterSnapshotHistory'
+import type { RaidTaxonomy, RaidRosterHistoryEntry, ClassCode } from '../types/raid'
 
 // Canonical EQ class order (matches Zeal's 1-indexed class ids / the class
 // select on every character page) — used to order the class-count grid and
@@ -64,8 +73,75 @@ export default function RaidSummaryPage(): React.ReactElement {
     getRaidTaxonomy().then(setTaxonomy).catch(() => setTaxonomy(null))
   }, [])
 
-  const members = roster?.members ?? []
-  const inRaid = !!roster?.in_raid && members.length > 0
+  // Saved roster snapshots (attendance / group history). viewing holds the
+  // full snapshot currently shown in place of the live roster, or null.
+  const [snapshots, setSnapshots] = useState<RaidRosterHistoryEntry[]>([])
+  const [viewing, setViewing] = useState<RaidRosterHistoryEntry | null>(null)
+  const [snapshotBusy, setSnapshotBusy] = useState(false)
+  const [snapshotError, setSnapshotError] = useState('')
+
+  const loadSnapshots = useCallback(async (): Promise<void> => {
+    try {
+      const res = await getRaidRosterSnapshots()
+      setSnapshots(res.snapshots)
+    } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : String(err))
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSnapshots()
+  }, [loadSnapshots])
+
+  const takeSnapshot = async (): Promise<void> => {
+    setSnapshotBusy(true)
+    setSnapshotError('')
+    try {
+      await createRaidRosterSnapshot('')
+      await loadSnapshots()
+    } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSnapshotBusy(false)
+    }
+  }
+
+  const viewSnapshot = async (id: number): Promise<void> => {
+    setSnapshotError('')
+    try {
+      setViewing(await getRaidRosterSnapshot(id))
+    } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const renameSnapshot = async (id: number, label: string): Promise<void> => {
+    setSnapshotError('')
+    try {
+      await renameRaidRosterSnapshot(id, label)
+      setViewing((v) => (v && v.id === id ? { ...v, label: label.trim() } : v))
+      await loadSnapshots()
+    } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const deleteSnapshot = async (id: number): Promise<void> => {
+    setSnapshotError('')
+    try {
+      await deleteRaidRosterSnapshot(id)
+      setViewing((v) => (v && v.id === id ? null : v))
+      await loadSnapshots()
+    } catch (err) {
+      setSnapshotError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const liveInRaid = !!roster?.in_raid && (roster?.members.length ?? 0) > 0
+  const members = viewing ? viewing.members ?? [] : roster?.members ?? []
+  // A saved snapshot is always a real raid, so it gets the same "in raid"
+  // alert styling the live roster does.
+  const inRaid = viewing ? members.length > 0 : liveInRaid
 
   const { counts, unclassedCount, missing } = useMemo(() => {
     const counts = new Map<ClassCode, number>()
@@ -86,14 +162,6 @@ export default function RaidSummaryPage(): React.ReactElement {
     return { counts, unclassedCount, missing }
   }, [members])
 
-  const sortedMembers = useMemo(() => {
-    const rank = (m: RaidRosterMember): number => {
-      const i = m.code ? CLASS_ORDER.indexOf(m.code as ClassCode) : -1
-      return i === -1 ? CLASS_ORDER.length : i
-    }
-    return [...members].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
-  }, [members])
-
   const missingCritical = missing.filter((c) => CRITICAL_CLASSES.has(c))
   const missingOther = missing.filter((c) => !CRITICAL_CLASSES.has(c))
 
@@ -110,11 +178,21 @@ export default function RaidSummaryPage(): React.ReactElement {
         >
           <RefreshCw size={14} /> Refresh
         </button>
+        <button
+          onClick={() => void takeSnapshot()}
+          disabled={!liveInRaid || snapshotBusy}
+          title={liveInRaid ? 'Save the current roster and groups to snapshot history' : 'Join a raid to take a snapshot'}
+          className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted-foreground)' }}
+        >
+          <Camera size={14} /> {snapshotBusy ? 'Saving…' : 'Snapshot'}
+        </button>
       </div>
       <p className="text-xs -mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
         Live snapshot of the raid from the Zeal pipe — who&apos;s in, class counts, and any classes
-        with nobody covering them. For a specific encounter&apos;s MIN/REC staffing, use the
-        Composition Check tab.
+        with nobody covering them. Snapshot the roster to keep a history of attendance and
+        group setup. For a specific encounter&apos;s MIN/REC staffing, use the Composition
+        Check tab.
       </p>
 
       {error ? (
@@ -122,8 +200,34 @@ export default function RaidSummaryPage(): React.ReactElement {
           {error}
         </div>
       ) : null}
+      {snapshotError ? (
+        <div className="px-3 py-2 text-sm rounded" style={{ backgroundColor: 'var(--color-danger)', color: '#fff' }}>
+          {snapshotError}
+        </div>
+      ) : null}
 
-      <RosterStatusBanner roster={roster} />
+      {viewing ? (
+        <div
+          className="rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap"
+          style={{ border: '1px solid var(--color-primary)', backgroundColor: 'var(--color-surface)' }}
+        >
+          <History size={15} style={{ color: 'var(--color-primary)' }} />
+          <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>
+            Viewing snapshot from <span className="font-semibold">{formatSnapshotTime(viewing.taken_at)}</span>
+            {viewing.label ? <> — {viewing.label}</> : null}
+            {viewing.zone ? <span style={{ color: 'var(--color-muted-foreground)' }}> · {viewing.zone}</span> : null}
+          </span>
+          <button
+            onClick={() => setViewing(null)}
+            className="ml-auto flex items-center gap-1.5 px-2 py-1 text-sm rounded"
+            style={{ backgroundColor: 'var(--color-primary)', color: 'var(--color-primary-foreground)' }}
+          >
+            <X size={14} /> Back to live
+          </button>
+        </div>
+      ) : (
+        <RosterStatusBanner roster={roster} />
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Stat label="Members" value={members.length} />
@@ -188,52 +292,19 @@ export default function RaidSummaryPage(): React.ReactElement {
         </div>
       </div>
 
-      <div
-        className="rounded-lg flex flex-col min-h-0"
-        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', maxHeight: '28rem' }}
-      >
-        <div
-          className="px-3 py-2 text-sm font-semibold shrink-0"
-          style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface-2)', color: 'var(--color-foreground)' }}
-        >
-          Members
-        </div>
-        {/* A fixed max-height + its own overflow-y-auto keeps a full 72-member
-            raid scrollable within this box on its own, independent of how
-            much room the stats/banner/class-count sections above take up. */}
-        <div className="overflow-y-auto min-h-0">
-          <div
-            className="grid grid-cols-[1.4fr_60px_1fr_1fr_1fr] gap-3 px-3 py-1 text-[11px] uppercase tracking-wide sticky top-0"
-            style={{ color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-surface)' }}
-          >
-            <span>Name</span>
-            <span className="justify-self-end">Level</span>
-            <span>Class</span>
-            <span>Group</span>
-            <span>Rank</span>
-          </div>
-          {sortedMembers.length === 0 ? (
-            <div className="px-3 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-              No members yet.
-            </div>
-          ) : (
-            sortedMembers.map((m, i) => (
-              <div
-                key={`${m.name}-${i}`}
-                className={`grid grid-cols-[1.4fr_60px_1fr_1fr_1fr] gap-3 items-center px-3 py-1.5 ${i % 2 === 1 ? 'bg-(--color-surface-2)/50' : ''}`}
-              >
-                <span className="text-sm truncate" style={{ color: 'var(--color-foreground)' }}>{m.name}</span>
-                <span className="text-sm tabular-nums justify-self-end" style={{ color: 'var(--color-muted-foreground)' }}>{m.level ?? '—'}</span>
-                <span className="text-sm" style={{ color: m.code ? 'var(--color-foreground)' : 'var(--color-danger)' }}>
-                  {m.code ? classLabel(taxonomy, m.code as ClassCode) : 'Unknown'}
-                </span>
-                <span className="text-sm truncate" style={{ color: 'var(--color-muted-foreground)' }}>{m.group ?? '—'}</span>
-                <span className="text-sm truncate" style={{ color: 'var(--color-muted-foreground)' }}>{m.rank ?? '—'}</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      <RaidMembersView
+        members={members}
+        classOrder={CLASS_ORDER}
+        classLabel={(code) => classLabel(taxonomy, code)}
+      />
+
+      <RosterSnapshotHistory
+        snapshots={snapshots}
+        viewingId={viewing?.id ?? null}
+        onView={(id) => void viewSnapshot(id)}
+        onRename={renameSnapshot}
+        onDelete={deleteSnapshot}
+      />
     </div>
   )
 }

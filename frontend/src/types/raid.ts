@@ -80,6 +80,17 @@ export interface RaidRosterSnapshot {
   members: RaidRosterMember[]
 }
 
+/** A saved copy of the live raid roster (attendance / group history). */
+export interface RaidRosterHistoryEntry {
+  id: number
+  taken_at: number // unix seconds
+  zone_id?: number
+  zone?: string
+  label: string
+  member_count: number
+  members?: RaidRosterMember[] // present on single-snapshot fetches only
+}
+
 /** One member of a manually-entered roster (class = code or class name). */
 export interface CheckRosterInput {
   name: string

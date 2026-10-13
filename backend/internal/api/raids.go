@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/raidcomp"
@@ -159,17 +160,11 @@ type rosterResponse struct {
 }
 
 func (h *raidsHandler) getRoster(w http.ResponseWriter, r *http.Request) {
-	snap, _ := h.roster.Get()
 	// Overlay the live pipe zone: the snapshot's zone was captured at the last
 	// MsgRaid, which can be stale (zoned since) or zero (raid arrived before
 	// the first player tick). The live zone is what encounter detection should
 	// match against.
-	if h.liveZone != nil {
-		if id, short := h.liveZone(); id > 0 {
-			snap.ZoneID = id
-			snap.Zone = short
-		}
-	}
+	snap := h.liveRoster()
 	connected := h.pipe != nil && h.pipe.Status().State == zealpipe.StateConnected
 	if snap.Members == nil {
 		snap.Members = []raidcomp.Member{}
@@ -179,6 +174,133 @@ func (h *raidsHandler) getRoster(w http.ResponseWriter, r *http.Request) {
 		InRaid:        len(snap.Members) > 0,
 		Snapshot:      snap,
 	})
+}
+
+// ── Roster snapshots ───────────────────────────────────────────────────────
+
+// liveRoster returns the current roster snapshot with the live pipe zone
+// overlaid (see getRoster).
+func (h *raidsHandler) liveRoster() raidcomp.Snapshot {
+	snap, _ := h.roster.Get()
+	if h.liveZone != nil {
+		if id, short := h.liveZone(); id > 0 {
+			snap.ZoneID = id
+			snap.Zone = short
+		}
+	}
+	return snap
+}
+
+type snapshotLabelRequest struct {
+	Label string `json:"label"`
+}
+
+func snapshotID(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid snapshot id")
+		return 0, false
+	}
+	return id, true
+}
+
+func (h *raidsHandler) listSnapshots(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	snaps, err := h.store.ListSnapshots()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load roster snapshots: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"snapshots": snaps})
+}
+
+func (h *raidsHandler) getSnapshot(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	id, ok := snapshotID(w, r)
+	if !ok {
+		return
+	}
+	snap, err := h.store.GetSnapshot(id)
+	if errors.Is(err, raidcomp.ErrSnapshotNotFound) {
+		writeError(w, http.StatusNotFound, "roster snapshot not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load roster snapshot: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
+}
+
+// createSnapshot saves the CURRENT live roster. The roster is read
+// server-side rather than posted by the client, so a snapshot always reflects
+// what Zeal actually reported.
+func (h *raidsHandler) createSnapshot(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	var req snapshotLabelRequest
+	if r.ContentLength != 0 {
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	live := h.liveRoster()
+	if len(live.Members) == 0 {
+		writeError(w, http.StatusConflict, "not in a raid — nothing to snapshot")
+		return
+	}
+	saved, err := h.store.SaveSnapshot(live, req.Label)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (h *raidsHandler) renameSnapshot(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	id, ok := snapshotID(w, r)
+	if !ok {
+		return
+	}
+	var req snapshotLabelRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	err := h.store.RenameSnapshot(id, req.Label)
+	if errors.Is(err, raidcomp.ErrSnapshotNotFound) {
+		writeError(w, http.StatusNotFound, "roster snapshot not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *raidsHandler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
+	if h.unavailable(w) {
+		return
+	}
+	id, ok := snapshotID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.store.DeleteSnapshot(id); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete roster snapshot: "+err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Encounter CRUD ─────────────────────────────────────────────────────────

@@ -3554,6 +3554,7 @@ export function importExistingEmotes(spellIds?: number[]): Promise<{ imported: n
 import type {
   RaidTaxonomy,
   RaidRosterSnapshot,
+  RaidRosterHistoryEntry,
   RaidEncounter,
   RaidRole,
   CheckReport,
@@ -3585,6 +3586,27 @@ export function deleteRaidRole(role: string, sub?: string): Promise<void> {
 
 export function getRaidRoster(): Promise<RaidRosterSnapshot> {
   return get<RaidRosterSnapshot>('/api/raids/roster')
+}
+
+export function getRaidRosterSnapshots(): Promise<{ snapshots: RaidRosterHistoryEntry[] }> {
+  return get<{ snapshots: RaidRosterHistoryEntry[] }>('/api/raids/snapshots')
+}
+
+export function getRaidRosterSnapshot(id: number): Promise<RaidRosterHistoryEntry> {
+  return get<RaidRosterHistoryEntry>(`/api/raids/snapshots/${id}`)
+}
+
+/** Saves the current live raid roster server-side (409 if not in a raid). */
+export function createRaidRosterSnapshot(label: string): Promise<RaidRosterHistoryEntry> {
+  return post<RaidRosterHistoryEntry>('/api/raids/snapshots', { label })
+}
+
+export function renameRaidRosterSnapshot(id: number, label: string): Promise<void> {
+  return patch<void>(`/api/raids/snapshots/${id}`, { label })
+}
+
+export function deleteRaidRosterSnapshot(id: number): Promise<void> {
+  return del<void>(`/api/raids/snapshots/${id}`)
 }
 
 export function getRaidEncounters(): Promise<{ encounters: RaidEncounter[] }> {
