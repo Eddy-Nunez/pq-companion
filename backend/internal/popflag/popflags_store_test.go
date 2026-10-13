@@ -86,29 +86,27 @@ func TestApplyPopFlagsReportManualPrecedence(t *testing.T) {
 	const char = "Osui"
 
 	report := ParsePopFlagsReport([]string{
-		"=== Tier 2 Progression ===",
-		"Mithaniel Marr cipher half: Combined into Cipher",
+		"=== Plane of Time ===",
+		"Plane of Time access: Unlocked",
 	})
 	if _, err := s.ApplyPopFlagsReport(char, report, "raw", time.Unix(1000, 0)); err != nil {
 		t.Fatalf("ApplyPopFlagsReport: %v", err)
 	}
-	// potor_saryrn is satisfied_by cipher>=1; confirm it landed, then
-	// manually retract it, then re-apply the same report. (hoh_mithaniel is
-	// ALSO satisfied_by cipher, but is a hard prereq of pok_maelin_cipher —
-	// whose own qglobal condition is cipher>=1 too — so retracting it would
-	// hit the SetManual lock guard for an unrelated reason; potor_saryrn
-	// isn't any other flag's prereq, so it isolates the guarantee this test
-	// is actually about.)
-	if !doneByID(t, s, char)["potor_saryrn"].Done {
-		t.Fatalf("potor_saryrn should be satisfied by cipher")
+	// potime (time==1) is the only qglobal-backed required flag that isn't
+	// any other flag's prereq, so retracting it can't trip the SetManual
+	// lock guard for an unrelated reason — it isolates the guarantee this
+	// test is actually about. Confirm it landed, manually retract it, then
+	// re-apply the same report.
+	if !doneByID(t, s, char)["potime"].Done {
+		t.Fatalf("potime should be set by time access")
 	}
-	if err := s.SetManual(char, "potor_saryrn", false); err != nil {
+	if err := s.SetManual(char, "potime", false); err != nil {
 		t.Fatalf("SetManual retract: %v", err)
 	}
 	if _, err := s.ApplyPopFlagsReport(char, report, "raw", time.Unix(2000, 0)); err != nil {
 		t.Fatalf("ApplyPopFlagsReport (re-apply): %v", err)
 	}
-	if row := doneByID(t, s, char)["potor_saryrn"]; row.Done || row.Source != SourceManual {
+	if row := doneByID(t, s, char)["potime"]; row.Done || row.Source != SourceManual {
 		t.Errorf("manual retraction should survive a popflags re-sync, got %+v", row)
 	}
 }
@@ -136,5 +134,28 @@ func TestApplyPopFlagsReportSeerAndPopflagsShareScope(t *testing.T) {
 	}
 	if row := doneByID(t, s, char)["poj_preflag"]; row.Done {
 		t.Errorf("a later popflags reading confirming mavuin absent should retract the seer-sourced row, got %+v", row)
+	}
+}
+
+// TestApplyPopFlagsReportPoFireStages pins the two pofire values to the right
+// rows: Miak's 'portal's destination' sets pofire=1 (Tower access), and only
+// the Solusek Ro Planar Projection hail sets pofire=2 (Plane of Fire flag).
+func TestApplyPopFlagsReportPoFireStages(t *testing.T) {
+	s := openTempStore(t)
+	const char = "Osui"
+
+	report := ParsePopFlagsReport([]string{
+		"=== Tier 3 Progression ===",
+		"Plane of Fire progression: In progress",
+	})
+	if _, err := s.ApplyPopFlagsReport(char, report, "raw", time.Unix(1000, 0)); err != nil {
+		t.Fatalf("ApplyPopFlagsReport: %v", err)
+	}
+	done := doneByID(t, s, char)
+	if !done["solro_miak"].Done {
+		t.Errorf("pofire>=1 should complete solro_miak")
+	}
+	if done["solro_solusek"].Done {
+		t.Errorf("pofire>=1 must not complete solro_solusek (needs pofire=2)")
 	}
 }
