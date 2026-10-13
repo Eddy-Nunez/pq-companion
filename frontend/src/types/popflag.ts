@@ -33,6 +33,8 @@ export interface PoPFlag {
   bit_position?: number
   satisfied_by?: QualifyCond[]
   seer_phrases?: string[]
+  // Live-log auto-detection rules (backend popflag.EventRule).
+  events?: { kind: string; match: string }[]
 }
 
 export interface PoPFlagStatus extends PoPFlag {

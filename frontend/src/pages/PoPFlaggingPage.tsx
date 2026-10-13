@@ -5,7 +5,9 @@ import {
 } from 'lucide-react'
 import { getPopFlagDataset, getPopFlags, setPopFlag } from '../services/api'
 import type { PoPFlagStatus, PoPResolved } from '../types/popflag'
-import { STEP_KIND_META, STEP_KIND_ORDER, ROLE_META } from '../lib/popFlagKind'
+import {
+  STEP_KIND_META, STEP_KIND_ORDER, ROLE_META, MANUAL_META,
+} from '../lib/popFlagKind'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { usePersistentState } from '../hooks/usePersistentState'
@@ -504,6 +506,19 @@ export default function PoPFlaggingPage(): React.ReactElement {
             </span>
           )
         })}
+        <span
+          className="mx-1 h-3 w-px shrink-0"
+          style={{ backgroundColor: 'var(--color-border)' }}
+          aria-hidden
+        />
+        <span
+          className="inline-flex items-center gap-1 text-[11px]"
+          title={MANUAL_META.tip}
+          style={{ color: MANUAL_META.color }}
+        >
+          <MANUAL_META.icon size={12} />
+          {MANUAL_META.label} check-off
+        </span>
       </div>
 
       {view === 'flow' ? (

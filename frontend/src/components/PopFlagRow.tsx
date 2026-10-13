@@ -1,7 +1,9 @@
 import React from 'react'
 import { CheckCircle2, Circle, Lock } from 'lucide-react'
 import type { PoPFlagStatus } from '../types/popflag'
-import { stepKindMeta, roleMeta } from '../lib/popFlagKind'
+import {
+  stepKindMeta, roleMeta, isManualOnly, MANUAL_META,
+} from '../lib/popFlagKind'
 
 // PopFlagRow renders one PoP flag as a checkable row: a coloured left stripe +
 // icon for the step kind, a role badge for non-required rows, a lock icon
@@ -105,6 +107,7 @@ export function PopFlagRow({
   const rm = roleMeta(flag.role)
   const RoleIcon = rm?.icon
   const isMember = !!flag.group
+  const manual = isManualOnly(flag) && !flag.superseded
   // Superseded: an unchosen alternative in a satisfied any-of group — render it
   // faded + struck as "not needed". Dim optional rows that aren't done so they
   // read as "nice to have, not required".
@@ -174,6 +177,20 @@ export function PopFlagRow({
             >
               {RoleIcon && <RoleIcon size={9} />}
               {compact ? null : rm.label}
+            </span>
+          )}
+          {manual && (
+            <span
+              className="ml-1.5 inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-wider"
+              title={MANUAL_META.tip}
+              style={{
+                color: MANUAL_META.color,
+                backgroundColor: MANUAL_META.bg,
+                border: `1px dashed ${MANUAL_META.border}`,
+              }}
+            >
+              <MANUAL_META.icon size={9} />
+              {compact ? null : MANUAL_META.label}
             </span>
           )}
           {flag.superseded && (

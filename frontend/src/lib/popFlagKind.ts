@@ -4,9 +4,10 @@
 // tell at a glance whether a step is a raid kill, a must-act-now post-kill
 // hail, or solo "homework" (an always-up hail / a loot-and-turn-in).
 import {
-  Swords, AlarmClock, Megaphone, Package, DoorOpen, KeyRound, Sparkles,
+  Swords, AlarmClock, Megaphone, Package, DoorOpen, KeyRound, Sparkles, Hand,
   type LucideIcon,
 } from 'lucide-react'
+import type { PoPFlag } from '../types/popflag'
 
 export type StepKind = 'kill' | 'timed_hail' | 'hail' | 'loot' | 'zone'
 
@@ -129,6 +130,29 @@ export const ROLE_META: Record<Role, RoleMeta> = {
 export function roleMeta(role?: string): RoleMeta | null {
   if (role && role in ROLE_META) return ROLE_META[role as Role]
   return null
+}
+
+// ── Manual-only detection ─────────────────────────────────────────────────────
+// A row is manual-only when nothing can ever tick it for the player: no
+// backing qglobal (so neither a Seer reading nor '#popflags' reports it), no
+// replacement condition, and no live-log event rule. Any-of group members are
+// excluded — their anchor milestone still syncs, so the player never has to
+// tick a member to progress.
+
+export const MANUAL_META = {
+  label: 'Manual',
+  icon: Hand,
+  color: '#e2e8f0',
+  bg: 'rgba(226,232,240,0.10)',
+  border: 'rgba(226,232,240,0.45)',
+  tip: "Can't be auto-detected — not reported by #popflags or the Seer, and no log line marks it. Check it off yourself.",
+}
+
+export function isManualOnly(flag: PoPFlag): boolean {
+  return !flag.group
+    && !flag.qglobal
+    && !flag.satisfied_by?.length
+    && !flag.events?.length
 }
 
 // ── Zone display order + colour (Flow view) ─────────────────────────────────
