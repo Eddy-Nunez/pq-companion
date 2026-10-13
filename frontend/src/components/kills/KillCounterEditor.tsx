@@ -38,6 +38,28 @@ function parsePairs(text: string, what: string): { n: number; pattern: string }[
   return out
 }
 
+// Clock lines may carry flags between the seconds and the bar:
+// "0 idle reset | <regex>" — idle = only while the clock isn't running,
+// reset = also zero the count.
+function marksToText(ms?: KillClockMark[]): string {
+  return (ms ?? [])
+    .map((m) => [String(m.at_secs), m.if_idle ? 'idle' : '', m.reset ? 'reset' : ''].filter(Boolean).join(' ') + ` | ${m.pattern}`)
+    .join('\n')
+}
+
+function parseMarks(text: string): KillClockMark[] | string {
+  const out: KillClockMark[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    const m = /^(\d+)((?:\s+(?:idle|reset))*)\s*\|\s*(.+)$/i.exec(line)
+    if (!m) return `Clock line must look like "<seconds> [idle] [reset] | <pattern>": "${line}"`
+    const flags = m[2].toLowerCase()
+    out.push({ at_secs: parseInt(m[1], 10), pattern: m[3].trim(), if_idle: /idle/.test(flags), reset: /reset/.test(flags) })
+  }
+  return out
+}
+
 function lines(text: string): string[] {
   return text.split('\n').map((l) => l.trim()).filter(Boolean)
 }
@@ -90,7 +112,7 @@ export default function KillCounterEditor({
   const [clockOn, setClockOn] = useState(!!d?.clock)
   const [clockLabel, setClockLabel] = useState(d?.clock?.label ?? 'Event time left')
   const [clockMins, setClockMins] = useState(d?.clock ? String(Math.round(d.clock.duration_secs / 60)) : '')
-  const [clockMarks, setClockMarks] = useState(pairsToText((d?.clock?.marks ?? []).map((m) => ({ n: m.at_secs, pattern: m.pattern }))))
+  const [clockMarks, setClockMarks] = useState(marksToText(d?.clock?.marks))
   const [clockStops, setClockStops] = useState((d?.clock?.stop_patterns ?? []).join('\n'))
   const [advanced, setAdvanced] = useState(
     !!(d?.syncs?.length || d?.reset_pattern || d?.clock),
@@ -103,7 +125,7 @@ export default function KillCounterEditor({
     if (typeof ms === 'string') return setError(ms)
     const sy = parsePairs(syncs, 'Resync')
     if (typeof sy === 'string') return setError(sy)
-    const marks = parsePairs(clockMarks, 'Clock')
+    const marks = parseMarks(clockMarks)
     if (typeof marks === 'string') return setError(marks)
     const mins = intOr(clockMins, 0)
     if (clockOn && mins <= 0) return setError('Event clock needs a duration in minutes')
@@ -125,7 +147,7 @@ export default function KillCounterEditor({
         ? {
             label: clockLabel.trim(),
             duration_secs: mins * 60,
-            marks: marks.map((m): KillClockMark => ({ pattern: m.pattern, at_secs: m.n })),
+            marks,
             stop_patterns: lines(clockStops),
           }
         : null,
@@ -219,7 +241,7 @@ export default function KillCounterEditor({
                       <input value={clockMins} inputMode="numeric" onChange={(e) => setClockMins(e.target.value.replace(/[^0-9]/g, ''))} className="w-full text-xs rounded px-2 py-1 outline-none" style={inputStyle} />
                     </Field>
                   </div>
-                  <Field label="Clock start lines" hint='"<seconds into event> | <regex>": a match pins the clock as if the event started that many seconds earlier. Use 0 for the real start line.'>
+                  <Field label="Clock start lines" hint='"<seconds into event> | <regex>": a match pins the clock as if the event started that many seconds earlier. Use 0 for the real start line. Add "idle" before the bar to ignore the line while the clock is running, and "reset" to also zero the count.'>
                     <textarea value={clockMarks} onChange={(e) => setClockMarks(e.target.value)} rows={3} className={ta} style={inputStyle} />
                   </Field>
                   <Field label="Clock stop lines (regex, one per line)">

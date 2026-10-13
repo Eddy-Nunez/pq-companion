@@ -100,20 +100,32 @@ export default function KillCountersTab(): React.ReactElement {
         )}
       </div>
 
-      {presets.filter((p) => !p.installed).map((p) => (
-        <div key={p.key} className="rounded p-3 flex items-start gap-3"
-          style={{ border: '1px dashed var(--color-border)' }}>
-          <PackagePlus size={16} className="shrink-0 mt-0.5" style={{ color: 'var(--color-primary)' }} />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold" style={{ color: 'var(--color-foreground)' }}>{p.name}</p>
-            <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{p.description}</p>
-          </div>
-          <button onClick={() => run(() => installKillCounterPreset(p.key))}
-            className="text-xs px-2 py-1 rounded shrink-0" style={ghostBtn}>
-            Add preset
-          </button>
+      {presets.some((p) => !p.installed) && (
+        <div className="rounded" style={{ border: '1px dashed var(--color-border)' }}>
+          <p className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide"
+            style={{ color: 'var(--color-muted)' }}>
+            <PackagePlus size={12} style={{ color: 'var(--color-primary)' }} /> Event presets
+          </p>
+          {presets.filter((p) => !p.installed).map((p) => (
+            <div key={p.key} className="flex items-center gap-3 px-3 py-1.5 border-t"
+              style={{ borderColor: 'var(--color-border)' }}>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs" style={{ color: 'var(--color-foreground)' }}>
+                  <span className="font-semibold">{p.name}</span>
+                  <span className="ml-2 text-[11px]" style={{ color: 'var(--color-muted)' }}>{p.zone}</span>
+                </p>
+                <p className="text-[11px] truncate" title={p.description} style={{ color: 'var(--color-muted-foreground)' }}>
+                  {p.description}
+                </p>
+              </div>
+              <button onClick={() => run(() => installKillCounterPreset(p.key))}
+                className="text-xs px-2 py-1 rounded shrink-0" style={ghostBtn}>
+                Add
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
       {k.loaded && k.counters.length === 0 && (
         <p className="text-xs py-6 text-center" style={{ color: 'var(--color-muted)' }}>

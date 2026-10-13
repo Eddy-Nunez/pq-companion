@@ -2,6 +2,7 @@ package killtracker
 
 import (
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -246,7 +247,8 @@ func TestBertoxPresetFlow(t *testing.T) {
 
 	// Missed a few kills in another wing; the Feig emote resyncs to 48 and
 	// announces the highest milestone crossed.
-	e.HandleLine(t0, "An unsettling feeling of fear passes through you as you hear the summoners finish a dark incantation then cry out saying, 'We call to you corrupted King of Lxanvom, Feig Adan, your master has need of you!' A bestial squeak thunders through the crypt as a foul fiend of Bertoxxulous is summoned forth.")
+	// Quarm's wording (SecretsOTheP/quests); upstream EQMacEmu uses "Feig Adan, your master".
+	e.HandleLine(t0, "An unsettling feeling of fear passes through you as the summoners cry, 'We call to you, corrupted King of Lxanvom, Feig Adan! Your master has need of you!' A bestial squeak thunders through the crypt as a foul fiend of Bertoxxulous is summoned forth.")
 	if got := countOf(e, trash.Def.ID).Count; got != 48 {
 		t.Fatalf("after Feig emote count = %d, want 48", got)
 	}
@@ -256,7 +258,15 @@ func TestBertoxPresetFlow(t *testing.T) {
 	}
 
 	// The 8th king death is announced; kings resync to 8.
+	// Kings count from the zone-wide fall line, not kill lines.
 	e.Handle(killEv(t0, "Darwol Adan", "x"))
+	if got := countOf(e, kings.Def.ID).Count; got != 0 {
+		t.Fatalf("kings counted a kill line: %d", got)
+	}
+	e.HandleLine(t0, "The corrupted king, Darwol Adan, falls. His dying cry echoes through the depths of Lxanvom.")
+	if got := countOf(e, kings.Def.ID).Count; got != 1 {
+		t.Fatalf("kings after fall line = %d, want 1", got)
+	}
 	e.HandleLine(t0, "An unsettling feeling of fear passes through you as you hear the summoners finish a dark incantation then cry out saying, 'We call to you the last corrupted Kings of Lxanvom. Meedo Adan! Qezzin Adan! Pzo Adan! Bhaly Adan! Your master has need of you!'")
 	if got := countOf(e, kings.Def.ID).Count; got != 8 {
 		t.Fatalf("kings = %d, want 8", got)
@@ -297,5 +307,126 @@ func TestCountersPersist(t *testing.T) {
 	}
 	if n := len(NewEngine(s, nil).State().Counters); n != 1 {
 		t.Fatalf("after delete reload = %d", n)
+	}
+}
+
+func TestAllPresetsInstall(t *testing.T) {
+	for _, p := range Presets() {
+		e := NewEngine(nil, nil)
+		cs, err := e.InstallPreset(p.Key)
+		if err != nil {
+			t.Fatalf("preset %s: %v", p.Key, err)
+		}
+		if len(cs) != len(p.Counters) || p.Zone == "" {
+			t.Fatalf("preset %s: installed %d of %d, zone %q", p.Key, len(cs), len(p.Counters), p.Zone)
+		}
+		for _, c := range cs {
+			if c.Def.Preset != p.Key {
+				t.Errorf("preset %s: counter %q missing preset key", p.Key, c.Def.Name)
+			}
+		}
+	}
+}
+
+func TestSlainPattern(t *testing.T) {
+	re := regexp.MustCompile(slainPattern("Ston`Ruak, Ancient of the Trees"))
+	for _, line := range []string{
+		"Ston`Ruak, Ancient of the Trees has been slain by Osui!",
+		"You have slain Ston`Ruak, Ancient of the Trees!",
+		"Ineka has slain Ston`Ruak, Ancient of the Trees!",
+		"Ston`Ruak, Ancient of the Trees died.",
+	} {
+		if !re.MatchString(line) {
+			t.Errorf("no match: %q", line)
+		}
+	}
+	for _, line := range []string{
+		"Ston`Ruak, Ancient of the Trees hits YOU for 900 points of damage.",
+		"Osui hits Ston`Ruak, Ancient of the Trees for 120 points of damage.",
+	} {
+		if re.MatchString(line) {
+			t.Errorf("false match: %q", line)
+		}
+	}
+}
+
+func installOne(t *testing.T, e *Engine, key string) []Counter {
+	t.Helper()
+	cs, err := e.InstallPreset(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cs
+}
+
+func TestCoirnavClockAndSync(t *testing.T) {
+	e := NewEngine(nil, nil)
+	c := installOne(t, e, "coirnav")[0]
+	_ = e.SetCount(c.Def.ID, 30)
+	e.HandleLine(t0, `Coirnav the Avatar of Water shouts, "Those that violate my domain will pay. I call upon the power imbued to me by Povar! Come forth my minions of vapor and destroy these intruders."`)
+	got := countOf(e, c.Def.ID)
+	if got.Count != 0 || got.ClockStartedAt != t0.Unix() {
+		t.Fatalf("after start: %+v", got)
+	}
+	// The 12-minute warning pins the clock even if the start was missed.
+	at := t0.Add(13 * time.Minute)
+	e.HandleLine(at, `Ice spreads across the reef as vapor coils around Coirnav's towering form. His voice rolls through the depths. "Our power gathers, and your time dwindles. Struggle against the currents!"`)
+	if got := countOf(e, c.Def.ID).ClockStartedAt; got != at.Add(-720*time.Second).Unix() {
+		t.Fatalf("clock after warning 2 = %d", got)
+	}
+	// The first warning names all three gods; it must not reset or restart at 0.
+	e.HandleLine(at, `The waters churn as three voices rise as one through Coirnav, echoing throughout the reef. "The powers of Povar, E`+"`"+`ci and Tarew Marr are bound within me. You will not break the will of the Triumvirate!"`)
+	if got := countOf(e, c.Def.ID).ClockStartedAt; got != at.Add(-600*time.Second).Unix() {
+		t.Fatalf("clock after warning 1 = %d", got)
+	}
+	e.HandleLine(at, "The currents wrench across the reef as Pwelon, Nrinda and Vamuil gather before Coirnav.")
+	if got := countOf(e, c.Def.ID).Count; got != 75 {
+		t.Fatalf("count after miniboss line = %d", got)
+	}
+}
+
+func TestFenninStagesAndWarnings(t *testing.T) {
+	e := NewEngine(nil, nil)
+	c := installOne(t, e, "fennin")[0]
+	e.HandleLine(t0, "The Guardian of Doomfire crashes to the scorched earth. Frenzied cries erupt as an Army of Flames burns across the scorched realm of Doomfire.")
+	if got := countOf(e, c.Def.ID).ClockStartedAt; got != t0.Unix() {
+		t.Fatalf("clock start = %d", got)
+	}
+	e.HandleLine(t0, "The commanders collapse beneath the onslaught. Columns of fire tear through the air as the Council of Fire advances.")
+	if got := countOf(e, c.Def.ID).Count; got != 61 {
+		t.Fatalf("count = %d, want 61", got)
+	}
+	at := t0.Add(3 * time.Hour)
+	e.HandleLine(at, `All of Doomfire trembles as the voice of Fennin Ro booms, "Hear the roar of Doomfire! Flame and Chaos answer to me! We will see what remains when my fury meets your ambition!"`)
+	if got := countOf(e, c.Def.ID).ClockStartedAt; got != at.Add(-4*2700*time.Second).Unix() {
+		t.Fatalf("clock after warning 4 = %d", got)
+	}
+	e.HandleLine(at, "Fennin Ro, the Tyrant of Fire, falls! His colossal form crashes into the scorched earth.")
+	if got := countOf(e, c.Def.ID).ClockStartedAt; got != 0 {
+		t.Fatalf("clock not stopped: %d", got)
+	}
+}
+
+func TestStoneRingIdleOnlyStart(t *testing.T) {
+	e := NewEngine(nil, nil)
+	forts := installOne(t, e, "stonering")[0]
+	const summon = "The ground shudders as stone fortifications are summoned forth."
+	e.HandleLine(t0, summon)
+	for i := 0; i < 12; i++ {
+		e.Handle(killEv(t0, "A Stone Fortification", ""))
+	}
+	// A second trigger mob dies mid-ring: same line, must not reset or restart.
+	later := t0.Add(5 * time.Minute)
+	e.HandleLine(later, summon)
+	got := countOf(e, forts.Def.ID)
+	if got.Count != 12 || got.ClockStartedAt != t0.Unix() {
+		t.Fatalf("mid-ring repeat changed state: %+v", got)
+	}
+	// The ring failed silently (no stop line); the next attempt still starts.
+	next := t0.Add(2 * time.Hour)
+	e.HandleLine(next, summon)
+	got = countOf(e, forts.Def.ID)
+	if got.Count != 0 || got.ClockStartedAt != next.Unix() {
+		t.Fatalf("new attempt after silent failure: %+v", got)
 	}
 }

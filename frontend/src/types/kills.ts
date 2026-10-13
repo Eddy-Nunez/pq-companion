@@ -36,6 +36,8 @@ export interface KillSyncRule {
 export interface KillClockMark {
   pattern: string
   at_secs: number
+  if_idle?: boolean // only honored while the clock isn't running
+  reset?: boolean // also zeroes the count when honored
 }
 
 export interface KillClock {
@@ -79,6 +81,7 @@ export interface KillCountersState {
 export interface KillCounterPreset {
   key: string
   name: string
+  zone: string
   description: string
   counters: KillCounterDef[]
   installed: boolean

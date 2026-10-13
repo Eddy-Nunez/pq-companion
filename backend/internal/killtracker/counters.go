@@ -42,6 +42,13 @@ type SyncRule struct {
 type ClockMark struct {
 	Pattern string `json:"pattern"`
 	AtSecs  int    `json:"at_secs"`
+	// IfIdle only honors the mark while the clock isn't running — for a
+	// start line the server repeats mid-event (Stone Ring prints its
+	// "fortifications are summoned" line once per trigger mob).
+	IfIdle bool `json:"if_idle,omitempty"`
+	// Reset zeroes the count when the mark is honored, so a start line
+	// that may repeat mid-event can still begin a fresh attempt.
+	Reset bool `json:"reset,omitempty"`
 }
 
 // Clock is an optional event countdown shown alongside a counter.
@@ -120,6 +127,8 @@ type compiledSync struct {
 type compiledMark struct {
 	re     *regexp.Regexp
 	atSecs int
+	ifIdle bool
+	reset  bool
 }
 
 // ErrNotFound is returned for an unknown counter id.
@@ -241,7 +250,7 @@ func compile(def CounterDef) (*compiled, error) {
 			if err != nil {
 				return nil, fmt.Errorf("clock pattern %q: %w", m.Pattern, err)
 			}
-			c.marks = append(c.marks, compiledMark{re: re, atSecs: m.AtSecs})
+			c.marks = append(c.marks, compiledMark{re: re, atSecs: m.AtSecs, ifIdle: m.IfIdle, reset: m.Reset})
 		}
 		for _, p := range def.Clock.StopPatterns {
 			if strings.TrimSpace(p) == "" {
@@ -305,11 +314,21 @@ func (e *Engine) HandleLine(ts time.Time, msg string) {
 			touched = true
 		}
 		for _, m := range comp.marks {
-			if m.re.MatchString(msg) {
-				c.ClockStartedAt = ts.Add(-time.Duration(m.atSecs) * time.Second).Unix()
-				touched = true
+			if !m.re.MatchString(msg) {
+				continue
+			}
+			// A clock past its duration counts as idle: some events fail
+			// silently (Stone Ring just depops), leaving no stop line.
+			if m.ifIdle && c.ClockStartedAt != 0 && c.Def.Clock != nil &&
+				ts.Unix() < c.ClockStartedAt+int64(c.Def.Clock.DurationSecs) {
 				break
 			}
+			c.ClockStartedAt = ts.Add(-time.Duration(m.atSecs) * time.Second).Unix()
+			if m.reset {
+				c.Count = 0
+			}
+			touched = true
+			break
 		}
 		for _, re := range comp.stops {
 			if c.ClockStartedAt != 0 && re.MatchString(msg) {
