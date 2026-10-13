@@ -2879,6 +2879,7 @@ func AllPacks() []TriggerPack {
 		SpellBreaksPack(),
 		GroupAlertsPack(),
 		RaidAlertsPack(),
+		RaidEventTimersPack(),
 		TrackingPack(),
 		MiscAlertsPack(),
 		SlowsPack(),
