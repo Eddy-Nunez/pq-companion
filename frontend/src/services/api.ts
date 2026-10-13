@@ -3015,6 +3015,14 @@ export interface CreateTriggerRequest {
    * coerces this to false unless timer_type is 'custom'.
    */
   timer_stack?: boolean
+  /**
+   * When timer_type is 'custom' (and not stacked), restarts the timer each
+   * time it expires until the worn-off pattern clears it — for scripted
+   * events with a fixed wave cadence. timer_repeat_max caps the cycles
+   * (0 = the engine's safety cap).
+   */
+  timer_repeat?: boolean
+  timer_repeat_max?: number
   worn_off_pattern?: string
   spell_id?: number
   /**

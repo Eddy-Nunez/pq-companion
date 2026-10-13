@@ -141,6 +141,11 @@ type ActiveTimer struct {
 	// false outside CategoryCustom. Internal-only; the frontend doesn't need it.
 	Stacked bool `json:"-"`
 
+	// Repeat restarts the timer on expiry (Trigger.TimerRepeat) instead of
+	// dropping it; repeatsLeft counts down the remaining cycles.
+	Repeat      bool `json:"repeat,omitempty"`
+	repeatsLeft int
+
 	// IsCharm marks a timer whose source spell is a Charm effect (SPA 22).
 	// Charm represents an ongoing pet the player controls, so — unlike a
 	// debuff or mez — its timer must survive the death of *other* mobs,

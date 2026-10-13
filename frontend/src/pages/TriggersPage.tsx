@@ -597,6 +597,8 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
   // Stacks each firing as its own timer row instead of restarting/
   // overwriting the existing same-name row. Only meaningful for custom timers.
   const [timerStack, setTimerStack] = useState(initial?.timer_stack ?? false)
+  const [timerRepeat, setTimerRepeat] = useState(initial?.timer_repeat ?? false)
+  const [timerRepeatMax, setTimerRepeatMax] = useState(initial?.timer_repeat_max ?? 0)
   // Which Custom Timers window this trigger's timer appears in (only used
   // when timerType === 'custom'). '' = the original/default window. The
   // "__new__" sentinel opens an inline create input, mirroring the category
@@ -917,6 +919,8 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
       bar_color: timerType === 'none' ? '' : barColor,
       pinned: timerType === 'none' ? false : pinned,
       timer_stack: timerType === 'custom' ? timerStack : false,
+      timer_repeat: timerType === 'custom' && !timerStack ? timerRepeat : false,
+      timer_repeat_max: Math.max(0, Math.floor(timerRepeatMax)),
       custom_group_id: timerType === 'custom' ? customGroupID : '',
       characters: Array.from(selectedChars),
       timer_alerts: timerType === 'none' ? [] : timerAlerts,
@@ -1574,6 +1578,33 @@ function TriggerForm({ initial, prefill, categories, onCategoriesChanged, timerG
                 </span>
               </div>
             )}
+            {source === 'log' && timerType === 'custom' && !timerStack && (
+              <div className="flex items-center gap-1.5">
+                <label className="text-[11px] shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>
+                  Repeat timer
+                </label>
+                <Toggle checked={timerRepeat} onChange={setTimerRepeat} />
+                {timerRepeat && (
+                  <>
+                    <label className="text-[11px] shrink-0 ml-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                      max cycles
+                    </label>
+                    <DecimalInput
+                      min={0}
+                      value={timerRepeatMax}
+                      onValue={(v) => setTimerRepeatMax(Math.max(0, Math.floor(v)))}
+                      className="w-16 rounded px-2 py-0.5 text-xs outline-none text-center"
+                      style={inputStyle}
+                      disabled={submitting}
+                      title="Stop after this many restarts. 0 = until the worn-off pattern clears it (with a safety cap of 200)."
+                    />
+                  </>
+                )}
+                <span className="text-[10px] italic" style={{ color: 'var(--color-muted)' }}>
+                  restart each time it runs out — for waves on a fixed cadence; the worn-off pattern stops it
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <label className="text-[11px] shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>
                 Display threshold (s)
@@ -1935,6 +1966,8 @@ function TriggerRow({
       bar_color: trigger.bar_color ?? '',
       pinned: trigger.pinned ?? false,
       timer_stack: trigger.timer_stack ?? false,
+      timer_repeat: trigger.timer_repeat ?? false,
+      timer_repeat_max: trigger.timer_repeat_max ?? 0,
       custom_group_id: trigger.custom_group_id ?? '',
       characters: trigger.characters,
       timer_alerts: trigger.timer_alerts ?? [],
@@ -3604,6 +3637,8 @@ export default function TriggersPage(): React.ReactElement {
       bar_color: t.bar_color ?? '',
       pinned: t.pinned ?? false,
       timer_stack: t.timer_stack ?? false,
+      timer_repeat: t.timer_repeat ?? false,
+      timer_repeat_max: t.timer_repeat_max ?? 0,
       custom_group_id: t.custom_group_id ?? '',
       characters: t.characters,
       timer_alerts: t.timer_alerts ?? [],

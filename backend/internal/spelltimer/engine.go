@@ -2961,6 +2961,29 @@ const chChainMissCheckDelay = 4 * time.Second
 //
 // Also resolves removeOnKill's ambiguous-kill queue every tick — see
 // resolvePendingKillsLocked.
+// maxRepeatCycles caps a repeating timer whose trigger sets no explicit
+// TimerRepeatMax, so a stop line that never arrives can't cycle it forever.
+const maxRepeatCycles = 200
+
+// SetExternalRepeat marks the non-stacked custom timer for (name, targetName)
+// as restart-on-expiry, up to maxRepeats more cycles (0 = maxRepeatCycles).
+// Called by the trigger engine right after StartExternal for a trigger with
+// TimerRepeat set; a refire of the same trigger restarts the timer and
+// re-arms the full cycle budget.
+func (e *Engine) SetExternalRepeat(name, targetName string, maxRepeats int) {
+	if maxRepeats <= 0 || maxRepeats > maxRepeatCycles {
+		maxRepeats = maxRepeatCycles
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, t := range e.timers {
+		if t.Category == CategoryCustom && !t.Stacked && t.SpellName == name && t.TargetName == targetName {
+			t.Repeat = true
+			t.repeatsLeft = maxRepeats
+		}
+	}
+}
+
 func (e *Engine) pruneExpired() {
 	now := time.Now()
 	keep := e.keepExpired()
@@ -2992,6 +3015,27 @@ func (e *Engine) pruneExpired() {
 			}
 			delete(e.timers, name)
 			continue
+		}
+		if t.Repeat && t.repeatsLeft > 0 && t.DurationSeconds > 0 {
+			// Same one-tick 0:00 grace as below, so a threshold-0 alert can
+			// still observe the crossing, then restart from the old expiry —
+			// not from now — so the cadence doesn't drift by a tick per cycle.
+			if t.expiryGraceUntil.IsZero() {
+				t.expiryGraceUntil = now.Add(expiryGraceWindow)
+			}
+			if !now.After(t.expiryGraceUntil) {
+				continue
+			}
+			period := time.Duration(t.DurationSeconds * float64(time.Second))
+			for !t.ExpiresAt.After(now) && t.repeatsLeft > 0 {
+				t.StartsAt = t.ExpiresAt
+				t.ExpiresAt = t.ExpiresAt.Add(period)
+				t.repeatsLeft--
+			}
+			t.expiryGraceUntil = time.Time{}
+			if t.ExpiresAt.After(now) {
+				continue
+			}
 		}
 		if keep && now.Sub(t.ExpiresAt) <= keepExpiredMaxOverdue {
 			continue

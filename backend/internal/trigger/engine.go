@@ -46,6 +46,13 @@ type TimerSink interface {
 	StopExternal(name string, spellID int)
 }
 
+// RepeatingSink is optionally implemented by a TimerSink that supports
+// restart-on-expiry custom timers (Trigger.TimerRepeat). Checked by type
+// assertion so test sinks needn't implement it.
+type RepeatingSink interface {
+	SetExternalRepeat(name, targetName string, maxRepeats int)
+}
+
 // compiledExtra pairs one enabled ExtraPattern's compiled regex with its
 // per-pattern timer overrides, so a match knows which row's duration/spell
 // to apply.
@@ -977,6 +984,11 @@ func (e *Engine) applyFire(plan firePlan, opts fireOpts) {
 
 	if e.sink != nil && plan.hasTimer {
 		e.sink.StartExternal(plan.timerKey, plan.timerCategory, plan.timerDuration, t.DisplayThresholdSecs, plan.firedAt, plan.timerAlerts, plan.timerSpellID, plan.timerTarget, t.BarColor, t.Pinned, t.CustomGroupID, plan.timerIsSig, plan.timerStack)
+		if t.TimerRepeat && t.TimerType == TimerTypeCustom && !plan.timerStack {
+			if rs, ok := e.sink.(RepeatingSink); ok {
+				rs.SetExternalRepeat(plan.timerKey, plan.timerTarget, t.TimerRepeatMax)
+			}
+		}
 	}
 	if !opts.test {
 		e.startCooldownTimer(t, plan.firedAt)

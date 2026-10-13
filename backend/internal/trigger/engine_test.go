@@ -1762,3 +1762,30 @@ func TestEngine_NoRepeatWindowNeverSetsRepeatCount(t *testing.T) {
 		t.Errorf("got RepeatCount=%d text=%q, want 0 / n=1", hist[1].RepeatCount, hist[1].Actions[0].Text)
 	}
 }
+
+// TimerRepeat / TimerRepeatMax survive a store round-trip.
+func TestStore_TimerRepeatRoundTrip(t *testing.T) {
+	s := openTestStore(t)
+	tr := &Trigger{
+		ID: "rep1", Name: "Waves", Enabled: true, Pattern: `x`,
+		TimerType: TimerTypeCustom, TimerDurationSecs: 49,
+		TimerRepeat: true, TimerRepeatMax: 12, CreatedAt: time.Now().UTC(),
+	}
+	if err := s.Insert(tr); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("rep1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.TimerRepeat || got.TimerRepeatMax != 12 {
+		t.Fatalf("round-trip lost repeat: %+v", got)
+	}
+	got.TimerRepeat = false
+	if err := s.Update(got); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Get("rep1"); again.TimerRepeat {
+		t.Fatal("update did not clear timer_repeat")
+	}
+}

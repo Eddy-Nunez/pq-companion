@@ -300,6 +300,19 @@ type Trigger struct {
 	// Default false preserves today's single-row-per-trigger behaviour.
 	TimerStack bool `json:"timer_stack,omitempty"`
 
+	// TimerRepeat restarts this trigger's custom timer each time it expires,
+	// for scripted events that recur on a fixed cadence (Coirnav's final-phase
+	// reinforcements every 49s, a ring war's timed waves) until the
+	// WornOffPattern clears it. Each cycle starts from the previous one's
+	// expiry, so a long run doesn't drift, and fade-soon TimerAlerts fire
+	// again every cycle. Only meaningful when TimerType is "custom" and the
+	// timer isn't stacked.
+	TimerRepeat bool `json:"timer_repeat,omitempty"`
+	// TimerRepeatMax caps how many times a repeating timer restarts, so a
+	// missed stop line can't leave it cycling forever. 0 = the engine's
+	// safety cap (see spelltimer.maxRepeatCycles).
+	TimerRepeatMax int `json:"timer_repeat_max,omitempty"`
+
 	// RefireCooldownSecs suppresses the trigger from firing again for this many
 	// seconds after it fires. 0 (default) means fire on every match — the
 	// out-of-the-box behaviour. Unlike CooldownSecs (a visible spell-recast

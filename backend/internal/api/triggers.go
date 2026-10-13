@@ -77,6 +77,10 @@ type triggerRequest struct {
 	// handler coerces this to false unless the trigger's TimerType is
 	// "custom".
 	TimerStack bool `json:"timer_stack"`
+	// TimerRepeat / TimerRepeatMax request restart-on-expiry — see
+	// Trigger.TimerRepeat. Coerced off for non-custom or stacked timers.
+	TimerRepeat    bool `json:"timer_repeat"`
+	TimerRepeatMax int  `json:"timer_repeat_max"`
 	// CustomGroupID selects which Custom Timers window a timer_type="custom"
 	// trigger's timer appears in. Empty = the original/default window.
 	CustomGroupID   string                 `json:"custom_group_id"`
@@ -192,6 +196,8 @@ func (h *triggerHandler) create(w http.ResponseWriter, r *http.Request) {
 		// on Trigger. Coerced here (not just in the frontend) so a crafted or
 		// stale request can't enable it on a buff/detrimental trigger.
 		TimerStack:      req.TimerStack && normalizeTimerType(req.TimerType) == trigger.TimerTypeCustom,
+		TimerRepeat:     req.TimerRepeat && !req.TimerStack && normalizeTimerType(req.TimerType) == trigger.TimerTypeCustom,
+		TimerRepeatMax:  max(0, req.TimerRepeatMax),
 		CustomGroupID:   strings.TrimSpace(req.CustomGroupID),
 		Characters:      req.Characters,
 		TimerAlerts:     req.TimerAlerts,
@@ -284,6 +290,8 @@ func (h *triggerHandler) update(w http.ResponseWriter, r *http.Request) {
 	existing.BarColor = strings.TrimSpace(req.BarColor)
 	existing.Pinned = req.Pinned
 	existing.TimerStack = req.TimerStack && existing.TimerType == trigger.TimerTypeCustom
+	existing.TimerRepeat = req.TimerRepeat && !existing.TimerStack && existing.TimerType == trigger.TimerTypeCustom
+	existing.TimerRepeatMax = max(0, req.TimerRepeatMax)
 	existing.CustomGroupID = strings.TrimSpace(req.CustomGroupID)
 	existing.Characters = req.Characters
 	existing.TimerAlerts = req.TimerAlerts
