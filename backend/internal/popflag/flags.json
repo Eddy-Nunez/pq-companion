@@ -224,7 +224,8 @@
     "prereqs": ["pod_grummus"],
     "step_kind": "zone",
     "optional": true,
-    "role": "keyring"
+    "role": "keyring",
+    "events": [{ "kind": "zone", "match": "The Crypt of Decay" }]
   },
   {
     "id": "pod_postflag",
@@ -362,7 +363,8 @@
     "prereqs": ["pov_aerindar"],
     "step_kind": "zone",
     "optional": true,
-    "role": "keyring"
+    "role": "keyring",
+    "events": [{ "kind": "zone", "match": "Halls of Honor" }]
   },
   {
     "id": "cod_carpryn",
@@ -739,7 +741,8 @@
     "prereqs": ["solro_solusek"],
     "step_kind": "zone",
     "optional": true,
-    "role": "keyring"
+    "role": "keyring",
+    "events": [{ "kind": "zone", "match": "Plane of Fire" }]
   },
   {
     "id": "poair_wind_key",

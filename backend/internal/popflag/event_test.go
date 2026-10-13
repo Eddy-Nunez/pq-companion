@@ -17,7 +17,13 @@ func TestMatchEvent(t *testing.T) {
 		{"kill", "Vallon Zek", "potac_vallon"},
 		{"kill", "Tallon Zek", "potac_tallon"},
 		{"kill", "a gnoll pup", ""},      // random mob → no match
-		{"zone", "Plane of Justice", ""}, // no zone rules authored
+		{"zone", "Plane of Justice", ""}, // not a key-ring zone
+		// Key-ring zone-ins: zoning in IS the key-ring grant, and #popflags
+		// can't report it (no qglobal), so the zone-in is the only signal.
+		{"zone", "The Crypt of Decay", "pod_cod_keyring"},
+		{"zone", "Halls of Honor", "pov_hoh_keyring"},
+		{"zone", "Plane of Fire", "solro_pofire_keyring"},
+		{"zone", "Plane of Earth", ""}, // poeartha/poearthb share a name
 	}
 	for _, tc := range cases {
 		got := MatchEvent(tc.kind, tc.name)
