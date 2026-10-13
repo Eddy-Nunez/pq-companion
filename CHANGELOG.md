@@ -9,6 +9,34 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.28.0 — 2026-10-13
+
+A new Kill Tracker counts kills toward the milestones that drive scripted Planes of Power raids, with ready-made counters for Bertoxxulous and six other events, and a new trigger pack adds countdown timers for raid events that run on a server clock.
+
+### Highlights
+- **Kill Tracker** — Parsing → Kill Tracker. The Kill Log lists every kill your log shows, with the time to the second, the killer and the zone. Sort by any column, filter by zone, time window or named mobs only, or switch to By mob for kill counts and how long ago each mob last died. Backfill fills in kills from your old logs.
+- **Kill Counters with event presets** — count kills toward milestones, with an on-screen or spoken alert as each one approaches, and follow them in game with the new Kill Counters overlay (dashboard panel and pop-out). One-click presets are built from Project Quarm's own quest scripts:
+  - Bertoxxulous: trash toward each of the eight Adan kings, kings toward the final four and Bertox, and the 123-minute event clock
+  - Coirnav, Fennin Ro, the Plane of Earth Stone Ring, Ston`Ruak, Drornok, and Plane of Time phase 3
+
+  Counters correct themselves from the server's own announcements, such as the boss-spawn emotes, so kills your log didn't see don't throw them off. You can also build your own from mob names or any log line.
+- **Raid Event Timers trigger pack** — countdown timers for scripted events that run on server timers: Paffa's waves, Coirnav's final-phase reinforcements, the Plane of Time instance clock, Plane of Air boss despawns, the Emperor and his room curse, Doomshade, Ring of Fear, the Great Divide Ring War, Hollowshade invasions and the Grimling war. Install it from the built-in packs on the Triggers page.
+- **Repeating trigger timers** — custom timers have a new Repeat option that restarts the timer each time it runs out, until its worn-off line clears it. Useful for waves on a fixed cadence.
+- **Filtered Timers overlay** — a second timer window you filter by spell, player or mob (including Me and your current target), alongside the unchanged Buff and Detrimental overlays. The beneficial by-spell view can list group or raid members missing a buff (needs Zeal), and the window can optionally apply display thresholds.
+- **Ctrl+scroll resizes pop-out overlays** — hold Ctrl and scroll over any pop-out overlay to resize it in 5% steps. The Settings sliders now range from 50% to 200%.
+- **Raid Summary groups and snapshots** — the Members list has a Groups view with one card per raid group, every column sorts, and a Snapshot button saves the roster for attendance history.
+- **Zones tab sorting and spawn chance** — the NPCs, Drops, Forage and Ground Spawns tabs sort and filter. The NPCs tab shows each NPC's chance to spawn, and the Drops tab shows the real drop rate, matching the item page. NPCs that can't currently spawn on Quarm are hidden behind a Show inactive toggle.
+- **Archive & Trim settings** — keep the last N days or the newest N MB of a log, and set or turn off the large-log warning.
+- **Charm Pet Finder: Magician** — adds Call of the Arch Mage, the level 65 charm for summoned creatures.
+- **PoP Flags: Manual badge** — rows that no sync can ever check off are marked Manual, so you know to tick them yourself.
+
+### Fixes
+- **Mez and debuff timers kept running after they wore off** — "Your X spell has worn off." now clears your timer on the mob.
+- **Possibly-dead timers crowded out live ones** — the dimmed timers for mobs that may have died now sort below live timers on the Detrimental overlay.
+- **Per-overlay zoom was unreliable** — each pop-out overlay now keeps its own size, and the main window keeps its App Zoom when you change pages.
+- **NPC overlay spawn chances disagreed with the Zones tab** — both now use the same spawn chance, which accounts for era.
+- **PoP flag steps corrected against Quarm's quest scripts** — the Crypt of Decay, Halls of Honor and Plane of Fire key-ring rows now complete when you zone in, Miak and the Solusek Ro projection set the right Tower steps, and the Torment post-flag is now optional.
+
 ## v0.27.0 — 2026-10-08
 
 Same-name NPCs are easier to tell apart in the NPC overlay, and this release adds a Blocked Buffs editor, a {repeated} trigger count, per-item NPC overlay filters and an all-characters PoP flag overview.
