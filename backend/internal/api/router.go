@@ -21,6 +21,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/eqw"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/factiontracker"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/keyring"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/killtracker"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/kokorotts"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/lockout"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/logparser"
@@ -53,7 +54,7 @@ import (
 // NewRouter builds and returns the chi router wired to all backend components.
 // combatHistory may be nil when persistence is disabled (e.g. user.db open
 // failed); in that case the history endpoints respond 503.
-func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher *zeal.Watcher, pipeSupervisor *zealpipe.Supervisor, backupMgr *backup.Manager, tailer *logparser.Tailer, replayer *logparser.Replayer, npcTracker *overlay.NPCTracker, combatTracker *combat.Tracker, combatHistory *combat.HistoryStore, threatTracker *threat.Tracker, raidThreatAssembler *raidthreat.Assembler, timerEngine *spelltimer.Engine, respawnEngine *respawn.Engine, triggerStore *trigger.Store, triggerEngine *trigger.Engine, charStore *character.Store, rollTracker *rolltracker.Tracker, appBackupMgr *appbackup.Manager, playerStore *players.Store, chatStore *chat.Store, lootStore *loot.Store, backfillRegistry *backfill.Registry, keyringStore *keyring.Store, keyringMaster []keyring.MasterEntry, lockoutStore *lockout.Store, blockbuffStore *blockbuff.Store, sb *sandbox.Sandbox, savedQueryStore *savedquery.Store, skillsStore *skills.Store, traderStore *trader.Store, traderCapturer *trader.Capturer, popflagStore *popflag.Store, wishlistWatcher *wishlistwatch.Watcher, changelogEntries []changelog.Entry, factionEngine *factiontracker.Engine, emoteService *emote.Service, mapStore *maps.Store, mapAnnotations *maps.AnnotationStore, progressStore *progress.Store, mystatsStore *mystats.Store, raidStore *raidcomp.Store, roster *raidcomp.Roster, liveZone func() (int, string), actualPort int) http.Handler {
+func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher *zeal.Watcher, pipeSupervisor *zealpipe.Supervisor, backupMgr *backup.Manager, tailer *logparser.Tailer, replayer *logparser.Replayer, npcTracker *overlay.NPCTracker, combatTracker *combat.Tracker, combatHistory *combat.HistoryStore, threatTracker *threat.Tracker, raidThreatAssembler *raidthreat.Assembler, timerEngine *spelltimer.Engine, respawnEngine *respawn.Engine, triggerStore *trigger.Store, triggerEngine *trigger.Engine, charStore *character.Store, rollTracker *rolltracker.Tracker, appBackupMgr *appbackup.Manager, playerStore *players.Store, chatStore *chat.Store, lootStore *loot.Store, backfillRegistry *backfill.Registry, keyringStore *keyring.Store, keyringMaster []keyring.MasterEntry, lockoutStore *lockout.Store, blockbuffStore *blockbuff.Store, sb *sandbox.Sandbox, savedQueryStore *savedquery.Store, skillsStore *skills.Store, traderStore *trader.Store, traderCapturer *trader.Capturer, popflagStore *popflag.Store, wishlistWatcher *wishlistwatch.Watcher, changelogEntries []changelog.Entry, factionEngine *factiontracker.Engine, emoteService *emote.Service, mapStore *maps.Store, mapAnnotations *maps.AnnotationStore, progressStore *progress.Store, mystatsStore *mystats.Store, raidStore *raidcomp.Store, roster *raidcomp.Roster, killStore *killtracker.Store, killCounters *killtracker.Engine, liveZone func() (int, string), actualPort int) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -101,6 +102,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 	playersH := &playersHandler{store: playerStore}
 	chatH := &chatHandler{store: chatStore, mgr: cfgMgr, tailer: tailer}
 	lootH := &lootHandler{store: lootStore, mgr: cfgMgr, tailer: tailer, db: database}
+	killsH := &killsHandler{store: killStore, counters: killCounters, mgr: cfgMgr, tailer: tailer}
 	backfillH := &backfillHandler{registry: backfillRegistry, mgr: cfgMgr, tailer: tailer, hub: hub}
 	keyringH := &keyringHandler{store: keyringStore, master: keyringMaster}
 	lockoutsH := &lockoutsHandler{store: lockoutStore, db: database}
@@ -478,6 +480,20 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Get("/", lootH.list)
 			r.Get("/meta", lootH.meta)
 			r.Post("/clear", lootH.clear)
+		})
+		r.Route("/kills", func(r chi.Router) {
+			r.Get("/", killsH.list)
+			r.Get("/meta", killsH.meta)
+			r.Post("/clear", killsH.clear)
+		})
+		r.Route("/kill-counters", func(r chi.Router) {
+			r.Get("/", killsH.counterState)
+			r.Post("/", killsH.createCounter)
+			r.Get("/presets", killsH.presets)
+			r.Post("/presets/{key}", killsH.installPreset)
+			r.Put("/{id}", killsH.updateCounter)
+			r.Delete("/{id}", killsH.deleteCounter)
+			r.Post("/{id}/action", killsH.action)
 		})
 		r.Route("/backfill", func(r chi.Router) {
 			r.Get("/", backfillH.info)

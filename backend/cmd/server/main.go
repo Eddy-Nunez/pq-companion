@@ -34,6 +34,7 @@ import (
 	"github.com/jasonsoprovich/pq-companion/backend/internal/emote"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/factiontracker"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/keyring"
+	"github.com/jasonsoprovich/pq-companion/backend/internal/killtracker"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/lockout"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/logparser"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/loot"
@@ -270,6 +271,28 @@ func main() {
 		lootStore = nil
 	} else {
 		defer lootStore.Close()
+	}
+
+	// Kill tracker: persists every kill the log shows (Kill Log) and stores
+	// the user's kill counters. Non-fatal — failing here disables the Kill
+	// Log and leaves counters in memory only.
+	killStore, err := killtracker.OpenStore(filepath.Join(home, ".pq-companion", "user.db"))
+	var killLogger *killtracker.Logger
+	if err != nil {
+		slog.Warn("open kill tracker (disabled)", "err", err)
+		killStore = nil
+	} else {
+		defer killStore.Close()
+	}
+	// A kill target that resolves to no npc_types row (under any placeholder
+	// decoration) is a player death, kept out of the default Kill Log view.
+	killClassify := func(name string) bool {
+		for _, alt := range db.NPCNameVariantCandidates(strings.ReplaceAll(name, " ", "_")) {
+			if _, ok := database.GetNPCIDByName(alt); ok {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Skill tracker: persists each character's skill values from "You have
@@ -1238,6 +1261,13 @@ func main() {
 		})
 	}
 
+	if killStore != nil {
+		killLogger = killtracker.NewLogger(killStore, killClassify, activeChar)
+		killLogger.SetOnInsert(func(e killtracker.Entry) {
+			hub.Broadcast(ws.Event{Type: "kills:new", Data: e})
+		})
+	}
+
 	if skillsStore != nil {
 		skillsConsumer = skills.NewConsumer(skillsStore, activeChar)
 		skillsConsumer.SetOnUpdate(func(u skills.Update) {
@@ -1283,6 +1313,15 @@ func main() {
 			Key:        "loot",
 			Label:      "Loot Tracker",
 			NewHandler: func(character string) backfill.Handler { return loot.NewBackfillHandler(lootStore, character) },
+		})
+	}
+	if killStore != nil {
+		backfillRegistry.Register(backfill.Section{
+			Key:   "kills",
+			Label: "Kill Log",
+			NewHandler: func(character string) backfill.Handler {
+				return killtracker.NewBackfillHandler(killStore, killClassify, character)
+			},
 		})
 	}
 	if skillsStore != nil {
@@ -1801,6 +1840,10 @@ func main() {
 		rollTracker.SetItemMatcher(database.MatchItemNameInText)
 	}
 
+	// Kill counters: user-defined counts (with the built-in Bertoxxulous
+	// preset) driven by kills and raw lines; live state persists in user.db.
+	killCounters := killtracker.NewEngine(killStore, hub)
+
 	// Central dispatch callbacks, shared by the live tailer and the log
 	// replayer so a replayed line drives exactly the same consumers as a
 	// live one.
@@ -1814,6 +1857,10 @@ func main() {
 		respawnEngine.Handle(ev)
 		rollTracker.Handle(ev)
 		factionEngine.Handle(ev)
+		killCounters.Handle(ev)
+		if killLogger != nil {
+			killLogger.HandleEvent(ev)
+		}
 		if playersConsumer != nil {
 			playersConsumer.Handle(ev)
 		}
@@ -1904,6 +1951,7 @@ func main() {
 		chChainInterruptWatcher.HandleLine(ts, msg)
 		chMetronomeSelfCastWatcher.HandleLine(ts, msg)
 		rollTracker.HandleLine(ts, msg)
+		killCounters.HandleLine(ts, msg)
 		if keyringConsumer != nil {
 			keyringConsumer.HandleLine(ts, msg)
 		}
@@ -2106,7 +2154,7 @@ func main() {
 	}
 	defer mapStore.Close()
 
-	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, blockbuffStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, liveZoneFn, actualPort)
+	router := api.NewRouter(database, hub, cfgMgr, zealWatcher, pipeSupervisor, backupMgr, tailer, replayer, npcTracker, combatTracker, historyStore, threatTracker, raidThreatAssembler, timerEngine, respawnEngine, triggerStore, triggerEngine, charStore, rollTracker, appBackupMgr, playerStore, chatStore, lootStore, backfillRegistry, keyringStore, keyringMaster, lockoutStore, blockbuffStore, sb, savedQueryStore, skillsStore, traderStore, traderCapturer, popflagStore, wishlistWatcher, changelogEntries, factionEngine, emoteService, mapStore, mapAnnotations, progressStore, mystatsStore, raidStore, rosterKeeper, killStore, killCounters, liveZoneFn, actualPort)
 
 	// Raid disband watcher. Zeal emits MsgRaid only while is_in_raid(); on
 	// disband the envelopes just STOP — there is no "raid over" message on the
