@@ -4294,6 +4294,7 @@ const OVERLAY_POPOUT_TOGGLE: Record<OverlayName, () => void> = {
   chChain:      () => { window.electron?.overlay?.toggleCHChain() },
   chMetronome:  () => { window.electron?.overlay?.toggleCHMetronome() },
   discordVoice: () => { window.electron?.overlay?.toggleDiscordVoice() },
+  killCounter:  () => { window.electron?.overlay?.toggleKillCounter() },
 }
 
 // The HPS overlay can't be implemented correctly until EQ logs expose real

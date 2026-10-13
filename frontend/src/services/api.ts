@@ -1497,6 +1497,73 @@ export function clearLoot(character?: string): Promise<{ deleted: number }> {
   return post<{ deleted: number }>(`/api/loot/clear${qs}`)
 }
 
+// ── Kill Tracker (kill log + kill counters) ──────────────────────────────────
+
+export interface KillFilters {
+  character?: string
+  search?: string
+  zone?: string
+  scope?: import('../types/kills').KillScope
+  sort?: 'asc' | 'desc'
+  limit?: number
+}
+
+export function getKillMeta(character?: string): Promise<import('../types/kills').KillMetaResponse> {
+  const qs = character ? `?character=${encodeURIComponent(character)}` : ''
+  return get<import('../types/kills').KillMetaResponse>(`/api/kills/meta${qs}`)
+}
+
+export function listKills(f: KillFilters = {}): Promise<import('../types/kills').KillListResponse> {
+  const p = new URLSearchParams()
+  if (f.character) p.set('character', f.character)
+  if (f.search) p.set('search', f.search)
+  if (f.zone) p.set('zone', f.zone)
+  if (f.scope) p.set('scope', f.scope)
+  if (f.sort) p.set('sort', f.sort)
+  if (f.limit) p.set('limit', String(f.limit))
+  const qs = p.toString()
+  return get<import('../types/kills').KillListResponse>(`/api/kills${qs ? '?' + qs : ''}`)
+}
+
+export function clearKills(character?: string): Promise<{ deleted: number }> {
+  const qs = character ? `?character=${encodeURIComponent(character)}` : ''
+  return post<{ deleted: number }>(`/api/kills/clear${qs}`)
+}
+
+type KillCountersState = import('../types/kills').KillCountersState
+type KillCounterDef = import('../types/kills').KillCounterDef
+
+export function getKillCounters(): Promise<KillCountersState> {
+  return get<KillCountersState>('/api/kill-counters')
+}
+
+export function getKillCounterPresets(): Promise<{ presets: import('../types/kills').KillCounterPreset[] }> {
+  return get<{ presets: import('../types/kills').KillCounterPreset[] }>('/api/kill-counters/presets')
+}
+
+export function installKillCounterPreset(key: string): Promise<KillCountersState> {
+  return post<KillCountersState>(`/api/kill-counters/presets/${encodeURIComponent(key)}`)
+}
+
+export function createKillCounter(def: Omit<KillCounterDef, 'id'>): Promise<KillCountersState> {
+  return post<KillCountersState>('/api/kill-counters', def)
+}
+
+export function updateKillCounter(def: KillCounterDef): Promise<KillCountersState> {
+  return put<KillCountersState>(`/api/kill-counters/${encodeURIComponent(def.id)}`, def)
+}
+
+export function deleteKillCounter(id: string): Promise<KillCountersState> {
+  return del<KillCountersState>(`/api/kill-counters/${encodeURIComponent(id)}`)
+}
+
+export function killCounterAction(
+  id: string,
+  body: import('../types/kills').KillCounterAction,
+): Promise<KillCountersState> {
+  return post<KillCountersState>(`/api/kill-counters/${encodeURIComponent(id)}/action`, body)
+}
+
 // ── Log Backfill (retroactively populate trackers from a character's log) ──────
 
 export interface BackfillSection {

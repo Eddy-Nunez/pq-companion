@@ -28,6 +28,7 @@ export type OverlayName =
   | 'zoneLockouts'
   | 'raidReadiness'
   | 'filteredTimer'
+  | 'killCounter'
 
 /**
  * How an overlay behaves while locked.
@@ -60,6 +61,9 @@ const OVERLAY_DEFAULT_LOCKED_MODE: Partial<Record<OverlayName, LockedMode>> = {
   // nothing to click or clear, so there's no reason for its body to capture
   // the mouse while playing.
   raidReadiness: 'clickthrough',
+  // A HUD of counts — the +/− buttons are for the dashboard panel and an
+  // unlocked popout, never for mid-fight clicks.
+  killCounter: 'clickthrough',
 }
 
 export const OVERLAY_DEFS: { name: OverlayName; label: string }[] = [
@@ -79,6 +83,7 @@ export const OVERLAY_DEFS: { name: OverlayName; label: string }[] = [
   { name: 'liveMap', label: 'Live Map' },
   { name: 'zoneLockouts', label: 'Zone Lockouts' },
   { name: 'raidReadiness', label: 'Raid Readiness' },
+  { name: 'killCounter', label: 'Kill Counters' },
 ]
 
 // Matches a StreamKit voice-overlay URL, e.g.

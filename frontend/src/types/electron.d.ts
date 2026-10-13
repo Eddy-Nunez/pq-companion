@@ -48,6 +48,9 @@ export interface ElectronAPI {
     openFilteredTimer: () => Promise<void>
     closeFilteredTimer: () => Promise<void>
     toggleFilteredTimer: () => Promise<void>
+    openKillCounter: () => Promise<void>
+    closeKillCounter: () => Promise<void>
+    toggleKillCounter: () => Promise<void>
     openCHChain: () => Promise<void>
     closeCHChain: () => Promise<void>
     toggleCHChain: () => Promise<void>

@@ -4,6 +4,7 @@ import {
   Users, Dice5, UserSearch, MessageSquare, Package, TrendingUp, BookOpen,
   Library, KeyRound, Hourglass, Star, Wand2, ListChecks, Percent, Store, PawPrint,
   Flag, Swords, ShieldBan, Keyboard, Route, Scale, Navigation, ShieldCheck,
+  Crosshair,
 } from 'lucide-react'
 import type { Preferences } from '../types/config'
 
@@ -94,6 +95,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: '/combat', label: 'Combat Log', icon: <ScrollText size={16} /> },
       { to: '/triggers', label: 'Triggers', icon: <Zap size={16} /> },
       { to: '/rolls', label: 'Roll Tracker', icon: <Dice5 size={16} /> },
+      { to: '/kills', label: 'Kill Tracker', icon: <Crosshair size={16} /> },
       { to: '/players', label: 'Player Tracker', icon: <UserSearch size={16} /> },
       { to: '/chat', label: 'Chat History', icon: <MessageSquare size={16} /> },
       { to: '/loot', label: 'Loot Tracker', icon: <Package size={16} /> },

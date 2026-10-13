@@ -59,6 +59,8 @@ const DPSOverlayWindowPage = lazy(() => import('./pages/DPSOverlayWindowPage'))
 const HPSOverlayWindowPage = lazy(() => import('./pages/HPSOverlayWindowPage'))
 const BuffTimerWindowPage = lazy(() => import('./pages/BuffTimerWindowPage'))
 const FilteredTimerWindowPage = lazy(() => import('./pages/FilteredTimerWindowPage'))
+const KillCounterWindowPage = lazy(() => import('./pages/KillCounterWindowPage'))
+const KillTrackerPage = lazy(() => import('./pages/KillTrackerPage'))
 const CHChainOverlayWindowPage = lazy(() => import('./pages/CHChainOverlayWindowPage'))
 const CHMetronomeOverlayWindowPage = lazy(() => import('./pages/CHMetronomeOverlayWindowPage'))
 const DetrimTimerWindowPage = lazy(() => import('./pages/DetrimTimerWindowPage'))
@@ -293,6 +295,7 @@ export default function App(): React.ReactElement {
         {DEV_HPS && <Route path="hps-overlay-window" element={<OverlayPage overlayKey="hps"><HPSOverlayWindowPage /></OverlayPage>} />}
         <Route path="buff-timer-window" element={<OverlayPage overlayKey="buffTimer"><BuffTimerWindowPage /></OverlayPage>} />
         <Route path="filtered-timer-window" element={<OverlayPage overlayKey="filteredTimer"><FilteredTimerWindowPage /></OverlayPage>} />
+        <Route path="kill-counter-window" element={<OverlayPage overlayKey="killCounter"><KillCounterWindowPage /></OverlayPage>} />
         <Route path="detrim-timer-window" element={<OverlayPage overlayKey="detrimTimer"><DetrimTimerWindowPage /></OverlayPage>} />
         <Route path="custom-timer-window" element={<OverlayPage overlayKey="customTimer"><CustomTimerWindowPage /></OverlayPage>} />
         <Route path="trigger-overlay-window" element={<OverlayPage><TriggerOverlayWindowPage /></OverlayPage>} />
@@ -342,6 +345,7 @@ export default function App(): React.ReactElement {
           <Route path="combat-history" element={<Navigate to="/combat/history" replace />} />
           <Route path="triggers" element={<TriggersPage />} />
           <Route path="rolls" element={<RollTrackerPage />} />
+          <Route path="kills" element={<KillTrackerPage />} />
           <Route path="players" element={<PlayersPage />} />
           <Route path="chat" element={<ChatHistoryPage />} />
           <Route path="loot" element={<LootTrackerPage />} />

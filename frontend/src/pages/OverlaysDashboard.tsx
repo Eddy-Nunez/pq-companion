@@ -15,6 +15,7 @@ import { Eye, EyeOff, Monitor, MonitorPlay, RotateCcw, ExternalLink, Layers, X, 
 import type { OverlayName } from '../lib/overlays'
 import BuffTimerPanel from '../components/overlays/BuffTimerPanel'
 import FilteredTimerPanel from '../components/overlays/FilteredTimerPanel'
+import KillCounterPanel from '../components/overlays/KillCounterPanel'
 import DetrimTimerPanel from '../components/overlays/DetrimTimerPanel'
 import DPSPanel from '../components/overlays/DPSPanel'
 import HPSPanel from '../components/overlays/HPSPanel'
@@ -85,6 +86,7 @@ const PANEL_POPOUT: Record<DashboardPanelKey, { name: OverlayName; toggle: () =>
   zoneLockouts: { name: 'zoneLockouts', toggle: () => { window.electron?.overlay?.toggleZoneLockouts() } },
   raidReadiness: { name: 'raidReadiness', toggle: () => { window.electron?.overlay?.toggleRaidReadiness() } },
   filtered:    { name: 'filteredTimer', toggle: () => { window.electron?.overlay?.toggleFilteredTimer() } },
+  kills:       { name: 'killCounter',  toggle: () => { window.electron?.overlay?.toggleKillCounter() } },
 }
 
 // Compact square icon button for the manager's per-overlay rows.
@@ -824,6 +826,17 @@ export default function OverlaysDashboard(): React.ReactElement {
             defaultHeight={layout.filtered.height}
             snapGridSize={SNAP_GRID}
             onLayoutChange={handleLayoutChange('filtered')}
+          />
+        )}
+        {layout.kills.visible && (
+          <KillCounterPanel
+            key={`kills-${layoutVersion}`}
+            defaultX={layout.kills.x}
+            defaultY={layout.kills.y}
+            defaultWidth={layout.kills.width}
+            defaultHeight={layout.kills.height}
+            snapGridSize={SNAP_GRID}
+            onLayoutChange={handleLayoutChange('kills')}
           />
         )}
         {layout.detrim.visible && (
