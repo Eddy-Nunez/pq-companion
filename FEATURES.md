@@ -2014,6 +2014,57 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.28.0 — Kill Tracker, Event Presets, Raid Event Timers
+
+- **Kill Tracker** (`internal/killtracker`, Parsing → Kill Tracker) — the
+  Kill Log stores every `EventKill` in `user.db` (`kill_events`: target,
+  killer, zone, ts, `is_npc`, `named`). A per-second `seq` keeps same-second
+  AE kills apart while live capture and the new "Kill Log" backfill section
+  dedup against each other. `is_npc` resolves the target against
+  `npc_types` (any placeholder decoration), which keeps player deaths, mounts
+  and Eye of X out of the default view; `named` is a proper-name heuristic.
+  The page has sortable columns, zone/scope/time-window filters, and a By mob
+  view.
+- **Kill Counters** — `kill_counters` rows hold a definition (mob names
+  and/or a line regex, optional zone, goal, milestones, heads-up count,
+  resync lines, reset line, event clock with backdated marks and stop lines)
+  plus live count and clock. Milestone alerts go out as synthetic
+  `trigger:fired` events. Clock marks support `if_idle` and `reset` for
+  start lines a server repeats mid-event. Shown in a Kill Counters overlay
+  (dashboard panel and pop-out).
+- **Event presets** — Bertoxxulous, Coirnav, Fennin Ro, Stone Ring,
+  Ston`Ruak, Drornok and Plane of Time phase 3, built from Project Quarm's
+  `SecretsOTheP/quests`, which differs from upstream EQMacEmu for several
+  encounters (Bertox's spawn emote and per-king fall line, Coirnav/Fennin's
+  rewritten announcements; Neffiken/Gurebk/Jeplak lost their guard-count
+  gates).
+- **Repeating trigger timers** — `timer_repeat` / `timer_repeat_max` on
+  custom timers; expiry restarts the timer anchored to the previous expiry
+  (no drift), fade-soon alerts re-fire each cycle, 200-cycle safety cap.
+- **Raid Event Timers pack** — built-in custom-timer triggers for Paffa,
+  Coirnav's reinforcements, the Plane of Time instance clock, Plane of Air
+  boss despawns, Emperor Ssraeshza and his room curse, Doomshade, Ring of
+  Fear, the Great Divide Ring War (each wave hidden until its last three
+  minutes), Hollowshade invasions and the Grimling war.
+- **Filtered Timers overlay** — a second timer window filtered by spell,
+  player or mob (including Me and the current target), with an optional
+  missing-buff list from the Zeal roster and opt-in display thresholds.
+- **Overlay zoom** — pop-out overlays zoom per window via CSS zoom, Ctrl+scroll
+  steps it by 5%, and the Settings sliders range 50–200%.
+- **Raid Summary** — Groups/List toggle with per-group cards, sortable
+  columns, and saved roster snapshots (`raid_roster_snapshots`).
+- **Zones tabs** — NPCs/Drops/Forage/Ground sort and filter; NPC spawn
+  chance is the era-aware normalized share (shared with the NPC overlay),
+  Drops show the effective rate, and inactive NPCs hide behind "Show
+  inactive".
+- **Archive & Trim** keeps the last N days or newest N MB, with a
+  configurable large-log threshold; the Charm Pet Finder adds the Magician's
+  Call of the Arch Mage.
+- **Timers and PoP flags** — "Your X spell has worn off." clears the mob's
+  detrimental; possibly-dead rows sort below live ones; key-ring rows
+  complete on zone-in; Tower/Torment steps corrected against quest scripts;
+  rows no sync can reach show a Manual badge.
+
 ## v0.27.0 — Variant Labels, Blocked Buffs, Trigger Repeat Count
 
 - **Same-name NPC variants are labelled** — `overlay.TargetVariant` carries
