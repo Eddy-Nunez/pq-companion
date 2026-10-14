@@ -92,7 +92,7 @@ export default function RaidMembersView({ members, classOrder, classLabel }: Pro
 
   return (
     <div
-      className="rounded-lg flex flex-col min-h-0"
+      className="rounded-lg flex flex-col shrink-0"
       style={{
         border: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-surface)',
