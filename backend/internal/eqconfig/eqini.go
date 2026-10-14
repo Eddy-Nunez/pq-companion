@@ -251,7 +251,7 @@ func SetExportOnCamp(eqPath string, enabled bool) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		// Seed a minimal file so the toggle works before Zeal has written one.
 		content := "[" + zealSection + "]\r\n" + exportOnCampKey + "=" + boolStr(enabled, "true", "false") + "\r\n"
-		return os.WriteFile(path, []byte(content), 0o644)
+		return writeFileAtomic(path, content)
 	}
 	return writeINI(path, zealSection, exportOnCampKey, boolStr(enabled, "true", "false"))
 }
@@ -308,14 +308,14 @@ func SetBandolierBagSlot(eqPath, character string, slot int) error {
 	section := zealCharSection(character)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		content := "[" + section + "]\r\n" + bandolierBagKey + "=" + strconv.Itoa(slot) + "\r\n"
-		return os.WriteFile(path, []byte(content), 0o644)
+		return writeFileAtomic(path, content)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", filepath.Base(path), err)
 	}
 	updated := setINIKeyInSection(string(b), section, bandolierBagKey, strconv.Itoa(slot))
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+	if err := writeFileAtomic(path, updated); err != nil {
 		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
 	}
 	return nil
@@ -328,7 +328,7 @@ func writeINI(path, section, key, value string) error {
 		return fmt.Errorf("read %s: %w", filepath.Base(path), err)
 	}
 	updated := setINIKey(string(b), section, key, value)
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+	if err := writeFileAtomic(path, updated); err != nil {
 		return fmt.Errorf("write %s: %w", filepath.Base(path), err)
 	}
 	return nil
@@ -339,4 +339,36 @@ func boolStr(b bool, t, f string) string {
 		return t
 	}
 	return f
+}
+
+// writeFileAtomic writes content to path via a temp file + rename in the same
+// directory, so a crash or full disk mid-write can't leave the user's
+// eqclient.ini / zeal.ini truncated — matching the pattern
+// zeal.WriteSpellsets uses.
+func writeFileAtomic(path, content string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".ini-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpPath) }
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("write temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("close temp: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o644); err != nil {
+		cleanup()
+		return fmt.Errorf("chmod temp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
 }

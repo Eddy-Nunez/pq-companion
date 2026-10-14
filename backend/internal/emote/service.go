@@ -75,7 +75,7 @@ func (s *Service) writeLive(content string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	return writeFileAtomic(path, content)
 }
 
 func readBackup(path string) (string, bool, error) {
@@ -93,7 +93,7 @@ func (s *Service) writeBackup(path, content string) error {
 	if err := os.MkdirAll(s.backupDir, 0o755); err != nil {
 		return fmt.Errorf("create backup dir: %w", err)
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	return writeFileAtomic(path, content)
 }
 
 // EnsureDefaultBackup captures a pristine default backup if one doesn't
@@ -685,4 +685,36 @@ func (s *Service) Status() (*Status, error) {
 		st.ExternalChangeAt = at.Unix()
 	}
 	return st, nil
+}
+
+// writeFileAtomic writes content to path via a temp file + rename in the same
+// directory, so a crash or full disk mid-write can't leave the user's
+// spells_en.txt (or its backups) truncated — matching the pattern
+// zeal.WriteSpellsets uses.
+func writeFileAtomic(path, content string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".spells_en-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpPath) }
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("write temp: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("close temp: %w", err)
+	}
+	if err := os.Chmod(tmpPath, 0o644); err != nil {
+		cleanup()
+		return fmt.Errorf("chmod temp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
 }
