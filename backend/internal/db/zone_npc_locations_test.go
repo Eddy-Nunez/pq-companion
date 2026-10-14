@@ -20,7 +20,9 @@ func TestGetRaidTargetsByZonePoP(t *testing.T) {
 		{"potorment", "Saryrn"},
 		{"pofire", "Fennin Ro the Tyrant of Fire"},
 		{"bothunder", "Agnarr the Storm Lord"},
-		{"hohonora", "Freegan Haun"}, // Halls of Honor trial NPC, no spawn2
+		// Halls of Honor B; HoH A (hohonora) has had no loot lockouts at all
+		// since 2026_10_07_HoH_A_Remove_Loot_Lockouts.sql.
+		{"hohonorb", "Lord Mithaniel Marr"},
 	}
 	for _, c := range cases {
 		t.Run(c.zone, func(t *testing.T) {
