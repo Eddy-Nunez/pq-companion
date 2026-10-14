@@ -9,6 +9,20 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.28.1 — 2026-10-14
+
+A maintenance release: PoP respawn timers catch up with Project Quarm's latest changes, Settings no longer undoes changes made elsewhere, and replaying a log no longer re-records old events or posts to Discord.
+
+### Fixes
+- **Stale PoP respawn timers and lockouts** — game data now includes Project Quarm's content updates since the last database dump: PoP trash respawns at 15.5 or 20.5 minutes instead of 19.5–25.5, Bastion of Thunder's six-hour named are now three hours, and Halls of Honor A no longer has loot lockouts.
+- **Settings saves reverted changes made elsewhere** — with Settings open, toggling an unrelated option could undo an overlay's zoom or detrimental overrides, another panel's change, or the character override cleared on login. Saves now apply only what you changed.
+- **Log replay re-recorded old events** — replaying a log no longer bumps kill counters or the kill log, re-saves loot, chat and player sightings, sets lockouts and PoP flags as new, moves faction tallies, removes wishlist entries, or overwrites your last zone and unspent AA. Triggers, timers, meters and overlays still run during replay.
+- **Log replay posted to Discord** — Discord webhook trigger actions no longer fire while replaying a log.
+- **One bad log line could stop the app updating** — an error in any single log feature no longer takes down the backend. That feature switches off for the session and everything else keeps working.
+- **Archive & Trim overwrote same-day archives** — running it twice in one day now keeps both archives instead of replacing the first.
+- **EQ config files could be left truncated** — eqclient.ini, zeal.ini and spells_en.txt are now written safely, so a crash or full disk mid-save can't leave them cut short.
+- **Raid Summary boxes collapsed** — the Members and Snapshot history boxes no longer shrink below their content.
+
 ## v0.28.0 — 2026-10-13
 
 A new Kill Tracker counts kills toward the milestones that drive scripted Planes of Power raids, with ready-made counters for Bertoxxulous and six other events, and a new trigger pack adds countdown timers for raid events that run on a server clock.
