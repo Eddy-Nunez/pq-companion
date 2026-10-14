@@ -104,3 +104,54 @@ func TestBackupAndPurgeKeepBytes(t *testing.T) {
 		})
 	}
 }
+
+// TestBackupAndPurgeTwiceSameDay guards against the second archive of a day
+// overwriting the first: that first archive is the only copy of the history
+// the first trim removed.
+func TestBackupAndPurgeTwiceSameDay(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "eqlog_Test_pq.proj.txt")
+	oldLine := "[" + time.Now().AddDate(0, 0, -60).Format("Mon Jan 02 15:04:05 2006") + "] old line"
+	newLine := "[" + time.Now().Format("Mon Jan 02 15:04:05 2006") + "] new line"
+	if err := os.WriteFile(logPath, []byte(oldLine+"\n"+newLine+"\n"), 0644); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+
+	first, err := BackupAndPurge(logPath, TrimOptions{KeepDays: 30})
+	if err != nil {
+		t.Fatalf("first BackupAndPurge: %v", err)
+	}
+	second, err := BackupAndPurge(logPath, TrimOptions{KeepDays: 30})
+	if err != nil {
+		t.Fatalf("second BackupAndPurge: %v", err)
+	}
+	if first == second {
+		t.Fatalf("second archive reused the first's path %q", first)
+	}
+
+	r, err := zip.OpenReader(first)
+	if err != nil {
+		t.Fatalf("open first archive: %v", err)
+	}
+	defer r.Close()
+	rc, err := r.File[0].Open()
+	if err != nil {
+		t.Fatalf("open first archive entry: %v", err)
+	}
+	defer rc.Close()
+	got, _ := io.ReadAll(rc)
+	if !strings.Contains(string(got), "old line") {
+		t.Errorf("first archive lost the trimmed history: %q", got)
+	}
+
+	archives := DiscoverArchives(dir, "Test")
+	if len(archives) != 2 {
+		t.Fatalf("DiscoverArchives found %d archives, want 2", len(archives))
+	}
+	today := time.Now().Format("2006-01-02")
+	for _, a := range archives {
+		if a.ArchivedAt.Format("2006-01-02") != today {
+			t.Errorf("%s: ArchivedAt = %v, want today's date", a.Path, a.ArchivedAt)
+		}
+	}
+}

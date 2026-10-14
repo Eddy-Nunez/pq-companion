@@ -91,8 +91,7 @@ func BackupAndPurge(logPath string, opts TrimOptions) (string, error) {
 	dir := filepath.Dir(logPath)
 	base := filepath.Base(logPath)
 	name := strings.TrimSuffix(base, ".txt")
-	backupName := name + "." + time.Now().Format("2006-01-02") + ".bak.zip"
-	backupPath := filepath.Join(dir, backupName)
+	backupPath := uniqueArchivePath(dir, name, time.Now().Format("2006-01-02"), "")
 
 	origInfo, err := os.Stat(logPath)
 	if err != nil {

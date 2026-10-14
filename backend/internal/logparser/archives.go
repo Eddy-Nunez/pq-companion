@@ -24,8 +24,9 @@ type ArchiveFile struct {
 }
 
 // reArchiveName matches the "<YYYY-MM-DD>.bak.zip" / ".bak.txt" tail that
-// BackupAndPurge appends to eqlog_<Char>_pq.proj.
-var reArchiveName = regexp.MustCompile(`\.(\d{4}-\d{2}-\d{2})\.bak\.(?:zip|txt)$`)
+// BackupAndPurge appends to eqlog_<Char>_pq.proj. A second archive taken the
+// same day gets a "-N" counter after the date (see uniqueArchivePath).
+var reArchiveName = regexp.MustCompile(`\.(\d{4}-\d{2}-\d{2})(?:-\d+)?\.bak\.(?:zip|txt)$`)
 
 // DiscoverArchives returns the log archives for one character found in
 // eqPath, oldest first. Returns nil when eqPath or character is empty or no
@@ -164,7 +165,7 @@ func CompressLegacyArchive(path string) (string, error) {
 		return "", fmt.Errorf("not a legacy .bak.txt archive: %s", base)
 	}
 	entryName := strings.TrimSuffix(base, m[0]) + ".txt"
-	newPath := strings.TrimSuffix(path, ".txt") + ".zip"
+	newPath := uniqueArchivePath(filepath.Dir(path), strings.TrimSuffix(base, m[0]), m[1], path)
 
 	srcInfo, err := os.Stat(path)
 	if err != nil {
@@ -181,6 +182,31 @@ func CompressLegacyArchive(path string) (string, error) {
 		return newPath, fmt.Errorf("compressed to %s but could not remove original: %w", filepath.Base(newPath), err)
 	}
 	return newPath, nil
+}
+
+// uniqueArchivePath returns <dir>/<stem>.<date>.bak.zip, or the first free
+// <stem>.<date>-N.bak.zip when that name (or its legacy .bak.txt twin) is
+// taken, so archiving twice in one day never overwrites an earlier archive.
+// skip names a file that doesn't count as taken (the legacy .bak.txt being
+// converted); pass "" when there is none.
+func uniqueArchivePath(dir, stem, date, skip string) string {
+	for n := 1; ; n++ {
+		tag := date
+		if n > 1 {
+			tag = fmt.Sprintf("%s-%d", date, n)
+		}
+		base := filepath.Join(dir, stem+"."+tag+".bak")
+		// Any stat error counts as free: a real permission problem then
+		// surfaces from the caller's create instead of looping here forever.
+		_, zipErr := os.Stat(base + ".zip")
+		_, txtErr := os.Stat(base + ".txt")
+		if base+".txt" == skip {
+			txtErr = os.ErrNotExist
+		}
+		if zipErr != nil && txtErr != nil {
+			return base + ".zip"
+		}
+	}
 }
 
 // CompressResult is the outcome of compressing one legacy archive.
