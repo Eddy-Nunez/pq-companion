@@ -1831,7 +1831,11 @@ func main() {
 			})
 			if err != nil {
 				slog.Warn("persist roll tracker settings", "err", err)
+				return
 			}
+			// Let open windows (Settings in particular) pick up the change, so
+			// their next save doesn't write the old values back.
+			hub.Broadcast(ws.Event{Type: "config:updated", Data: cfgMgr.Get()})
 		})
 		// Best-effort loot-item auto-suggest: resolve a raid/chat line like
 		// "Robe of the Lost Circle 333" to the canonical item name so the
@@ -2026,6 +2030,8 @@ func main() {
 			})
 			if err != nil {
 				slog.Warn("logparser: could not clear manual character override", "err", err)
+			} else {
+				hub.Broadcast(ws.Event{Type: "config:updated", Data: cfgMgr.Get()})
 			}
 		}
 		hub.Broadcast(ws.Event{Type: "config:character_detected", Data: map[string]string{"character": character}})

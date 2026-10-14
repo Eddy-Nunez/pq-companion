@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 import type { Config, Preferences } from '../../types/config'
-import { updateConfig, piperSynthesize, clearPiperCache } from '../../services/api'
+import { saveConfigChanges, piperSynthesize, clearPiperCache } from '../../services/api'
 import { usePiperStatus } from '../../hooks/usePiperStatus'
 import { playSoundForTest, stopTestPlayback, isTestPlaying } from '../../services/audio'
 
@@ -53,8 +53,8 @@ interface PiperTtsSettingsProps {
  * voice appears in every alert/trigger voice dropdown. See docs/piper-tts-plan.md.
  *
  * Unlike most settings (debounced autosave in the parent), path/toggle changes
- * here persist immediately via updateConfig so the backend re-detects and the
- * status + Test Voice reflect the just-entered paths without a lag.
+ * here persist immediately via saveConfigChanges so the backend re-detects
+ * and the status + Test Voice reflect the just-entered paths without a lag.
  */
 export default function PiperTtsSettings({
   config,
@@ -84,7 +84,7 @@ export default function PiperTtsSettings({
   function saveNow(patch: Partial<Preferences>): void {
     const next: Config = { ...config, preferences: { ...config.preferences, ...patch } }
     setConfig(next)
-    void updateConfig(next)
+    void saveConfigChanges(next, config)
   }
 
   async function browseExe(): Promise<void> {

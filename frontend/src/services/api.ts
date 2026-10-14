@@ -99,6 +99,7 @@ export interface GlobalSearchResult {
 import { getBackendBaseUrl } from './backendUrl'
 import { isPiperVoice } from '../lib/piper'
 import { isKokoroVoice } from '../lib/kokoro'
+import { mergeConfigEdits } from '../lib/configMerge'
 
 // A GET can fail to even reach the backend during the brief startup window
 // before the sidecar is accepting connections — fetch rejects with a TypeError
@@ -1957,6 +1958,26 @@ export function getConfig(): Promise<Config> {
 
 export function updateConfig(cfg: Config): Promise<Config> {
   return put<Config>('/api/config', cfg)
+}
+
+// Config saves made through saveConfigChanges run one at a time, so a second
+// save's fresh read always sees the first one's write.
+let configSaveQueue: Promise<unknown> = Promise.resolve()
+
+/**
+ * saveConfigChanges persists only the edits that turn base into next, applied
+ * onto a fresh copy of the server config (see lib/configMerge). Use it instead
+ * of updateConfig whenever next was built from a config fetched earlier — a
+ * whole-object PUT would write that copy's stale fields back, reverting
+ * changes made since by another window or by the backend.
+ */
+export function saveConfigChanges(next: Config, base: Config): Promise<Config> {
+  const run = configSaveQueue.then(async () => {
+    const fresh = await getConfig()
+    return updateConfig(mergeConfigEdits(fresh, base, next))
+  })
+  configSaveQueue = run.catch(() => undefined)
+  return run
 }
 
 // ── Changelog ──────────────────────────────────────────────────────────────────

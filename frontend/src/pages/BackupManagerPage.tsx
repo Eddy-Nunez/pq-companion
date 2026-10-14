@@ -29,7 +29,7 @@ import {
   unlockBackup,
   pruneBackups,
   getConfig,
-  updateConfig,
+  saveConfigChanges,
   exportAppBackup,
   previewAppImport,
   stageAppImport,
@@ -457,13 +457,20 @@ interface SettingsPanelProps {
 
 function SettingsPanel({ onClose, onPruned }: SettingsPanelProps): React.ReactElement {
   const [cfg, setCfg] = useState<Config | null>(null)
+  // The config as last loaded/saved, so Save writes only this page's edits.
+  const [baseCfg, setBaseCfg] = useState<Config | null>(null)
   const [saving, setSaving] = useState(false)
   const [pruning, setPruning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    getConfig().then(setCfg).catch((err: Error) => setError(err.message))
+    getConfig()
+      .then((c) => {
+        setCfg(c)
+        setBaseCfg(c)
+      })
+      .catch((err: Error) => setError(err.message))
   }, [])
 
   const bs = cfg?.backup ?? { auto_backup: false, schedule: 'off' as const, max_backups: 10 }
@@ -477,8 +484,9 @@ function SettingsPanel({ onClose, onPruned }: SettingsPanelProps): React.ReactEl
     if (!cfg) return
     setSaving(true)
     setError(null)
-    updateConfig(cfg)
-      .then(() => {
+    saveConfigChanges(cfg, baseCfg ?? cfg)
+      .then((saved) => {
+        setBaseCfg(saved)
         setSaved(true)
         setTimeout(() => setSaved(false), 2000)
       })

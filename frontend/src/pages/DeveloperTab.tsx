@@ -6,7 +6,7 @@ import SqlSandboxPanel from './SqlSandboxPanel'
 // boot bundle — only Dev-tab users who open the graph sub-tab pay the cost.
 const SchemaGraphPanel = React.lazy(() => import('./SchemaGraphPanel'))
 import SpellEmotesPanel from './SpellEmotesPanel'
-import { getConfig, updateConfig } from '../services/api'
+import { getConfig, saveConfigChanges } from '../services/api'
 import type { Config } from '../types/config'
 
 // DeveloperTab hosts power-user tools that don't belong in the regular UI.
@@ -106,7 +106,10 @@ function FlagsPanel(): React.ReactElement {
     if (!config || saving) return
     setSaving(true)
     setError(null)
-    updateConfig({ ...config, preferences: { ...config.preferences, ...patch } })
+    saveConfigChanges(
+      { ...config, preferences: { ...config.preferences, ...patch } },
+      config,
+    )
       .then(setConfig)
       .catch((err: Error) => setError(err.message))
       .finally(() => setSaving(false))

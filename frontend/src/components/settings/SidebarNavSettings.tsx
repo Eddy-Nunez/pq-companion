@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { PanelLeft, ChevronUp, ChevronDown, RotateCcw, Eye, EyeOff, Star } from 'lucide-react'
-import { getConfig, updateConfig } from '../../services/api'
+import { getConfig, saveConfigChanges } from '../../services/api'
 import type { Config } from '../../types/config'
 import { NAV_SECTIONS, visibleNavSections, navFlags, orderItems, type NavItem, type NavSection } from '../../lib/sidebarNav'
 
@@ -61,7 +61,7 @@ export default function SidebarNavSettings(): React.ReactElement {
     }
     setCfg(next)
     try {
-      const saved = await updateConfig(next)
+      const saved = await saveConfigChanges(next, cfg)
       setCfg(saved)
     } finally {
       setSaving(false)

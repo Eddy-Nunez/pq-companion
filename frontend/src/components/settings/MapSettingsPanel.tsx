@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Check, Map as MapIcon, RefreshCw } from 'lucide-react'
-import { getConfig, getExternalMapStatus, updateConfig } from '../../services/api'
+import { getConfig, getExternalMapStatus, saveConfigChanges } from '../../services/api'
 import type { Config } from '../../types/config'
 import type { ExternalMapStatus, MapRenderMode } from '../../types/map'
 
@@ -64,7 +64,7 @@ export default function MapSettingsPanel(): React.ReactElement {
       ...config,
       preferences: { ...config.preferences, map_style: next },
     }
-    updateConfig(updated)
+    saveConfigChanges(updated, config)
       .then((c) => {
         setConfig(c)
         setSaved(true)
@@ -82,7 +82,7 @@ export default function MapSettingsPanel(): React.ReactElement {
       ...config,
       preferences: { ...config.preferences, map_poi_ignore_zfade: next },
     }
-    updateConfig(updated)
+    saveConfigChanges(updated, config)
       .then((c) => {
         setConfig(c)
         setSaved(true)
@@ -99,7 +99,7 @@ export default function MapSettingsPanel(): React.ReactElement {
       ...config,
       preferences: { ...config.preferences, map_show_group: next },
     }
-    updateConfig(updated)
+    saveConfigChanges(updated, config)
       .then((c) => {
         setConfig(c)
         setSaved(true)

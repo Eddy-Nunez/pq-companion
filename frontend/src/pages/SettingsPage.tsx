@@ -13,11 +13,12 @@ import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
 import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFiltersCard'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
-import { getConfig, updateConfig, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
+import { getConfig, saveConfigChanges, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
 import { renderChangelogBody } from '../components/WhatsNewModal'
 import type { Config, DPSClassColors, LogTrimSettings, NPCOverlaySections, TimerAlertPref } from '../types/config'
 import { DEFAULT_DPS_CLASS_COLORS, DEFAULT_LOG_TRIM, DEFAULT_NPC_OVERLAY_SECTIONS } from '../types/config'
 import { withTimerAlertDefaults } from '../lib/timerAlerts'
+import { mergeConfigEdits } from '../lib/configMerge'
 import { OVERLAY_DEFS, resolveLockedMode } from '../lib/overlays'
 import type { OverlayName, LockedMode } from '../lib/overlays'
 import { DEV_HPS } from '../lib/devFlags'
@@ -378,7 +379,7 @@ export default function SettingsPage(): React.ReactElement {
       const c = configRef.current
       const oc = originalConfigRef.current
       if (c && oc && JSON.stringify(c) !== JSON.stringify(oc)) {
-        void updateConfig(c)
+        void saveConfigChanges(c, oc)
       }
     }
   }, [])
@@ -505,29 +506,20 @@ export default function SettingsPage(): React.ReactElement {
     getZealPipeStatus().then(setPipeStatus).catch(() => null)
   })
 
-  // Overlay windows save their own zoom (Ctrl+scroll — see useOverlayZoom).
-  // Pull that in so the sliders track it, and fold it into the saved baseline
-  // too, so the next autosave of an unrelated setting can't write the stale
-  // value back. A slider the user has moved here but not yet saved wins.
+  // Config also changes outside this page: overlay windows save their own
+  // zoom (Ctrl+scroll — see useOverlayZoom) and other settings, and the
+  // backend clears the manual character override on login. Rebase the draft
+  // onto the server copy so those changes show here and so the next autosave
+  // diffs against them instead of writing the old values back. An edit the
+  // user has made here but not yet saved wins.
   useWebSocket((msg: WsMessage) => {
     if (msg.type !== WSEvent.ConfigUpdated) return
     getConfig()
       .then((srv) => {
-        const next = srv.preferences.overlay_zoom_factors
-        const base = originalConfigRef.current?.preferences.overlay_zoom_factors
-        if (JSON.stringify(next) === JSON.stringify(base)) return
-        const withZoom = (c: Config | null): Config | null =>
-          c && {
-            ...c,
-            preferences: { ...c.preferences, overlay_zoom_factors: next },
-          }
-        setConfig((c) =>
-          JSON.stringify(c?.preferences.overlay_zoom_factors) ===
-          JSON.stringify(base)
-            ? withZoom(c)
-            : c,
-        )
-        setOriginalConfig(withZoom)
+        const base = originalConfigRef.current
+        if (!base) return
+        setConfig((c) => c && mergeConfigEdits(srv, base, c))
+        setOriginalConfig(srv)
       })
       .catch(() => null)
   })
@@ -643,10 +635,13 @@ export default function SettingsPage(): React.ReactElement {
   }
 
   // persist writes the given config now. Used by both autosave and the explicit
-  // Advanced-tab apply button. It does NOT setConfig(saved) so an in-flight save
-  // can't clobber edits the user makes while it's running; only the saved
-  // baseline (originalConfig) is updated.
+  // Advanced-tab apply button. Only the fields that differ from the saved
+  // baseline (originalConfig) are written, onto a fresh server copy, so values
+  // changed elsewhere since this page loaded aren't reverted. Afterwards the
+  // draft is rebased onto the saved config rather than replaced, so edits the
+  // user makes while the save is in flight survive.
   function persist(c: Config): void {
+    const base = originalConfigRef.current ?? c
     if (saveStateClearRef.current) clearTimeout(saveStateClearRef.current)
     if (saveStateShowRef.current) clearTimeout(saveStateShowRef.current)
     setSaveError(null)
@@ -656,9 +651,10 @@ export default function SettingsPage(): React.ReactElement {
     // pauses. Only surface "Saving…" if the request is still in flight after
     // a short delay; fast saves jump straight to "Saved".
     saveStateShowRef.current = setTimeout(() => setSaveState('saving'), 200)
-    updateConfig(c)
+    saveConfigChanges(c, base)
       .then((saved) => {
         if (saveStateShowRef.current) clearTimeout(saveStateShowRef.current)
+        setConfig((cur) => cur && mergeConfigEdits(saved, base, cur))
         setOriginalConfig(saved)
         flashSaveState('saved')
       })
@@ -770,9 +766,7 @@ export default function SettingsPage(): React.ReactElement {
         preferences: { ...config.preferences, developer_mode: !developerMode },
       }
       setConfig(next)
-      updateConfig(next)
-        .then((saved) => setOriginalConfig(saved))
-        .catch(() => null)
+      persist(next)
       // Hop straight to the tab the first time the user reveals it so the
       // unlock isn't silent. When hiding, fall back to General.
       setTab(developerMode ? 'general' : 'developer')
@@ -1113,9 +1107,7 @@ export default function SettingsPage(): React.ReactElement {
               },
             }
             setConfig(next)
-            updateConfig(next)
-              .then((saved) => setOriginalConfig(saved))
-              .catch(() => null)
+            persist(next)
           }}
         />
         </>

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Volume2, Play, Square, Trash2, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react'
 
 import type { Config, Preferences } from '../../types/config'
-import { updateConfig, kokoroSynthesize, clearKokoroCache } from '../../services/api'
+import { saveConfigChanges, kokoroSynthesize, clearKokoroCache } from '../../services/api'
 import { useKokoroStatus } from '../../hooks/useKokoroStatus'
 import { playSoundForTest, stopTestPlayback, isTestPlaying } from '../../services/audio'
 
@@ -46,7 +46,7 @@ interface KokoroTtsSettingsProps {
  * dropdown.
  *
  * Unlike most settings (debounced autosave in the parent), the URL/toggle
- * changes here persist immediately via updateConfig so the backend
+ * changes here persist immediately via saveConfigChanges so the backend
  * re-detects and the status + voice list reflect the just-entered URL
  * without a lag.
  */
@@ -74,7 +74,7 @@ export default function KokoroTtsSettings({
   function saveNow(patch: Partial<Preferences>): void {
     const next: Config = { ...config, preferences: { ...config.preferences, ...patch } }
     setConfig(next)
-    void updateConfig(next)
+    void saveConfigChanges(next, config)
   }
 
   async function testVoice(): Promise<void> {

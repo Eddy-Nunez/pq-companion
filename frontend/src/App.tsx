@@ -4,7 +4,7 @@ import Layout from './components/Layout'
 import OnboardingWizard from './components/OnboardingWizard'
 import WhatsNewModal from './components/WhatsNewModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { getConfig, getChangelog, updateConfig, type ChangelogEntry } from './services/api'
+import { getConfig, getChangelog, updateConfig, saveConfigChanges, type ChangelogEntry } from './services/api'
 import { setAudioOwner } from './services/audio'
 import { loadEnums } from './lib/enumsCache'
 import { useAudioEngine } from './hooks/useAudioEngine'
@@ -194,7 +194,10 @@ function MainWindowLayout(): React.ReactElement {
               // Fresh install: stamp the current version silently — the
               // wizard above already covers first-run orientation, so
               // there's no "what's new" to show yet.
-              void updateConfig({ ...c, last_seen_changelog_version: appVersion })
+              void saveConfigChanges(
+                { ...c, last_seen_changelog_version: appVersion },
+                c,
+              )
               return
             }
             if (c.last_seen_changelog_version === appVersion) return

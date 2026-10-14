@@ -15,7 +15,7 @@ import {
 import {
   detectZeal,
   getConfig,
-  updateConfig,
+  saveConfigChanges,
   validateEQPath,
   getBackfillInfo,
   runBackfill,
@@ -191,7 +191,7 @@ export default function OnboardingWizard({
         character_class: characterClass,
         onboarding_completed: true,
       }
-      await updateConfig(updated)
+      await saveConfigChanges(updated, config)
 
       // Optional: backfill the trackers from this character's existing log.
       // Non-fatal — a failure here shouldn't block finishing setup.

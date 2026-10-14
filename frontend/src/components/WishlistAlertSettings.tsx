@@ -19,7 +19,7 @@ import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { useVoices } from '../hooks/useVoices'
 import { useTTSVoices } from '../hooks/usePiperStatus'
 import { voiceLabel } from '../lib/piper'
-import { getConfig, updateConfig } from '../services/api'
+import { getConfig, saveConfigChanges } from '../services/api'
 import type { Config, WishlistWatchSettings } from '../types/config'
 import { PlaySoundFields } from './NotificationActionEditor'
 import DecimalInput from './DecimalInput'
@@ -45,6 +45,8 @@ export default function WishlistAlertSettings({
   const voices = useTTSVoices(useVoices())
 
   const [config, setConfig] = useState<Config | null>(null)
+  // The config as loaded, so Save writes only this dialog's edits.
+  const [baseConfig, setBaseConfig] = useState<Config | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -53,7 +55,10 @@ export default function WishlistAlertSettings({
     setConfig(null)
     setError(null)
     getConfig()
-      .then(setConfig)
+      .then((c) => {
+        setConfig(c)
+        setBaseConfig(c)
+      })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [open])
 
@@ -76,11 +81,11 @@ export default function WishlistAlertSettings({
   }
 
   async function handleSave(): Promise<void> {
-    if (!config) return
+    if (!config || !baseConfig) return
     setSaving(true)
     setError(null)
     try {
-      await updateConfig(config)
+      await saveConfigChanges(config, baseConfig)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

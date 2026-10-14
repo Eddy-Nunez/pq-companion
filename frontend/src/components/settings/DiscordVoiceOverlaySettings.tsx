@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 import type { Config, Preferences, DiscordVoiceLink } from '../../types/config'
-import { updateConfig } from '../../services/api'
+import { saveConfigChanges } from '../../services/api'
 import { isValidStreamKitVoiceUrl } from '../../lib/overlays'
 
 const STREAMKIT_URL = 'https://streamkit.discord.com/overlay'
@@ -70,7 +70,7 @@ export default function DiscordVoiceOverlaySettings({
   function saveNow(patch: Partial<Preferences>): void {
     const next: Config = { ...config, preferences: { ...config.preferences, ...patch } }
     setConfig(next)
-    void updateConfig(next)
+    void saveConfigChanges(next, config)
   }
 
   function startAdd(): void {

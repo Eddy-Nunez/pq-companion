@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Webhook, AlertTriangle, Pencil, Trash2, Plus } from 'lucide-react'
 
 import type { Config, Preferences, DiscordWebhook } from '../../types/config'
-import { updateConfig } from '../../services/api'
+import { saveConfigChanges } from '../../services/api'
 import { isValidDiscordWebhookUrl } from '../../lib/discordWebhook'
 
 function newWebhookId(): string {
@@ -41,7 +41,7 @@ export default function DiscordWebhookSettings({
   function saveNow(patch: Partial<Preferences>): void {
     const next: Config = { ...config, preferences: { ...config.preferences, ...patch } }
     setConfig(next)
-    void updateConfig(next)
+    void saveConfigChanges(next, config)
   }
 
   function startAdd(): void {
