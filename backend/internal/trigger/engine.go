@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jasonsoprovich/pq-companion/backend/internal/ws"
@@ -100,6 +101,11 @@ type Engine struct {
 	// function) so tests can stub network I/O; defaults to
 	// postDiscordWebhook in NewEngine.
 	sendWebhook func(url, content string)
+	// replaying is set while a log replay session drives Handle (see
+	// SetReplaying). Replayed fires still render locally but skip Discord
+	// webhook posts, so replaying an old raid can't post its callouts to a
+	// real channel.
+	replaying atomic.Bool
 
 	mu           sync.RWMutex
 	compiled     []compiled // Source=="log" triggers, indexed by regex
@@ -944,7 +950,7 @@ func (e *Engine) applyFire(plan firePlan, opts fireOpts) {
 	// they don't re-post webhooks or add history rows (a 12-mob PBAE would
 	// otherwise post 12 times).
 	isRepeat := t.RepeatResetSecs > 0 && plan.repeatCount > 1
-	if !opts.test && !isRepeat {
+	if !opts.test && !isRepeat && !e.replaying.Load() {
 		e.dispatchWebhooks(plan.actions)
 	}
 
@@ -993,6 +999,12 @@ func (e *Engine) applyFire(plan firePlan, opts fireOpts) {
 	if !opts.test {
 		e.startCooldownTimer(t, plan.firedAt)
 	}
+}
+
+// SetReplaying marks whether incoming lines come from a log replay session
+// rather than the live log. While set, fires skip discord_webhook posts.
+func (e *Engine) SetReplaying(replaying bool) {
+	e.replaying.Store(replaying)
 }
 
 // discordWebhookURLRe restricts outbound webhook posts to Discord's own

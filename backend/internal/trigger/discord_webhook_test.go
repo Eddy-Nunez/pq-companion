@@ -139,3 +139,51 @@ func TestEngine_DiscordWebhookNoResolverIsNoop(t *testing.T) {
 	// Must not panic.
 	e.Handle(time.Now(), "hello world")
 }
+
+// TestEngine_DiscordWebhookSkippedDuringReplay verifies a log replay session
+// never posts to Discord — replaying an old raid would otherwise send its
+// callouts to a real channel — while the trigger itself still fires, and
+// that posting resumes once the session ends.
+func TestEngine_DiscordWebhookSkippedDuringReplay(t *testing.T) {
+	s, e := openTestEngine(t)
+
+	calls := make(chan struct{}, 4)
+	e.sendWebhook = func(url, content string) { calls <- struct{}{} }
+	e.SetWebhookResolver(func(id string) (string, bool) {
+		return "https://discord.com/api/webhooks/1/token", true
+	})
+
+	tr := &Trigger{
+		ID:      "replayed-webhook",
+		Name:    "Replayed Webhook",
+		Enabled: true,
+		Pattern: `hello world`,
+		Actions: []Action{
+			{Type: ActionDiscordWebhook, Text: "hi", WebhookID: "wh-1"},
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.Insert(tr); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	e.Reload()
+
+	e.SetReplaying(true)
+	e.Handle(time.Now(), "hello world")
+	select {
+	case <-calls:
+		t.Fatal("sendWebhook should not be called during a replay session")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if n := len(e.GetHistory()); n != 1 {
+		t.Errorf("history has %d entries, want the replayed fire recorded", n)
+	}
+
+	e.SetReplaying(false)
+	e.Handle(time.Now().Add(time.Minute), "hello world")
+	select {
+	case <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sendWebhook was not called after the replay session ended")
+	}
+}

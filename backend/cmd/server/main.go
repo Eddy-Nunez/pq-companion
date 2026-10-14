@@ -2040,6 +2040,7 @@ func main() {
 	// fight) is cleared when the session ends so ghosts don't linger.
 	replayer := logparser.NewReplayer(dispatchEvent, dispatchLine, func(active bool) {
 		tailer.SetPaused(active)
+		triggerEngine.SetReplaying(active)
 		if !active {
 			timerEngine.ClearAll()
 			combatTracker.Reset()
