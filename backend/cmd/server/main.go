@@ -1846,57 +1846,62 @@ func main() {
 
 	// Central dispatch callbacks, shared by the live tailer and the log
 	// replayer so a replayed line drives exactly the same consumers as a
-	// live one.
+	// live one. Each consumer runs under guard, keyed by consumer (its
+	// Handle and HandleLine share state), so one that panics on an odd line
+	// is logged and disabled instead of crashing the sidecar.
+	guard := newConsumerGuard()
 	dispatchEvent := func(ev logparser.LogEvent) {
 		hub.Broadcast(ws.Event{Type: string(ev.Type), Data: ev})
-		npcTracker.Handle(ev)
-		combatTracker.Handle(ev)
-		threatTracker.Handle(ev)
-		raidThreatAssembler.Handle(ev)
-		timerEngine.Handle(ev)
-		respawnEngine.Handle(ev)
-		rollTracker.Handle(ev)
-		factionEngine.Handle(ev)
-		killCounters.Handle(ev)
+		guard.run("npcTracker", func() { npcTracker.Handle(ev) })
+		guard.run("combatTracker", func() { combatTracker.Handle(ev) })
+		guard.run("threatTracker", func() { threatTracker.Handle(ev) })
+		guard.run("raidThreatAssembler", func() { raidThreatAssembler.Handle(ev) })
+		guard.run("timerEngine", func() { timerEngine.Handle(ev) })
+		guard.run("respawnEngine", func() { respawnEngine.Handle(ev) })
+		guard.run("rollTracker", func() { rollTracker.Handle(ev) })
+		guard.run("factionEngine", func() { factionEngine.Handle(ev) })
+		guard.run("killCounters", func() { killCounters.Handle(ev) })
 		if killLogger != nil {
-			killLogger.HandleEvent(ev)
+			guard.run("killLogger", func() { killLogger.HandleEvent(ev) })
 		}
 		if playersConsumer != nil {
-			playersConsumer.Handle(ev)
+			guard.run("playersConsumer", func() { playersConsumer.Handle(ev) })
 		}
 		if chatConsumer != nil {
-			chatConsumer.HandleEvent(ev)
+			guard.run("chatConsumer", func() { chatConsumer.HandleEvent(ev) })
 		}
 		if lootConsumer != nil {
-			lootConsumer.HandleEvent(ev)
+			guard.run("lootConsumer", func() { lootConsumer.HandleEvent(ev) })
 		}
 		if skillsConsumer != nil {
-			skillsConsumer.Handle(ev)
+			guard.run("skillsConsumer", func() { skillsConsumer.Handle(ev) })
 		}
 		if progressConsumer != nil {
-			progressConsumer.Handle(ev)
+			guard.run("progressConsumer", func() { progressConsumer.Handle(ev) })
 		}
 		// Last-seen zone: stamp the active character's row with the zone name on
 		// every zone-in. When the player camps and switches away, the stored
 		// value stays put at the camp zone — that's what the Characters page
 		// shows as "Camped in …". Runs on replay too, so existing characters
 		// get backfilled from their logs without any user action.
-		if ev.Type == logparser.EventZone {
-			if zd, ok := ev.Data.(logparser.ZoneData); ok {
-				if name := activeChar(); name != "" && zd.ZoneName != "" {
-					at := ev.Timestamp.Unix()
-					if err := charStore.UpdateLastZone(name, zd.ZoneName, at); err != nil {
-						slog.Warn("update character last zone", "character", name, "zone", zd.ZoneName, "err", err)
-					} else {
-						hub.Broadcast(ws.Event{Type: "character:zone", Data: map[string]any{
-							"name":         name,
-							"last_zone":    zd.ZoneName,
-							"last_zone_at": at,
-						}})
+		guard.run("charStore", func() {
+			if ev.Type == logparser.EventZone {
+				if zd, ok := ev.Data.(logparser.ZoneData); ok {
+					if name := activeChar(); name != "" && zd.ZoneName != "" {
+						at := ev.Timestamp.Unix()
+						if err := charStore.UpdateLastZone(name, zd.ZoneName, at); err != nil {
+							slog.Warn("update character last zone", "character", name, "zone", zd.ZoneName, "err", err)
+						} else {
+							hub.Broadcast(ws.Event{Type: "character:zone", Data: map[string]any{
+								"name":         name,
+								"last_zone":    zd.ZoneName,
+								"last_zone_at": at,
+							}})
+						}
 					}
 				}
 			}
-		}
+		})
 
 		// Unspent-AA fallback seed: "You have gained an ability point!  You now
 		// have <N> ability points." reports the unspent pool at that instant.
@@ -1904,30 +1909,34 @@ func main() {
 		// live Zeal pipe (label 71) has never populated a fresher value.
 		// SetUnspentAA only writes when this timestamp is >= the stored one, so
 		// a log backfill of old dings can't overwrite a current pipe reading.
-		if ev.Type == logparser.EventAAGain {
-			if ad, ok := ev.Data.(logparser.AAGainData); ok {
-				if name := activeChar(); name != "" {
-					if err := charStore.SetUnspentAA(name, ad.Points, ev.Timestamp.Unix()); err != nil {
-						slog.Debug("seed unspent AA from log", "character", name, "err", err)
+		guard.run("charStore", func() {
+			if ev.Type == logparser.EventAAGain {
+				if ad, ok := ev.Data.(logparser.AAGainData); ok {
+					if name := activeChar(); name != "" {
+						if err := charStore.SetUnspentAA(name, ad.Points, ev.Timestamp.Unix()); err != nil {
+							slog.Debug("seed unspent AA from log", "character", name, "err", err)
+						}
 					}
 				}
 			}
-		}
+		})
 
 		// PoP flag auto-detection: boss kills (and zone-ins) optimistically set
 		// 'auto'-sourced flags for the active character.
-		if popflagConsumer != nil {
-			switch ev.Type {
-			case logparser.EventKill:
-				if kd, ok := ev.Data.(logparser.KillData); ok {
-					popflagConsumer.HandleEvent("kill", kd.Target)
-				}
-			case logparser.EventZone:
-				if zd, ok := ev.Data.(logparser.ZoneData); ok {
-					popflagConsumer.HandleEvent("zone", zd.ZoneName)
+		guard.run("popflagConsumer", func() {
+			if popflagConsumer != nil {
+				switch ev.Type {
+				case logparser.EventKill:
+					if kd, ok := ev.Data.(logparser.KillData); ok {
+						popflagConsumer.HandleEvent("kill", kd.Target)
+					}
+				case logparser.EventZone:
+					if zd, ok := ev.Data.(logparser.ZoneData); ok {
+						popflagConsumer.HandleEvent("zone", zd.ZoneName)
+					}
 				}
 			}
-		}
+		})
 	}
 	dispatchLine := func(ts time.Time, msg string) {
 		// Opt-in raw passthrough: when enabled, surface lines that match no
@@ -1943,44 +1952,44 @@ func main() {
 				}})
 			}
 		}
-		triggerEngine.Handle(ts, msg)
-		wishlistWatcher.HandleLine(msg)
-		wishlistRemover.HandleLine(msg)
-		chChainMatcher.HandleLine(ts, msg)
-		chChainCastWatcher.HandleLine(ts, msg)
-		chChainInterruptWatcher.HandleLine(ts, msg)
-		chMetronomeSelfCastWatcher.HandleLine(ts, msg)
-		rollTracker.HandleLine(ts, msg)
-		killCounters.HandleLine(ts, msg)
+		guard.run("triggerEngine", func() { triggerEngine.Handle(ts, msg) })
+		guard.run("wishlistWatcher", func() { wishlistWatcher.HandleLine(msg) })
+		guard.run("wishlistRemover", func() { wishlistRemover.HandleLine(msg) })
+		guard.run("chChainMatcher", func() { chChainMatcher.HandleLine(ts, msg) })
+		guard.run("chChainCastWatcher", func() { chChainCastWatcher.HandleLine(ts, msg) })
+		guard.run("chChainInterruptWatcher", func() { chChainInterruptWatcher.HandleLine(ts, msg) })
+		guard.run("chMetronomeSelfCastWatcher", func() { chMetronomeSelfCastWatcher.HandleLine(ts, msg) })
+		guard.run("rollTracker", func() { rollTracker.HandleLine(ts, msg) })
+		guard.run("killCounters", func() { killCounters.HandleLine(ts, msg) })
 		if keyringConsumer != nil {
-			keyringConsumer.HandleLine(ts, msg)
+			guard.run("keyringConsumer", func() { keyringConsumer.HandleLine(ts, msg) })
 		}
 		if lockoutConsumer != nil {
-			lockoutConsumer.HandleLine(ts, msg)
+			guard.run("lockoutConsumer", func() { lockoutConsumer.HandleLine(ts, msg) })
 		}
 		if blockbuffConsumer != nil {
-			blockbuffConsumer.HandleLine(ts, msg)
+			guard.run("blockbuffConsumer", func() { blockbuffConsumer.HandleLine(ts, msg) })
 		}
 		if popflagConsumer != nil {
-			popflagConsumer.HandleLine(ts, msg)
+			guard.run("popflagConsumer", func() { popflagConsumer.HandleLine(ts, msg) })
 		}
 		if chatConsumer != nil {
-			chatConsumer.HandleLine(ts, msg)
+			guard.run("chatConsumer", func() { chatConsumer.HandleLine(ts, msg) })
 		}
 		if lootConsumer != nil {
-			lootConsumer.HandleLine(ts, msg)
+			guard.run("lootConsumer", func() { lootConsumer.HandleLine(ts, msg) })
 		}
 		// Loot lines identify which same-name raid-boss row just died
 		// (Kaas Thox pair) — see overlay/variant_elimination.go.
-		npcTracker.HandleLootLine(ts, msg)
+		guard.run("npcTracker", func() { npcTracker.HandleLootLine(ts, msg) })
 		if playersConsumer != nil {
-			playersConsumer.HandleLine(ts, msg)
+			guard.run("playersConsumer", func() { playersConsumer.HandleLine(ts, msg) })
 		}
 		if progressConsumer != nil {
-			progressConsumer.HandleLine(ts, msg)
+			guard.run("progressConsumer", func() { progressConsumer.HandleLine(ts, msg) })
 		}
 		if mystatsConsumer != nil {
-			mystatsConsumer.HandleLine(ts, msg)
+			guard.run("mystatsConsumer", func() { mystatsConsumer.HandleLine(ts, msg) })
 		}
 	}
 
