@@ -45,3 +45,16 @@ func TestGetSpellComponents(t *testing.T) {
 		})
 	}
 }
+
+// TestGetItem_ScrollEffect verifies scroll items expose the spell they teach
+// so the item page can link to it.
+func TestGetItem_ScrollEffect(t *testing.T) {
+	d := openTestDB(t)
+	it, err := d.GetItem(19377) // Spell: Rune V
+	if err != nil {
+		t.Fatalf("GetItem: %v", err)
+	}
+	if it.ScrollEffect != 1689 || it.ScrollName != "Rune V" {
+		t.Errorf("got scroll %d %q, want 1689 \"Rune V\"", it.ScrollEffect, it.ScrollName)
+	}
+}

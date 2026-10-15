@@ -63,6 +63,9 @@ export interface Item {
   worn_haste_pct?: number
   focus_effect: number
   focus_name: string
+  /** Spell a scroll/tome teaches; 0 for non-scrolls. */
+  scroll_effect: number
+  scroll_name: string
   // Limited-use charge count for click items. -1 (and occasionally 0) is the
   // sentinel for unlimited/permanent clickies; a positive value is a real cap.
   max_charges: number

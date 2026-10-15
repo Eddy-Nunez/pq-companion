@@ -75,7 +75,8 @@ function OverviewTab({ item, copied, onCopy }: { item: Item; copied: boolean; on
     (item.click_effect > 0 && !!item.click_name) ||
     (item.proc_effect > 0 && !!item.proc_name) ||
     (item.worn_effect > 0 && !!item.worn_name) ||
-    (item.focus_effect > 0 && !!item.focus_name)
+    (item.focus_effect > 0 && !!item.focus_name) ||
+    (item.scroll_effect > 0 && !!item.scroll_name)
 
   return (
     <div className="flex flex-col gap-3">
@@ -150,6 +151,7 @@ function OverviewTab({ item, copied, onCopy }: { item: Item; copied: boolean; on
       )}
       {hasEffects && (
         <Section title="Effects">
+          {item.scroll_effect > 0 && item.scroll_name && <SpellEffectRow label="Teaches" spellId={item.scroll_effect} name={item.scroll_name} />}
           {item.click_effect > 0 && item.click_name && <SpellEffectRow label="Click" spellId={item.click_effect} name={item.click_name} />}
           {item.click_effect > 0 && item.max_charges > 0 && (
             <StatRow

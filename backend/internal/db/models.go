@@ -65,6 +65,11 @@ type Item struct {
 	FocusEffect int    `json:"focus_effect"`
 	FocusName   string `json:"focus_name"`
 
+	// ScrollEffect is the spell a scroll/tome teaches (items.scrolleffect;
+	// 0 for non-scrolls). Covers spells, songs, ancients, and discipline tomes.
+	ScrollEffect int    `json:"scroll_effect"`
+	ScrollName   string `json:"scroll_name"`
+
 	// MaxCharges is the limited-use charge count for click items. EQ uses -1
 	// (and occasionally 0) as a sentinel for unlimited/permanent clickies; a
 	// positive value means genuinely limited charges (e.g. Puppet Strings=10).
