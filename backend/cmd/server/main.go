@@ -802,6 +802,39 @@ func main() {
 		}
 		return c.Level
 	})
+	// Other players' casts are attributed via "begins to cast a spell." lines
+	// (timerEngine.HandleLine); their level comes from /who history so
+	// level-scaled durations use the real caster level. Cached briefly: a
+	// raid fires many lands per second against the same few casters.
+	type playerInfoEntry struct {
+		class, level int
+		ok           bool
+		exp          time.Time
+	}
+	var playerInfoMu sync.Mutex
+	playerInfoCache := map[string]playerInfoEntry{}
+	timerEngine.SetPlayerInfoProvider(func(name string) (int, int, bool) {
+		if playerStore == nil || name == "" {
+			return 0, 0, false
+		}
+		key := strings.ToLower(name)
+		playerInfoMu.Lock()
+		if e, ok := playerInfoCache[key]; ok && time.Now().Before(e.exp) {
+			playerInfoMu.Unlock()
+			return e.class, e.level, e.ok
+		}
+		playerInfoMu.Unlock()
+		entry := playerInfoEntry{exp: time.Now().Add(30 * time.Second)}
+		if s, err := playerStore.Get(name); err == nil && s != nil {
+			entry.class = players.ClassIndexOf(s.EffectiveClass)
+			entry.level = s.EffectiveLevel
+			entry.ok = entry.class >= 0 && entry.level > 0
+		}
+		playerInfoMu.Lock()
+		playerInfoCache[key] = entry
+		playerInfoMu.Unlock()
+		return entry.class, entry.level, entry.ok
+	})
 	timerEngine.SetHiddenDetrimProvider(func(spellName string) bool {
 		return cfgMgr.Get().Preferences.DetrimSpellOverride(spellName) == config.DetrimOverrideHide
 	})
@@ -2001,6 +2034,7 @@ func main() {
 		guard.run("triggerEngine", func() { triggerEngine.Handle(ts, msg) })
 		guard.run("wishlistWatcher", func() { wishlistWatcher.HandleLine(msg) })
 		durable("wishlistRemover", func() { wishlistRemover.HandleLine(msg) })
+		guard.run("timerEngineCastStarts", func() { timerEngine.HandleLine(ts, msg) })
 		guard.run("chChainMatcher", func() { chChainMatcher.HandleLine(ts, msg) })
 		guard.run("chChainCastWatcher", func() { chChainCastWatcher.HandleLine(ts, msg) })
 		guard.run("chChainInterruptWatcher", func() { chChainInterruptWatcher.HandleLine(ts, msg) })

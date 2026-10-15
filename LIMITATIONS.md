@@ -815,9 +815,16 @@ These are inherent to log-file parsing and affect multiple features:
 
 - **Limitation:** Many duration formulas still scale between 60 and 65
   (charm, tash, malo, slows, Arch Lich, …). Spells the active character cast
-  use their real level; anything cast by someone else assumes level 65, so a
-  sub-65 caster's buff or debuff shows up to a few minutes too long.
-- **Root cause:** the log never records the caster's level. Pack trigger
+  use their real level. Another player's cast uses their `/who`-history level
+  when it can be attributed: self-only spells (the target is the caster), or
+  a land whose cast-time window holds "<Name> begins to cast a spell." lines
+  from players who all agree on a level and can cast it
+  (`spelltimer/caster_attribution.go`). Anything else — never-/who'd or
+  anonymous casters, or several eligible casters at different levels —
+  assumes 65, so a sub-65 caster's spell can show a few minutes too long.
+- **Root cause:** the log never records the caster's level, and
+  "begins to cast a spell." never names the spell. `/who` levels can also be
+  stale if the player has levelled since they were last seen. Pack trigger
   durations are the level-60 formula result and are rescaled at fire time
   (`spelltimer.rescaleFormulaDuration`); a value matching no level is treated
   as a user override and left alone.

@@ -1,6 +1,9 @@
 package spelltimer
 
 import (
+	"strings"
+	"time"
+
 	"testing"
 
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db"
@@ -49,8 +52,70 @@ func TestRescaleFormulaDuration(t *testing.T) {
 			if err != nil || spell == nil {
 				t.Fatalf("spell %d: %v", tashanian, err)
 			}
-			if got := e.rescaleFormulaDuration(spell, tt.in, ""); got != tt.want {
+			if got := e.rescaleFormulaDuration(spell, tt.in, "", time.Now()); got != tt.want {
 				t.Errorf("got %g, want %g", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOtherCasterLevel(t *testing.T) {
+	const (
+		enchanter   = 13
+		necromancer = 10
+		cleric      = 1
+		archLich    = 1416 // self-only, necro 60
+		tashanian   = 1702 // single target, 1s cast, enchanter 57
+	)
+	who := map[string][3]int{ // name → class, level, known(1/0)
+		"Necro":   {necromancer, 62, 1},
+		"Enchone": {enchanter, 63, 1},
+		"Enchtwo": {enchanter, 65, 1},
+		"Healer":  {cleric, 61, 1},
+	}
+	info := func(name string) (int, int, bool) {
+		for k, v := range who {
+			if strings.EqualFold(k, name) {
+				return v[0], v[1], v[2] == 1
+			}
+		}
+		return 0, 0, false
+	}
+	land := time.Date(2026, 10, 14, 20, 0, 10, 0, time.UTC)
+	tests := []struct {
+		name    string
+		spellID int
+		target  string
+		casts   map[string]time.Duration // caster → seconds before land
+		want    int
+		wantOK  bool
+	}{
+		{"self-only: target is the caster", archLich, "Necro", nil, 62, true},
+		{"self-only: unknown target", archLich, "Stranger", nil, 0, false},
+		{"single matching caster", tashanian, "a gnoll", map[string]time.Duration{"Enchone": time.Second}, 63, true},
+		{"other-class casters filtered out", tashanian, "a gnoll",
+			map[string]time.Duration{"Enchone": time.Second, "Healer": time.Second}, 63, true},
+		{"two enchanters at different levels is ambiguous", tashanian, "a gnoll",
+			map[string]time.Duration{"Enchone": time.Second, "Enchtwo": time.Second}, 0, false},
+		{"unknown caster in window is ambiguous", tashanian, "a gnoll",
+			map[string]time.Duration{"Enchone": time.Second, "Stranger": time.Second}, 0, false},
+		{"cast start outside the window ignored", tashanian, "a gnoll",
+			map[string]time.Duration{"Enchone": time.Second, "Enchtwo": 12 * time.Second}, 63, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, database := levelEngine(t, enchanter, 60)
+			e.SetPlayerInfoProvider(info)
+			for name, before := range tt.casts {
+				e.HandleLine(land.Add(-before), name+" begins to cast a spell.")
+			}
+			spell, err := database.GetSpell(tt.spellID)
+			if err != nil || spell == nil {
+				t.Fatalf("spell %d: %v", tt.spellID, err)
+			}
+			got, ok := e.otherCasterLevel(spell, tt.target, land)
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("got (%d, %v), want (%d, %v)", got, ok, tt.want, tt.wantOK)
 			}
 		})
 	}

@@ -64,6 +64,18 @@ func ClassNameByIndex(idx int) string {
 	return classIndexNames[idx]
 }
 
+// ClassIndexOf returns the 0-indexed EQ class id for any /who-style title
+// (base name or level title), or -1 when unknown.
+func ClassIndexOf(title string) int {
+	base := BaseClassOf(title)
+	for i, n := range classIndexNames {
+		if base != "" && n == base {
+			return i
+		}
+	}
+	return -1
+}
+
 // BaseClassOf returns the canonical base class name for any /who-style title
 // string (e.g. "Illusionist" → "Enchanter", "Warlord" → "Warrior"). Empty
 // input or an unknown title returns "".
