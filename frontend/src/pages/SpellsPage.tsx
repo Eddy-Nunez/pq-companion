@@ -297,7 +297,7 @@ function SearchPane({ selectedId, onSelect }: SearchPaneProps): React.ReactEleme
 
 interface StatRowProps {
   label: string
-  value: string | number
+  value: React.ReactNode
 }
 
 function StatRow({ label, value }: StatRowProps): React.ReactElement {
@@ -679,6 +679,22 @@ function DetailPanel({ spell }: DetailPanelProps): React.ReactElement {
 
         {/* Info */}
         <Section title="Info">
+          {crossRefs?.scroll_items.map((item) => (
+            <StatRow
+              key={item.id}
+              label="Scroll"
+              value={
+                <button
+                  onClick={() => navigate(`/items?select=${item.id}`)}
+                  className="flex items-center gap-1.5 underline decoration-dotted"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  <ItemIcon id={item.icon} name={item.name} size={16} />
+                  {item.name}
+                </button>
+              }
+            />
+          ))}
           <StatRow label="Spell ID" value={spell.id} />
         </Section>
 
