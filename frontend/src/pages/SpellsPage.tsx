@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, X, Clock } from 'lucide-react'
 import { searchSpells, getSpell, getSpellCrossRefs, getSpellRaw } from '../services/api'
-import type { Spell, SpellCrossRefs } from '../types/spell'
+import type { Spell, SpellComponent, SpellCrossRefs } from '../types/spell'
 import {
   buildSpellTriggerPrefill,
   castableClasses,
@@ -356,6 +356,13 @@ const SPELL_TABS: { key: SpellTabKey; label: string }[] = [
   { key: 'items', label: 'Items with Effect' },
 ]
 
+const COMPONENT_KIND_LABEL: Record<SpellComponent['kind'], string> = {
+  consumed: 'Consumed',
+  required: 'Required, not consumed',
+  pet_focus: 'Optional pet focus',
+  instrument: 'Any instrument of this type',
+}
+
 function visibleSpellTabs(
   crossRefs: SpellCrossRefs | null,
 ): { key: SpellTabKey; label: string }[] {
@@ -555,6 +562,36 @@ function DetailPanel({ spell }: DetailPanelProps): React.ReactElement {
             />
           )}
         </Section>
+
+        {/* Components — reagents consumed per cast, focus items that must be
+            carried, or the bard instrument type. */}
+        {crossRefs && crossRefs.components.length > 0 && (
+          <Section title="Components">
+            {crossRefs.components.map((c) => (
+              <button
+                key={`${c.kind}-${c.id}`}
+                onClick={() => navigate(`/items?select=${c.id}`)}
+                className="flex w-full items-center gap-2 border-t py-0.5 text-left text-sm first:border-t-0"
+                style={{ borderColor: 'var(--color-border)' }}
+              >
+                <ItemIcon id={c.icon} name={c.name} size={20} />
+                <span
+                  className="underline decoration-dotted"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  {c.kind === 'consumed' && c.count > 1 ? `${c.count} × ` : ''}
+                  {c.name}
+                </span>
+                <span
+                  className="ml-auto shrink-0 text-xs"
+                  style={{ color: 'var(--color-muted-foreground)' }}
+                >
+                  {COMPONENT_KIND_LABEL[c.kind]}
+                </span>
+              </button>
+            ))}
+          </Section>
+        )}
 
         {/* Targeting */}
         <Section title="Targeting">

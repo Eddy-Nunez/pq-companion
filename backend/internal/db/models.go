@@ -321,8 +321,26 @@ type SpellItemRef struct {
 
 // SpellCrossRefs holds items that reference a spell, grouped by relationship type.
 type SpellCrossRefs struct {
-	ScrollItems []SpellItemRef `json:"scroll_items"` // items that teach this spell
-	EffectItems []SpellItemRef `json:"effect_items"` // items with this spell as click/worn/proc/focus
+	ScrollItems []SpellItemRef   `json:"scroll_items"` // items that teach this spell
+	EffectItems []SpellItemRef   `json:"effect_items"` // items with this spell as click/worn/proc/focus
+	Components  []SpellComponent `json:"components"`   // reagents/focus items needed to cast
+}
+
+// SpellComponent is one item a spell needs at cast time, from spells_new's
+// components1-4 / component_counts1-4 / NoexpendReagent1-4 columns.
+//
+// Kind follows EQMacEmu's Mob::HasSpellReagent / HasSongInstrument:
+//   - "consumed":   components slot, Count of them used up per cast
+//   - "required":   NoexpendReagent slot, must be carried but is not consumed
+//   - "pet_focus":  NoexpendReagent pet focus item (e.g. Shovel of Ponz); the
+//     server skips the check, so it's optional and only boosts the pet
+//   - "instrument": bard song; any instrument of the item's type works
+type SpellComponent struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Icon  int    `json:"icon,omitempty"`
+	Count int    `json:"count"`
+	Kind  string `json:"kind"`
 }
 
 // Zone represents a row from the zone table.

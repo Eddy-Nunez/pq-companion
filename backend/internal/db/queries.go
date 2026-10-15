@@ -2167,6 +2167,10 @@ func (db *DB) GetSpellCrossRefs(spellID int) (*SpellCrossRefs, error) {
 	if err := effectRows.Err(); err != nil {
 		return nil, err
 	}
+
+	if result.Components, err = db.GetSpellComponents(spellID); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

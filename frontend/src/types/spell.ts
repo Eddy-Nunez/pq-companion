@@ -106,9 +106,20 @@ export interface SpellItemRef {
   effect_type?: string // "click" | "worn" | "proc" | "focus"
 }
 
+// One item a spell needs at cast time (spells_new components /
+// NoexpendReagent). See SpellComponent in backend/internal/db/models.go.
+export interface SpellComponent {
+  id: number
+  name: string
+  icon?: number
+  count: number
+  kind: 'consumed' | 'required' | 'pet_focus' | 'instrument'
+}
+
 export interface SpellCrossRefs {
   scroll_items: SpellItemRef[]
   effect_items: SpellItemRef[]
+  components: SpellComponent[]
 }
 
 // ── Shopping route ───────────────────────────────────────────────────────────
