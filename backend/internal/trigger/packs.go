@@ -717,7 +717,7 @@ func ClericPack() TriggerPack {
 				Pattern:           `^(?:You feel the watchful eyes of the gods upon you\.|[A-Z][a-zA-Z']{2,14} feels the watchful eyes of the gods upon them\.)$`,
 				WornOffPattern:    `^You are no longer watched\.$`,
 				TimerType:         TimerTypeBuff,
-				TimerDurationSecs: 360,
+				TimerDurationSecs: 600,
 				SpellID:           1546,
 				CooldownSecs:      90,
 				PackName:          "Cleric",

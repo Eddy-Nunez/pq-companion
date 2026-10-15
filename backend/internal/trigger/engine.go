@@ -90,6 +90,10 @@ type Engine struct {
 	// no target. Wired to overlay.NPCTracker via SetTargetProvider; nil when
 	// target integration is disabled (tests). Feeds the {target} action token.
 	currentTarget func() string
+	// activeClassLevel returns the active character's class index and level
+	// (ok=false when unknown). Wired via SetClassLevelProvider; feeds the
+	// level-scaled discipline reuse in startCooldownTimer.
+	activeClassLevel func() (class, level int, ok bool)
 	// resolveWebhook looks up a Preferences.DiscordWebhooks entry by ID,
 	// returning its URL and whether it was found. Wired via
 	// SetWebhookResolver to a closure over the config manager (kept as a
@@ -235,6 +239,13 @@ func NewEngine(store *Store, hub *ws.Hub, sink TimerSink, activeChar func() stri
 // lines; nil leaves the token unresolved.
 func (e *Engine) SetTargetProvider(fn func() string) {
 	e.currentTarget = fn
+}
+
+// SetClassLevelProvider wires the active character's class/level lookup so
+// discipline cooldown timers can use the server's level-scaled reuse instead
+// of the trigger's flat CooldownSecs. Nil keeps the flat value.
+func (e *Engine) SetClassLevelProvider(fn func() (class, level int, ok bool)) {
+	e.activeClassLevel = fn
 }
 
 // SetWebhookResolver wires a Preferences.DiscordWebhooks lookup into the
@@ -1149,9 +1160,20 @@ func cooldownKeyFor(t *Trigger) string {
 // alert at 1s remaining. No-op when CooldownSecs is 0 or no sink is wired.
 // SpellID is intentionally passed as 0 — duration focuses don't apply to
 // recast time, so we want the raw CooldownSecs value, not a focused one.
+// Discipline spells are the exception: their reuse scales with the caster's
+// level server-side, so when the active character's class/level is known the
+// computed value replaces CooldownSecs.
 func (e *Engine) startCooldownTimer(t *Trigger, firedAt time.Time) {
 	if e.sink == nil || t.CooldownSecs <= 0 {
 		return
+	}
+	cooldown := t.CooldownSecs
+	if e.activeClassLevel != nil && t.SpellID > 0 {
+		if class, level, ok := e.activeClassLevel(); ok {
+			if secs, ok := DisciplineReuseSecs(t.SpellID, class, level); ok {
+				cooldown = float64(secs)
+			}
+		}
 	}
 	// TTS template uses the trigger's own name as a literal (not {spell})
 	// because the cooldown timer's spell_name is the suffixed "<Name> CD"
@@ -1169,7 +1191,7 @@ func (e *Engine) startCooldownTimer(t *Trigger, firedAt time.Time) {
 	}
 	// CustomGroupID is meaningless here — the cooldown timer always renders on
 	// the Buff overlay (hardcoded category "buff"), which has no groups.
-	e.sink.StartExternal(cooldownKeyFor(t), "buff", t.CooldownSecs, 0, firedAt, alertJSON, 0, "", "", t.Pinned, "", false)
+	e.sink.StartExternal(cooldownKeyFor(t), "buff", cooldown, 0, firedAt, alertJSON, 0, "", "", t.Pinned, "", false)
 }
 
 // timerCategory maps a trigger's TimerType onto a spelltimer category string.

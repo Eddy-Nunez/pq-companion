@@ -908,6 +908,19 @@ func main() {
 	triggerEngine.SetTargetProvider(func() string {
 		return npcTracker.GetState().TargetName
 	})
+	// Discipline cooldowns scale with the caster's level server-side; class
+	// and level come from the Zeal quarmy export stored on the character.
+	triggerEngine.SetClassLevelProvider(func() (int, int, bool) {
+		name := activeChar()
+		if name == "" {
+			return 0, 0, false
+		}
+		c, ok, err := charStore.GetByName(name)
+		if err != nil || !ok || c.Class < 0 || c.Level <= 0 {
+			return 0, 0, false
+		}
+		return c.Class, c.Level, true
+	})
 	// discord_webhook actions store only a Preferences.DiscordWebhooks id —
 	// resolve it to the actual URL at fire time via the live config, so
 	// editing/deleting a saved webhook in Settings takes effect immediately.
