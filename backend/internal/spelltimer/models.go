@@ -15,10 +15,11 @@ const WSEventTimers = "overlay:timers"
 // eqTickSeconds is the duration of one EverQuest server tick in seconds.
 const eqTickSeconds = 6.0
 
-// defaultCasterLevel is used for duration calculations when character level is
-// not configured. Project Quarm's level cap is 60, so most formulas hit their
-// cap and the result is accurate for a max-level character.
-const defaultCasterLevel = 60
+// defaultCasterLevel is used for duration calculations when the caster's level
+// isn't known (another player's cast, or no character data yet). Project
+// Quarm's level cap is 65 since PoP; many formulas (charm, tash, slow, malo…)
+// still scale between 60 and 65, so assume a max-level caster.
+const defaultCasterLevel = 65
 
 // Category classifies an active spell timer by its game mechanic role.
 type Category string

@@ -263,8 +263,8 @@ func TestEnchanterMergedTriggers(t *testing.T) {
 		{"You begin casting Boltran`s Agacerie.", "Boltran`s Agacerie", 1140, 1706},
 		{"You begin casting Boltran's Agacerie.", "Boltran's Agacerie", 1140, 1706},
 		{"You begin casting Lull.", "Lull", 120, 208},
-		{"You begin casting Wake of Tranquility.", "Wake of Tranquility", 126, 1541},
-		{"You begin casting Soothe.", "Soothe", 450, 501},
+		{"You begin casting Wake of Tranquility.", "Wake of Tranquility", 42, 1541},
+		{"You begin casting Soothe.", "Soothe", 150, 501},
 		{"You begin casting Root.", "Root", 48, 230},
 		{"You begin casting Greater Fetter.", "Greater Fetter", 180, 3194},
 	}

@@ -485,6 +485,9 @@ type Engine struct {
 	// hiddenDetrimFn reports whether a detrimental spell should never get a
 	// timer (user's per-spell "hide" override). nil = nothing hidden.
 	hiddenDetrimFn func(spellName string) bool
+	// levelFn returns the active character's level (0 when unknown). Most
+	// duration formulas scale with the caster's level; see casterLevelFor.
+	levelFn func() int
 
 	mu     sync.Mutex
 	timers map[string]*ActiveTimer // keyed by timerKey(spell, target)
@@ -652,6 +655,44 @@ func (e *Engine) SetHiddenDetrimProvider(fn func(spellName string) bool) {
 	e.mu.Lock()
 	e.hiddenDetrimFn = fn
 	e.mu.Unlock()
+}
+
+// SetLevelProvider wires the active character's level lookup used for
+// level-scaled buff durations. nil (the default) uses defaultCasterLevel.
+func (e *Engine) SetLevelProvider(fn func() int) {
+	e.mu.Lock()
+	e.levelFn = fn
+	e.mu.Unlock()
+}
+
+// casterLevelFor returns the level to run spell's duration formula at.
+// castByMe uses the active character's real level; anyone else's cast (or an
+// unknown level) assumes defaultCasterLevel, since the log never says what
+// level the caster was.
+func (e *Engine) casterLevelFor(castByMe bool) int {
+	if !castByMe || e.levelFn == nil {
+		return defaultCasterLevel
+	}
+	if lvl := e.levelFn(); lvl > 0 {
+		return lvl
+	}
+	return defaultCasterLevel
+}
+
+// activeCanCast reports whether the active character's class can cast spell
+// at their current level — the best "was this mine?" signal a trigger fire
+// has, since raw-line triggers run before the parsed cast event records
+// lastCastSpell.
+func (e *Engine) activeCanCast(spell *db.Spell) bool {
+	if e.charCtx == nil || e.levelFn == nil {
+		return false
+	}
+	_, _, class := e.charCtx()
+	if class < 0 || class >= len(spell.ClassLevels) {
+		return false
+	}
+	need := spell.ClassLevels[class]
+	return need > 0 && need < 255 && need <= e.levelFn()
 }
 
 // NewEngine returns an initialised Engine ready to receive log events.
@@ -1253,6 +1294,7 @@ func (e *Engine) StartExternal(name string, category string, durationSecs, displ
 			// outlast the real buff. Buff/detrimental categories still get
 			// modifiers applied, matching the automatic spell-landed pipeline.
 			if cat != CategoryCustom {
+				durationSecs = e.rescaleFormulaDuration(spell, durationSecs, targetName)
 				durationSecs = e.applyDurationModifiers(spell, durationSecs)
 			}
 			resolvedIcon = spell.NewIcon
@@ -1727,7 +1769,8 @@ func (e *Engine) onSpellLanded(landedAt time.Time, data logparser.SpellLandedDat
 		return
 	}
 
-	durationTicks := SpellDurationTicks(spell, defaultCasterLevel)
+	castByMe := e.recentSelfCastMatches(spellName, target, isSingleTargetSpellType(spell.TargetType))
+	durationTicks := SpellDurationTicks(spell, e.casterLevelFor(castByMe))
 	if durationTicks <= 0 {
 		slog.Debug("timer-debug: landed spell has zero duration (no timer created)",
 			"name", spellName,
@@ -3211,6 +3254,35 @@ func (e *Engine) snapshot(now time.Time) TimerState {
 	}
 }
 
+// rescaleFormulaDuration re-runs spell's duration formula at the caster's
+// actual level when a trigger's typed duration is just that formula evaluated
+// at some level — which is how every built-in pack value is derived. Pack
+// values were seeded at the old level-60 cap, so without this a level-65
+// caster's tash/slow/charm timers run short. A duration that matches no level
+// is a deliberate user override and passes through unchanged.
+func (e *Engine) rescaleFormulaDuration(spell *db.Spell, durationSecs float64, target string) float64 {
+	if !isFormulaDuration(spell, durationSecs) {
+		return durationSecs
+	}
+	castByMe := e.activeCanCast(spell) ||
+		e.recentSelfCastMatches(spell.Name, target, isSingleTargetSpellType(spell.TargetType))
+	if ticks := SpellDurationTicks(spell, e.casterLevelFor(castByMe)); ticks > 0 {
+		return float64(ticks) * eqTickSeconds
+	}
+	return durationSecs
+}
+
+// isFormulaDuration reports whether durationSecs equals spell's formula
+// duration at any level up to the cap.
+func isFormulaDuration(spell *db.Spell, durationSecs float64) bool {
+	for lvl := 1; lvl <= defaultCasterLevel; lvl++ {
+		if float64(SpellDurationTicks(spell, lvl))*eqTickSeconds == durationSecs {
+			return true
+		}
+	}
+	return false
+}
+
 // applyDurationModifiers extends baseDurationSec by any matching item/AA
 // duration focuses for the active character. Returns baseDurationSec unchanged
 // when no character context is configured, no modifiers apply, or any lookup
@@ -3249,7 +3321,7 @@ func (e *Engine) applyDurationModifiers(spell *db.Spell, baseDurationSec float64
 	res := buffmod.Resolve(
 		spell.ID, spell.Name,
 		buffmod.SpellLevelForClass(spell.ClassLevels, casterClass),
-		defaultCasterLevel,
+		e.casterLevelFor(true),
 		int(baseDurationSec),
 		spell.CastTime, // SPA 143 (min cast time) filter
 		spellType,

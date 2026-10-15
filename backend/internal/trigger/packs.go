@@ -417,10 +417,9 @@ func EnchanterPack() TriggerPack {
 				Pattern:        `^(?:You hear the barking of Tashania\.|` + npcNameClass + ` glances nervously about\.)$`,
 				WornOffPattern: `^The barking fades\.$`,
 				TimerType:      TimerTypeDetrimental,
-				// 780s = 130 ticks per the corrected formula 9
-				// (level*2+10, base 140) at level 60. PQDI shows max 140
-				// ticks but that requires level 65+ which Quarm caps out
-				// before. Was 720s (120 ticks) under the old formula 9.
+				// 780s = 130 ticks: formula 9 (level*2+10, base 140) at
+				// level 60. The timer engine rescales to the caster's real
+				// level, reaching the full 140 ticks at 65.
 				TimerDurationSecs: 780,
 				SpellID:           1702,
 				PackName:          "Enchanter",
@@ -432,10 +431,11 @@ func EnchanterPack() TriggerPack {
 				Pattern:        `^(?:You have been crippled\.|` + npcNameClass + ` has been crippled\.)$`,
 				WornOffPattern: `^You feel your strength return\.$`,
 				TimerType:      TimerTypeDetrimental,
-				// 450s = 75 ticks per the corrected formula 8 (fixed base)
-				// matching PQDI for spell 1592 (base=75). Was 810s (135
-				// ticks) under the old formula 8.
-				TimerDurationSecs: 450,
+				// 420s = 70 ticks: formula 8 is min(level+10, base 75), so
+				// it scales to the full 75 ticks only at 65. Pack values are
+				// the level-60 formula result; the timer engine rescales any
+				// formula-derived duration to the caster's real level.
+				TimerDurationSecs: 420,
 				SpellID:           1592,
 				PackName:          "Enchanter",
 				Actions:           []Action{},
@@ -516,7 +516,7 @@ func EnchanterPack() TriggerPack {
 				Pattern:           `^(?:You have been enthralled\.|` + npcNameClass + ` has been enthralled\.)$`,
 				WornOffPattern:    `^Your Enthrall spell has worn off\.$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 144,
+				TimerDurationSecs: 48,
 				SpellID:           187,
 				PackName:          "Enchanter",
 				Actions:           []Action{},
@@ -628,10 +628,10 @@ func EnchanterPack() TriggerPack {
 				Enabled: true,
 				Pattern: `^You begin casting (Lull)\.$`,
 				ExtraPatterns: []ExtraPattern{
-					{Pattern: `^You begin casting (Calm)\.$`, Enabled: true, TimerDurationSecs: 126, SpellID: 47},
-					{Pattern: `^You begin casting (Soothe)\.$`, Enabled: true, TimerDurationSecs: 450, SpellID: 501},
+					{Pattern: `^You begin casting (Calm)\.$`, Enabled: true, TimerDurationSecs: 42, SpellID: 47},
+					{Pattern: `^You begin casting (Soothe)\.$`, Enabled: true, TimerDurationSecs: 150, SpellID: 501},
 					{Pattern: `^You begin casting (Pacify)\.$`, Enabled: true, TimerDurationSecs: 360, SpellID: 45},
-					{Pattern: `^You begin casting (Wake of Tranquility)\.$`, Enabled: true, TimerDurationSecs: 126, SpellID: 1541},
+					{Pattern: `^You begin casting (Wake of Tranquility)\.$`, Enabled: true, TimerDurationSecs: 42, SpellID: 1541},
 				},
 				WornOffPattern:    `^Your (?:target resisted the )?(Wake of Tranquility|Soothe|Pacify|Lull|Calm) spell(?: has worn off)?\.$`,
 				TimerType:         TimerTypeDetrimental,
@@ -747,7 +747,7 @@ func ClericPack() TriggerPack {
 				Pattern:           `^(?:Your skin gleams with a pure aura\.|` + npcNameClass + `'s skin gleams with a pure aura\.)$`,
 				WornOffPattern:    `^The aura fades\.$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 570,
+				TimerDurationSecs: 210,
 				SpellID:           1548,
 				PackName:          "Cleric",
 				Actions:           []Action{},
@@ -841,7 +841,7 @@ func DruidPack() TriggerPack {
 				Pattern:           `^(?:You are ensnared\.|` + npcNameClass + ` has been ensnared\.)$`,
 				WornOffPattern:    `^You are no longer ensnared\.$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 720,
+				TimerDurationSecs: 780,
 				SpellID:           512,
 				PackName:          "Druid",
 				Actions:           []Action{},
@@ -852,7 +852,7 @@ func DruidPack() TriggerPack {
 				Pattern:           `^(?:Your feet become entwined\.|` + npcNameClass + ` is entrapped by roots\.)$`,
 				WornOffPattern:    `^(?:The roots fall from your feet\.|Your Entrapping Roots spell has worn off\.|Your target resisted the Entrapping Roots spell\.)$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 540,
+				TimerDurationSecs: 180,
 				SpellID:           1608,
 				PackName:          "Druid",
 				Actions:           []Action{},
@@ -881,7 +881,7 @@ func ShamanPack() TriggerPack {
 				Pattern:           `^(?:You feel drowsy\.|` + npcNameClass + ` yawns\.)$`,
 				WornOffPattern:    `^You feel less drowsy\.$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 390,
+				TimerDurationSecs: 360,
 				SpellID:           1588,
 				PackName:          "Shaman",
 				Actions:           []Action{},
@@ -892,7 +892,7 @@ func ShamanPack() TriggerPack {
 				Pattern:           `^(?:You're motions slow as a plague of insects chew at your skin\.|` + npcNameClass + `'s motions slow as a plague of insects chews at their skin\.)$`,
 				WornOffPattern:    `^The plague of insects subsides\.$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 630,
+				TimerDurationSecs: 192,
 				SpellID:           2527,
 				PackName:          "Shaman",
 				Actions:           []Action{},
@@ -909,7 +909,7 @@ func ShamanPack() TriggerPack {
 				Pattern:           `^You begin casting Malo\.$`,
 				WornOffPattern:    `^(?:Your vulnerability fades\.|Your target resisted the Malo spell\.)$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 720,
+				TimerDurationSecs: 780,
 				SpellID:           1578,
 				PackName:          "Shaman",
 				Actions:           []Action{},
@@ -920,7 +920,7 @@ func ShamanPack() TriggerPack {
 				Pattern:           `^You begin casting Malosini\.$`,
 				WornOffPattern:    `^(?:Your vulnerability fades\.|Your target resisted the Malosini spell\.)$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 360,
+				TimerDurationSecs: 1140,
 				SpellID:           1577,
 				PackName:          "Shaman",
 				Actions:           []Action{},
@@ -1028,7 +1028,7 @@ func PaladinPack() TriggerPack {
 				Pattern:           `^(?:Your feet adhere to the ground\.|` + npcNameClass + ` adheres to the ground\.)$`,
 				WornOffPattern:    `^(?:Your feet come free\.|Your Immobilize spell has worn off\.|Your target resisted the Immobilize spell\.)$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 180,
+				TimerDurationSecs: 60,
 				SpellID:           132,
 				PackName:          "Paladin",
 				Actions:           []Action{},
@@ -2171,7 +2171,7 @@ func BeastlordPack() TriggerPack {
 				Pattern:           `^(?:You lose your fighting edge\.|` + npcNameClass + ` loses their fighting edge\.)$`,
 				WornOffPattern:    `^You regain your fighting edge\.$`,
 				TimerType:         TimerTypeDetrimental,
-				TimerDurationSecs: 630,
+				TimerDurationSecs: 192,
 				SpellID:           2942,
 				PackName:          "Beastlord",
 				Actions:           []Action{},

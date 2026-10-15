@@ -811,6 +811,24 @@ These are inherent to log-file parsing and affect multiple features:
 - **Remaining gap:** level is only refreshed on Zeal's logout/camp export, so
   a ding mid-session leaves the cooldown 54s long until the next export.
 
+### 11.4 Other players' caster level is unknown for level-scaled durations
+
+- **Limitation:** Many duration formulas still scale between 60 and 65
+  (charm, tash, malo, slows, Arch Lich, …). Spells the active character cast
+  use their real level; anything cast by someone else assumes level 65, so a
+  sub-65 caster's buff or debuff shows up to a few minutes too long.
+- **Root cause:** the log never records the caster's level. Pack trigger
+  durations are the level-60 formula result and are rescaled at fire time
+  (`spelltimer.rescaleFormulaDuration`); a value matching no level is treated
+  as a user override and left alone.
+- **Unverified pack buffs:** Arch Lich, Regrowth of Dar Khura, Blessing of
+  Replenishment, Call of Sky/Fire, Shroud of Stealth, Shield of Lava, Legacy
+  of Thorn and Ferocity disagree with the plain formula. §11.1's
+  `spell_modifiers` path is live for beneficial spells and could explain them,
+  so they're allowlisted in `packs_duration_test.go` until checked in-game.
+  Detrimental spells don't have that ambiguity (`ClientDetrimentalSpell
+  DurationModifier` is false), so detrimental pack values are test-enforced.
+
 ---
 
 ## 12. Gear upgrade finder

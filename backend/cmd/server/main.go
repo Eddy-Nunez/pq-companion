@@ -784,6 +784,24 @@ func main() {
 		s := cfgMgr.Get().CHChain
 		return s.Enabled && s.PossibleMissEnabled
 	})
+	// Duration formulas scale with caster level (still meaningful 60→65);
+	// level comes from the Zeal quarmy export stored on the character.
+	timerEngine.SetLevelProvider(func() int {
+		var charName string
+		if tailer != nil {
+			charName = tailer.ActiveCharacter()
+		} else {
+			charName = cfgMgr.Get().Character
+		}
+		if charName == "" {
+			return 0
+		}
+		c, ok, err := charStore.GetByName(charName)
+		if err != nil || !ok {
+			return 0
+		}
+		return c.Level
+	})
 	timerEngine.SetHiddenDetrimProvider(func(spellName string) bool {
 		return cfgMgr.Get().Preferences.DetrimSpellOverride(spellName) == config.DetrimOverrideHide
 	})
