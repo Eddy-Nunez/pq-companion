@@ -75,14 +75,15 @@ const (
 	seRaiseStatCap  = 262 // SE_RaiseStatCap — base1 = amount, base2 = stat index
 )
 
-// SE_RaiseStatCap base2 stat indexes (EQEmu bonuses.cpp).
+// SE_RaiseStatCap base2 stat indexes (EQMacEmu bonuses.cpp). Note WIS is 4
+// and INT is 5 — the reverse of the SE_WIS/SE_INT effect id order.
 const (
 	statIdxSTR = 0
 	statIdxSTA = 1
 	statIdxAGI = 2
 	statIdxDEX = 3
-	statIdxINT = 4
-	statIdxWIS = 5
+	statIdxWIS = 4
+	statIdxINT = 5
 	statIdxCHA = 6
 )
 
