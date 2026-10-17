@@ -548,6 +548,12 @@ type Engine struct {
 	illusionSpellIDs map[int]bool
 	illusionLoaded   bool
 
+	// stackSpells caches resolved spells by id so onSpellLanded can compare
+	// effect slots against existing buff timers under e.mu without a DB
+	// query (see buffOverwrites). Filled as spells land or start externally.
+	stackSpellMu sync.Mutex
+	stackSpells  map[int]*db.Spell
+
 	// ownedItemsFn / ownedClicky* narrow a multi-clicky land collision to the
 	// single clicky the active character actually carries. The clicky spell-ID
 	// set is derived from the owned item list once and cached; RefreshModifiers
@@ -1316,6 +1322,7 @@ func (e *Engine) StartExternal(name string, category string, durationSecs, displ
 			}
 			resolvedIcon = spell.NewIcon
 			isCharm = isCharmSpell(spell)
+			e.rememberStackSpell(spell)
 		}
 	}
 
@@ -1810,6 +1817,8 @@ func (e *Engine) onSpellLanded(landedAt time.Time, data logparser.SpellLandedDat
 		"final_seconds", durationSeconds,
 	)
 
+	e.rememberStackSpell(spell)
+
 	e.mu.Lock()
 	// keyTargetTokenLocked appends a disambiguating spawn-id suffix to the
 	// map key (never to the displayed TargetName) when this land can be
@@ -1937,6 +1946,23 @@ func (e *Engine) onSpellLanded(landedAt time.Time, data logparser.SpellLandedDat
 				timer.CustomGroup = existing.CustomGroup
 			}
 			delete(e.timers, existingKey)
+		}
+		// A different buff that this one overwrote on the same recipient is
+		// gone in game (e.g. Tranquility replacing Koadic's Endless
+		// Intellect) and EQ logs no worn-off line for it, so drop its timer
+		// here. Otherwise it lingers on the overlay and Live Buffs adds both
+		// buffs' stats together.
+		for existingKey, existing := range e.timers {
+			if existingKey == key || existing.Category != CategoryBuff ||
+				existing.TargetName == "" ||
+				normalizeNPCName(existing.TargetName) != normalizeNPCName(target) {
+				continue
+			}
+			if buffOverwrites(spell, e.cachedStackSpell(existing.SpellID)) {
+				slog.Debug("timer-debug: buff overwritten by stacking",
+					"old", existing.SpellName, "new", spellName, "target", target)
+				delete(e.timers, existingKey)
+			}
 		}
 	}
 	// Pending-arm promotion: for deferred-render spells (mez), the
