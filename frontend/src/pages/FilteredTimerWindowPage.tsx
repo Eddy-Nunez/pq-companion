@@ -20,7 +20,7 @@ export default function FilteredTimerWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('filteredTimer')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('filteredTimer', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const appearance = useTimerAppearance()
   const f = useFilteredTimers()

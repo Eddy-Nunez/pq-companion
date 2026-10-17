@@ -44,6 +44,14 @@ export type LockedMode = 'interactive' | 'clickthrough' | 'display-only'
 
 export const DEFAULT_LOCKED_MODE: LockedMode = 'interactive'
 
+/**
+ * Per-overlay override of the global "Fade When Inactive" toggle. Absent
+ * (shown as "Default") follows the global setting; "on" / "off" force it for
+ * that overlay only — e.g. fade the overlays sitting over the game window
+ * but keep the ones on a second monitor solid.
+ */
+export type FadeMode = 'on' | 'off'
+
 // Per-overlay override of the fallback used when the user hasn't picked a
 // mode yet (see resolveLockedMode). Discord Voice has no rows to scroll or
 // clear — it's a passive roster — so "interactive" (the shared default) would
@@ -108,4 +116,19 @@ export function resolveLockedMode(
   name: OverlayName,
 ): LockedMode {
   return modes?.[name] ?? OVERLAY_DEFAULT_LOCKED_MODE[name] ?? DEFAULT_LOCKED_MODE
+}
+
+/**
+ * Resolve whether an overlay's chrome should fade: its own override when set,
+ * otherwise the global overlay_fade_enabled toggle.
+ */
+export function resolveFadeEnabled(
+  modes: Partial<Record<string, FadeMode | ''>> | undefined,
+  name: OverlayName,
+  globalEnabled: boolean,
+): boolean {
+  const mode = modes?.[name]
+  if (mode === 'on') return true
+  if (mode === 'off') return false
+  return globalEnabled
 }

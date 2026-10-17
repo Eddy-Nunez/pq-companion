@@ -31,7 +31,7 @@ export default function ThreatOverlayWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode: lockedMode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('threat')
-  const chrome = useOverlayChromeFade(lockedMode === 'display-only')
+  const chrome = useOverlayChromeFade('threat', lockedMode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const [state, setState] = useState<ThreatState | null>(null)
   const [raidState, setRaidState] = useState<RaidThreatState | null>(null)

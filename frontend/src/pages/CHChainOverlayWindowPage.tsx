@@ -259,7 +259,7 @@ export default function CHChainOverlayWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('chChain')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('chChain', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const [state, setState] = useState<TimerState | null>(null)
   const [view, setView] = useState<ChainView>(loadView)

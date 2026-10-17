@@ -180,7 +180,7 @@ export default function CHMetronomeOverlayWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('chMetronome')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('chMetronome', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
 
   const [cfg, setCfg] = useState<Cfg>(loadCfg)

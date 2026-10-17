@@ -22,7 +22,7 @@ export default function ZoneLockoutsWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('zoneLockouts')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('zoneLockouts', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const { zone } = useLiveZone()
   const activePlayer = useActivePlayerName()

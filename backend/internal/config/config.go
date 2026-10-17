@@ -701,6 +701,13 @@ type Preferences struct {
 	// the map can be nil/omitted for upgrading users with no migration.
 	OverlayLockedModes map[string]string `yaml:"overlay_locked_modes,omitempty" json:"overlay_locked_modes,omitempty"`
 
+	// OverlayFadeModes overrides OverlayFadeEnabled per popout overlay (same
+	// canonical names as OverlayLockedModes): "on" or "off". A missing or
+	// empty value follows the global toggle, so a nil map is the pre-existing behaviour.
+	// Lets multi-monitor users fade overlays over the game window while
+	// keeping ones on another screen solid.
+	OverlayFadeModes map[string]string `yaml:"overlay_fade_modes,omitempty" json:"overlay_fade_modes,omitempty"`
+
 	// Roll Tracker overlay defaults, remembered across sessions. The tracker
 	// is otherwise stateless across restarts, but these UI preferences (e.g.
 	// a guild that always rolls lowest-wins, or runs in timer mode) should

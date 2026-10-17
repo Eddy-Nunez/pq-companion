@@ -17,7 +17,7 @@ export default function RaidReadinessWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('raidReadiness')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('raidReadiness', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const { roster, report, encounters, selectedId } = useRaidReadiness()
   const encounter = encounters.find((e) => e.id === selectedId)

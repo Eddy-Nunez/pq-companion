@@ -42,7 +42,7 @@ export default function DiscordVoiceOverlayWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('discordVoice')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('discordVoice', mode === 'display-only')
 
   const onDragMouseDown = useWindowDrag()
 

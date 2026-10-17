@@ -1,4 +1,4 @@
-import type { OverlayName, LockedMode } from '../lib/overlays'
+import type { OverlayName, LockedMode, FadeMode } from '../lib/overlays'
 import type { SavedRollProfile } from './rolls'
 
 export interface NPCOverlaySections {
@@ -241,6 +241,9 @@ export interface Preferences {
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing
   // keys default to "interactive". See lib/overlays.ts.
   overlay_locked_modes?: Partial<Record<OverlayName, LockedMode>>
+  // Per-overlay override of overlay_fade_enabled ('on' / 'off'). Missing keys
+  // (or '') follow the global toggle. See lib/overlays.ts resolveFadeEnabled.
+  overlay_fade_modes?: Partial<Record<OverlayName, FadeMode | ''>>
   // Named custom Roll Tracker grouping profiles, listed with the presets so
   // a custom setup survives switching to Simple and back.
   roll_tracker_saved_profiles?: SavedRollProfile[]

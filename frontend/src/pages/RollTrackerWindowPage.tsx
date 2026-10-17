@@ -456,7 +456,7 @@ export default function RollTrackerWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('rollTracker')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('rollTracker', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const [state, setState] = useState<RollsState>({
     sessions: [],

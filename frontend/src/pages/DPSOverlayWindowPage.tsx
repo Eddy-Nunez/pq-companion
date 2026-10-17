@@ -208,7 +208,7 @@ export default function DPSOverlayWindowPage(): React.ReactElement {
   const palette = useDPSClassColors()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('dps')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('dps', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const [combat, setCombat] = useState<CombatState | null>(null)
   const [showAll, setShowAll] = useState(true)

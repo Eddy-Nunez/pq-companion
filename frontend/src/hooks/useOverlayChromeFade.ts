@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getConfig } from '../services/api'
 import { useOverlayPositionMode } from './useOverlayPositionMode'
+import { resolveFadeEnabled } from '../lib/overlays'
+import type { OverlayName } from '../lib/overlays'
 
 const POLL_INTERVAL = 3000
 
@@ -35,6 +37,10 @@ const DEFAULT_FADE_DELAY_MS = 2500
  * responding to hover again). Absence of movement can't be "dropped", so the
  * countdown always eventually fires and the fade self-heals.
  *
+ * `name` picks up the overlay's own override from
+ * preferences.overlay_fade_modes ("on" / "off"), falling back to the global
+ * toggle when unset — see resolveFadeEnabled.
+ *
  * `displayOnly` is true when the caller's overlay_locked_modes is set to
  * "display-only" (see useOverlayLock): that mode promises a pure HUD that
  * never reacts to the mouse at all, so the forwarded move events driving the
@@ -44,7 +50,7 @@ const DEFAULT_FADE_DELAY_MS = 2500
  * prevent. positionMode still wins over displayOnly so a display-only HUD
  * stays visible and grabbable while the user is repositioning it.
  */
-export function useOverlayChromeFade(displayOnly = false): boolean {
+export function useOverlayChromeFade(name: OverlayName, displayOnly = false): boolean {
   const [enabled, setEnabled] = useState(false)
   const [delayMs, setDelayMs] = useState(DEFAULT_FADE_DELAY_MS)
   const [chromeVisible, setChromeVisible] = useState(true)
@@ -86,7 +92,13 @@ export function useOverlayChromeFade(displayOnly = false): boolean {
       getConfig()
         .then((c) => {
           if (cancelled) return
-          setEnabled(Boolean(c.preferences.overlay_fade_enabled))
+          setEnabled(
+            resolveFadeEnabled(
+              c.preferences.overlay_fade_modes,
+              name,
+              Boolean(c.preferences.overlay_fade_enabled),
+            ),
+          )
           const secs = c.preferences.overlay_fade_delay_secs
           setDelayMs(secs && secs > 0 ? secs * 1000 : DEFAULT_FADE_DELAY_MS)
         })
@@ -95,7 +107,7 @@ export function useOverlayChromeFade(displayOnly = false): boolean {
     fetch()
     const id = setInterval(fetch, POLL_INTERVAL)
     return () => { cancelled = true; clearInterval(id) }
-  }, [])
+  }, [name])
 
   useEffect(() => {
     // Any movement over the overlay = active: show chrome, restart countdown.

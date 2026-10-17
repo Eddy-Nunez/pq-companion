@@ -25,7 +25,7 @@ export default function RespawnTimerWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('respawnTimer')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('respawnTimer', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const appearance = useTimerAppearance()
   const [state, setState] = useState<RespawnState | null>(null)

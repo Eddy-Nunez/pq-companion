@@ -18,7 +18,7 @@ export default function KillCounterWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('killCounter')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('killCounter', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const k = useKillCounters()
 

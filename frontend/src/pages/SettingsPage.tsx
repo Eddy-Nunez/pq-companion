@@ -20,7 +20,7 @@ import { DEFAULT_DPS_CLASS_COLORS, DEFAULT_LOG_TRIM, DEFAULT_NPC_OVERLAY_SECTION
 import { withTimerAlertDefaults } from '../lib/timerAlerts'
 import { mergeConfigEdits } from '../lib/configMerge'
 import { OVERLAY_DEFS, resolveLockedMode } from '../lib/overlays'
-import type { OverlayName, LockedMode } from '../lib/overlays'
+import type { OverlayName, LockedMode, FadeMode } from '../lib/overlays'
 import { DEV_HPS } from '../lib/devFlags'
 import {
   CH_CHAIN_DEFAULT_PATTERN,
@@ -2245,7 +2245,8 @@ export default function SettingsPage(): React.ReactElement {
             </div>
           </label>
 
-          {config.preferences.overlay_fade_enabled && (
+          {(config.preferences.overlay_fade_enabled ||
+            Object.values(config.preferences.overlay_fade_modes ?? {}).includes('on')) && (
             <div className="mt-3">
               <div className="mb-1 flex items-center justify-between">
                 <p className="text-sm" style={{ color: 'var(--color-foreground)' }}>
@@ -2407,6 +2408,17 @@ export default function SettingsPage(): React.ReactElement {
               preferences: {
                 ...config.preferences,
                 overlay_locked_modes: next,
+              },
+            })
+          }
+          fadeModes={config.preferences.overlay_fade_modes ?? {}}
+          fadeGlobal={Boolean(config.preferences.overlay_fade_enabled)}
+          onFadeChange={(next) =>
+            setConfig({
+              ...config,
+              preferences: {
+                ...config.preferences,
+                overlay_fade_modes: next,
               },
             })
           }
@@ -4299,9 +4311,15 @@ const VISIBLE_OVERLAY_DEFS = DEV_HPS
 function OverlayLockModeCard({
   modes,
   onChange,
+  fadeModes,
+  fadeGlobal,
+  onFadeChange,
 }: {
   modes: Partial<Record<OverlayName, LockedMode>>
   onChange: (next: Partial<Record<OverlayName, LockedMode>>) => void
+  fadeModes: Partial<Record<OverlayName, FadeMode | ''>>
+  fadeGlobal: boolean
+  onFadeChange: (next: Partial<Record<OverlayName, FadeMode | ''>>) => void
 }): React.ReactElement {
   // Per-overlay popout open-state + the monitor each overlay currently sits on,
   // keyed by canonical overlay name. Polled like the dashboard's manager since
@@ -4374,7 +4392,11 @@ function OverlayLockModeCard({
         use its <span style={{ color: 'var(--color-foreground)' }}>Monitor</span>{' '}
         dropdown to send it to another screen.{' '}
         <span style={{ color: 'var(--color-foreground)' }}>Reset position</span>{' '}
-        recenters a drifted overlay on your primary monitor.
+        recenters a drifted overlay on your primary monitor.{' '}
+        <span style={{ color: 'var(--color-foreground)' }}>Fade</span> overrides
+        the Fade When Inactive setting for just that overlay — handy for
+        fading overlays over the game while keeping ones on another screen
+        solid.
       </p>
 
       {/* Mode legend */}
@@ -4419,8 +4441,8 @@ function OverlayLockModeCard({
         style={{
           display: 'grid',
           gridTemplateColumns: multiMonitor
-            ? 'minmax(80px,1fr) auto auto auto auto'
-            : 'minmax(80px,1fr) auto auto auto',
+            ? 'minmax(80px,1fr) auto auto auto auto auto'
+            : 'minmax(80px,1fr) auto auto auto auto',
           columnGap: 10,
           rowGap: 8,
           alignItems: 'center',
@@ -4490,6 +4512,27 @@ function OverlayLockModeCard({
                   ))}
                 </select>
               )}
+              <select
+                value={fadeModes[def.name] ?? ''}
+                // "Default" is stored as '' rather than deleting the key: the
+                // config PUT decodes over the existing map, so a removed key
+                // would survive server-side.
+                onChange={(e) =>
+                  onFadeChange({ ...fadeModes, [def.name]: e.target.value as FadeMode | '' })
+                }
+                className="rounded px-1.5 py-1 outline-none"
+                style={{
+                  backgroundColor: 'var(--color-surface-2)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-foreground)',
+                  cursor: 'pointer',
+                }}
+                title={`Fade the ${def.label} overlay when inactive — Default follows the global Fade When Inactive setting`}
+              >
+                <option value="">Fade: Default ({fadeGlobal ? 'on' : 'off'})</option>
+                <option value="on">Fade: On</option>
+                <option value="off">Fade: Off</option>
+              </select>
               <LockModeToggle
                 value={mode}
                 onChange={(next) => onChange({ ...modes, [def.name]: next })}

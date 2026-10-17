@@ -36,7 +36,7 @@ export default function LiveMapWindowPage(): React.ReactElement {
   const opacity = useOverlayOpacity()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('liveMap')
-  const chrome = useOverlayChromeFade(mode === 'display-only')
+  const chrome = useOverlayChromeFade('liveMap', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
 
   const { zone: zoneName, live } = useLiveZone()
