@@ -76407,7 +76407,7 @@
   ],
   "dialogue": [
    {
-    "text": "There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "Dere are sekret in dese planes dat Grimror not figger out yet. Grimror tink dere be anudder way ta get inna da homes uf da gods, but Grimror need study more. You come back anudder time."
    },
    {
     "triggers": [
@@ -76437,7 +76437,7 @@
     "triggers": [
      "dem tings"
     ],
-    "text": "Grimror need bile, dat stuff es strong here! But Grimror keent seem to git eet all. Bile comz from da leetle bugs. Keel little bugs, and geeve Grimror dere leetel bodiez and Grimror give yuuz anyting dat yuuz want. Dere on four leetel buggiez dat Grimror still neez, two uf dem come from da fliez, one comez from da wurmiez, and one comez from the moss-skeeterz. Yuuz bring Grimror dere lavas and Grimror geeve yuuz, and yuuz freends, anyting yuuz want There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "Grimror need bile, dat stuff es strong here! But Grimror keent seem to git eet all. Bile comz from da leetle bugs. Keel little bugs, and geeve Grimror dere leetel bodiez and Grimror give yuuz anyting dat yuuz want. Dere on four leetel buggiez dat Grimror still neez, two uf dem come from da fliez, one comez from da wurmiez, and one comez from the moss-skeeterz. Yuuz bring Grimror dere lavas and Grimror geeve yuuz, and yuuz freends, anyting yuuz want Dere are sekret in dese planes dat Grimror not figger out yet. Grimror tink dere be anudder way ta get inna da homes uf da gods, but Grimror need study more. You come back anudder time."
    },
    {
     "turnin": [
@@ -76559,6 +76559,12 @@
   "dialogue": [
    {
     "triggers": [
+     "rare disease"
+    ],
+    "text": "Brugga not making cures now. Maybe another time Brugga feel different. You go now, Brugga done talking."
+   },
+   {
+    "triggers": [
      "Hail"
     ],
     "text": "Ragh!' His eyes you with pure hatred. 'Indigo, my dark bowels. . . treachery it is, treachery against the clan. Gharol paid! Paid for it!' He shows you his hands and grins maliciously. 'Paid, he did!"
@@ -76567,7 +76573,7 @@
     "triggers": [
      "rare disease"
     ],
-    "text": "snorts 'You have someone that needs killing, or someone that needs saving? It not matter to Brugga, but you smell of a hero, so Brugga think there someone need saving. Well Brugga have time, so you give Brugga the disease and Brugga see. I wont deal with one such as you..."
+    "text": "snorts 'You have someone that needs killing, or someone that needs saving? It not matter to Brugga, but you smell of a hero, so Brugga think there someone need saving. Well Brugga have time, so you give Brugga the disease and Brugga see. I wont deal with one such as you... Brugga not making cures now. Maybe another time Brugga feel different. You go now, Brugga done talking."
    },
    {
     "turnin": [
@@ -76603,6 +76609,9 @@
   ],
   "dialogue": [
    {
+    "text": "shudders and pulls away from your offering, resisting. Whatever power once allowed these souls to be captured has waned, for now."
+   },
+   {
     "turnin": [
      29281
     ],
@@ -76625,6 +76634,9 @@
   ],
   "dialogue": [
    {
+    "text": "lies perfectly still, untroubled by your presence. It seems the time to claim these souls has not yet come."
+   },
+   {
     "turnin": [
      29281
     ],
@@ -76646,6 +76658,9 @@
    29281
   ],
   "dialogue": [
+   {
+    "text": "stirs with a flash of anger, then falls still and silent. Whatever binds these souls here will not be undone this day."
+   },
    {
     "turnin": [
      29281
@@ -77376,6 +77391,14 @@
   "dialogue": [
    {
     "triggers": [
+     "box of souls",
+     "Perilium",
+     "forge them for me"
+    ],
+    "text": "I am sorry friend, but that is work I cannot take on at the moment. Some recipes call for more than a steady hammer, and the magic of Tanaan's forges has not been cooperating with me of late. Check back with me another day."
+   },
+   {
+    "triggers": [
      "Hail"
     ],
     "text": "Greetings, Borik Darkanvil, at your service. I was once a planar traveler like you. Those days are behind me, now I am content to earn my keep as a blacksmith, and to experiment with some of the [special recipes] that I have picked up in these outer planes."
@@ -77402,7 +77425,7 @@
     "triggers": [
      "forge them for me"
     ],
-    "text": "A smith of your skill does not need my assistance in making the box, however I won't turn away your money. Bring me three thousand platinum, the perilium, the brain, and the heart and I will make the box for you. If you return all three items to me I will do the work for you for, a mere three thousand platinum. I will not guarantee my success, but I can guarantee if you do not have the skill, you will fail."
+    "text": "A smith of your skill does not need my assistance in making the box, however I won't turn away your money. Bring me three thousand platinum, the perilium, the brain, and the heart and I will make the box for you. If you return all three items to me I will do the work for you for, a mere three thousand platinum. I will not guarantee my success, but I can guarantee if you do not have the skill, you will fail. I am sorry friend, but that is work I cannot take on at the moment. Some recipes call for more than a steady hammer, and the magic of Tanaan's forges has not been cooperating with me of late. Check back with me another day."
    },
    {
     "turnin": [
@@ -80662,7 +80685,7 @@
      "help",
      "ready"
     ],
-    "text": "closes his eyes and falls asleep immediately.  He looks peaceful for a moment and then screams in agony! groans in agony. 'I suddenly feel the grasp of Terris upon my heart.  I must.. rest.  Can you please come back after I have rested.'"
+    "text": "groans in agony. 'I suddenly feel the grasp of Terris upon my heart. I must rest. Please return after I have rested.' closes his eyes and falls asleep immediately. He looks peaceful for a moment, then screams in agony!"
    },
    {
     "triggers": [
@@ -80811,7 +80834,7 @@
   ],
   "dialogue": [
    {
-    "text": "There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "grumbles under his breath, 'Eh? What? No no no, whatever it is you're after it will have to wait. My thoughts are all a jumble today, must be another storm blowing in. Come back and pester me some other time, yes? Now off with you, I have important sitting to do."
    },
    {
     "triggers": [
@@ -80853,7 +80876,7 @@
     "triggers": [
      "Drunder"
     ],
-    "text": "Drunder! The Fortress of Zek, the Zeks don't trust any one mortal to have free access to the fortress. The Diaku come and go in fours, and four parts are needed for entry. Of course they won't part with them easily. If you find four, and bring me four, I can make the four into one, and with one, you can get into Drunder without three more. Then, with your one, you can kill all of them. I would do it myself, but with my bad knee and all. . . You need to prove your dedication to our cause before I can discuss such matters with you. There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "Drunder! The Fortress of Zek, the Zeks don't trust any one mortal to have free access to the fortress. The Diaku come and go in fours, and four parts are needed for entry. Of course they won't part with them easily. If you find four, and bring me four, I can make the four into one, and with one, you can get into Drunder without three more. Then, with your one, you can kill all of them. I would do it myself, but with my bad knee and all. . . You need to prove your dedication to our cause before I can discuss such matters with you. grumbles under his breath, 'Eh? What? No no no, whatever it is you're after it will have to wait. My thoughts are all a jumble today, must be another storm blowing in. Come back and pester me some other time, yes? Now off with you, I have important sitting to do."
    },
    {
     "turnin": [
@@ -81224,7 +81247,7 @@
   ],
   "dialogue": [
    {
-    "text": "There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "Oh, I am sorry, but I cannot ask for your help with this right now. Phanti needs all of my attention, and the way into Saryrn's domain is closed to us for the time being. Please, return to me another time."
    },
    {
     "triggers": [
@@ -81248,7 +81271,7 @@
     "triggers": [
      "help"
     ],
-    "text": "Recently, the portal from the Plane of Disease has been unusually active. People have been reporting strange sounds from around the portal at night, and a few of our trackers have seen strange, almost rodent like, footprints. Our best guess is that one of the denizens of the Plane of Disease managed to make its way into our plane. If this is true, it may explain the unnaturally quick manifestation of the disease. Perhaps, the bile from one of the rodents will help us learn of the cause, and hopefully a cure. There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "Recently, the portal from the Plane of Disease has been unusually active. People have been reporting strange sounds from around the portal at night, and a few of our trackers have seen strange, almost rodent like, footprints. Our best guess is that one of the denizens of the Plane of Disease managed to make its way into our plane. If this is true, it may explain the unnaturally quick manifestation of the disease. Perhaps, the bile from one of the rodents will help us learn of the cause, and hopefully a cure. Oh, I am sorry, but I cannot ask for your help with this right now. Phanti needs all of my attention, and the way into Saryrn's domain is closed to us for the time being. Please, return to me another time."
    },
    {
     "turnin": [
@@ -81518,7 +81541,7 @@
   ],
   "dialogue": [
    {
-    "text": "There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "Begone, mortal. The arrangement I once offered is no longer mine to make. The planes shift in ways even an exile notices, and until they settle I have nothing for you. Leave me to my valley."
    },
    {
     "triggers": [
@@ -81548,7 +81571,7 @@
     "triggers": [
      "paid"
     ],
-    "text": "I was not the only member of my squad that was sent into exile, my brothers in arms, were the impetus for our exile.  I was but a mere pawn.  They now reside in the Plane of Justice as bodiless shades.  Their punishment was too lax for their actions; I want their eternal souls to be mine.  Find a smith who will teach you to create a box of souls, weaken the shades, then capture their souls and return all three to me, along with the box.  It must be disposed of. There are secrets within these planes that I have yet to unravel. I believe there may be another way to breach the homes of the gods, but I must study further. Return to me another time."
+    "text": "I was not the only member of my squad that was sent into exile, my brothers in arms, were the impetus for our exile.  I was but a mere pawn.  They now reside in the Plane of Justice as bodiless shades.  Their punishment was too lax for their actions; I want their eternal souls to be mine.  Find a smith who will teach you to create a box of souls, weaken the shades, then capture their souls and return all three to me, along with the box.  It must be disposed of. Begone, mortal. The arrangement I once offered is no longer mine to make. The planes shift in ways even an exile notices, and until they settle I have nothing for you. Leave me to my valley."
    },
    {
     "turnin": [
