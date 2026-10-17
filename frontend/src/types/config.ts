@@ -158,6 +158,11 @@ export interface Preferences {
   // default; missing is treated as enabled.
   overlay_entity_links_enabled?: boolean
   master_volume: number
+  // Output device for every trigger / alert sound and TTS (a Chromium
+  // audiooutput deviceId); '' = system default. The label is the device name
+  // at selection time, used to re-find it and to show it while unplugged.
+  audio_output_device_id?: string
+  audio_output_device_label?: string
   // Voice for any text_to_speech alert whose own voice field is empty
   // ("App default" in the editor). Empty = the OS default voice.
   default_tts_voice?: string

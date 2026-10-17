@@ -7,10 +7,17 @@
  *              backend to synthesize a cached WAV and plays that through
  *              playSound. Any local-TTS failure falls back to Web Speech so an
  *              alert is never lost.
+ *
+ * Output device: when an alert output device is chosen (setAudioOutputDevice)
+ * every Audio element is routed there with setSinkId. Web Speech can't be
+ * routed (it always plays on the Windows default device), so with a device
+ * chosen, Web Speech voices are rendered to a WAV by the backend
+ * (sapiSynthesize) and played as a clip instead — falling back to plain Web
+ * Speech on the default device if that fails.
  */
 import { isPiperVoice } from '../lib/piper'
 import { isKokoroVoice } from '../lib/kokoro'
-import { piperSynthesize, kokoroSynthesize } from './api'
+import { piperSynthesize, kokoroSynthesize, sapiSynthesize } from './api'
 
 // Deduplication: track when each unique audio key was last fired.
 // Prevents the same sound/utterance from playing twice when multiple alert
@@ -121,6 +128,33 @@ export function setTTSRate(rate: number): void {
 /** Returns the current global TTS speaking rate (0.5–2.0). */
 export function getTTSRate(): number {
   return ttsRate
+}
+
+// Output device for every alert playback: a Chromium audiooutput deviceId, or
+// '' for the system default. Resolved from Preferences.audio_output_device_*
+// by useAudioPrefs(), which clears it while the chosen device is unplugged so
+// alerts fall back to the default device instead of going silent.
+let outputDeviceId = ''
+
+/** Route subsequent alert playback to an output device ('' = system default). */
+export function setAudioOutputDevice(deviceId: string): void {
+  outputDeviceId = typeof deviceId === 'string' ? deviceId : ''
+}
+
+// Starts an Audio element on the chosen output device. A failed setSinkId
+// (device just unplugged, permission) still plays — on the default device —
+// so the alert is never lost. `cancelled` lets a test preview that was
+// stopped while the sink was switching skip the play.
+function startPlayback(audio: HTMLAudioElement, cancelled?: () => boolean): Promise<void> {
+  const el = audio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }
+  const sink =
+    outputDeviceId && typeof el.setSinkId === 'function'
+      ? el.setSinkId(outputDeviceId).catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn('[audio] setSinkId failed; using default device', err)
+        })
+      : Promise.resolve()
+  return sink.then(() => (cancelled?.() ? undefined : audio.play()))
 }
 
 // Per-trigger repeat-audio cooldown, in milliseconds. After a trigger fires
@@ -311,7 +345,7 @@ function playSoundNow(filePath: string, volume: number, onEnd?: () => void): voi
   }
   audio.addEventListener('ended', release)
   audio.addEventListener('error', release)
-  audio.play().catch((err: unknown) => {
+  startPlayback(audio).catch((err: unknown) => {
     // Surface the failure in DevTools — file-not-found and autoplay-blocked
     // both look identical to the user (silence) so a console line is the
     // only signal something's wrong with their trigger.
@@ -399,6 +433,26 @@ export function speakText(text: string, voice = '', volume = 1.0): void {
  * fallback both funnel through here.
  */
 function speakViaWebSpeech(text: string, voice: string, volume: number): void {
+  // With an output device chosen, render the Web Speech voice to a WAV so it
+  // can be routed like any other clip (queued with local TTS so bursts don't
+  // overlap). Any failure speaks normally on the default device instead.
+  if (outputDeviceId) {
+    sapiSynthesize(text, voice || defaultTTSVoice, ttsRate)
+      .then(({ path }) => {
+        if (path) enqueueLocalTtsAudio(path, volume)
+        else speakViaWebSpeechDirect(text, voice, volume)
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn('[audio] routed TTS failed; using Web Speech', err)
+        speakViaWebSpeechDirect(text, voice, volume)
+      })
+    return
+  }
+  speakViaWebSpeechDirect(text, voice, volume)
+}
+
+function speakViaWebSpeechDirect(text: string, voice: string, volume: number): void {
   if (!window.speechSynthesis) return
 
   // NOTE: do NOT call speechSynthesis.cancel() here. We used to, on the
@@ -483,7 +537,7 @@ export function playSoundForTest(filePath: string, volume = 1.0, onEnd?: () => v
   audio.addEventListener('ended', finish)
   audio.addEventListener('error', finish)
   activeStop = stop
-  audio.play().catch(finish)
+  startPlayback(audio, () => done).catch(finish)
 }
 
 /**
@@ -528,6 +582,32 @@ export function speakTextForTest(
 }
 
 function speakViaWebSpeechForTest(
+  text: string,
+  voice: string,
+  volume: number,
+  onEnd?: () => void,
+  rate?: number,
+): void {
+  // Preview through the same routed path a real fire takes (see
+  // speakViaWebSpeech) so Test plays on the chosen output device.
+  if (outputDeviceId) {
+    const r = typeof rate === 'number' && rate > 0 ? Math.min(2, Math.max(0.5, rate)) : ttsRate
+    sapiSynthesize(text, voice || defaultTTSVoice, r)
+      .then(({ path }) => {
+        if (path) playSoundForTest(path, volume, onEnd)
+        else speakViaWebSpeechDirectForTest(text, voice, volume, onEnd, rate)
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn('[audio] routed TTS preview failed; using Web Speech', err)
+        speakViaWebSpeechDirectForTest(text, voice, volume, onEnd, rate)
+      })
+    return
+  }
+  speakViaWebSpeechDirectForTest(text, voice, volume, onEnd, rate)
+}
+
+function speakViaWebSpeechDirectForTest(
   text: string,
   voice: string,
   volume: number,

@@ -5,7 +5,9 @@ import {
   setDefaultTTSVoice,
   setRepeatAudioCooldownMs,
   setTTSRate,
+  setAudioOutputDevice,
 } from '../services/audio'
+import { listOutputDevices, resolveOutputDevice } from '../lib/audioDevices'
 
 const POLL_INTERVAL = 3000
 
@@ -21,12 +23,30 @@ const POLL_INTERVAL = 3000
  *     alert (1.0 = normal, higher = faster).
  *   - Preferences.trigger_audio_cooldown_secs rate-limits repeat audio from
  *     the same trigger (consumed in useAudioEngine). 0 = off.
+ *   - Preferences.audio_output_device_id / _label pick the output device
+ *     for every alert. Re-resolved on Windows' devicechange so unplugging the
+ *     headset falls back to the default device and plugging it back in
+ *     restores the route.
  *
  * Mounted only inside MainWindowLayout — overlay windows don't fire alerts.
  */
 export function useAudioPrefs(): void {
   useEffect(() => {
     let cancelled = false
+    let wantedId = ''
+    let wantedLabel = ''
+    const applyDevice = (): void => {
+      if (!wantedId) {
+        setAudioOutputDevice('')
+        return
+      }
+      listOutputDevices()
+        .then((devices) => {
+          if (!cancelled) setAudioOutputDevice(resolveOutputDevice(devices, wantedId, wantedLabel))
+        })
+        .catch(() => {})
+    }
+    navigator.mediaDevices?.addEventListener?.('devicechange', applyDevice)
     const fetch = (): void => {
       getConfig()
         .then((c) => {
@@ -44,6 +64,13 @@ export function useAudioPrefs(): void {
           setRepeatAudioCooldownMs(
             typeof cd === 'number' && Number.isFinite(cd) ? cd * 1000 : 0,
           )
+          const id = c.preferences?.audio_output_device_id ?? ''
+          const label = c.preferences?.audio_output_device_label ?? ''
+          if (id !== wantedId || label !== wantedLabel) {
+            wantedId = id
+            wantedLabel = label
+            applyDevice()
+          }
         })
         .catch(() => {})
     }
@@ -52,6 +79,7 @@ export function useAudioPrefs(): void {
     return () => {
       cancelled = true
       clearInterval(id)
+      navigator.mediaDevices?.removeEventListener?.('devicechange', applyDevice)
     }
   }, [])
 }

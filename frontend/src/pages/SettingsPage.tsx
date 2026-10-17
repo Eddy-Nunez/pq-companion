@@ -32,6 +32,7 @@ import { applyContrast } from '../hooks/useHighContrast'
 import { applyZoom } from '../hooks/useZoom'
 import { OVERLAY_ZOOM_MAX, OVERLAY_ZOOM_MIN } from '../hooks/useOverlayZoom'
 import { speakTextForTest, stopTestPlayback } from '../services/audio'
+import AudioOutputDeviceSetting from '../components/settings/AudioOutputDeviceSetting'
 import type { ZealInstallStatus, ZealPipeStatus } from '../types/zeal'
 import type { QuarmClientStatus, QuarmFileStatus, EqwStatus } from '../types/quarm'
 import { useWebSocket, type WsMessage } from '../hooks/useWebSocket'
@@ -1843,6 +1844,22 @@ export default function SettingsPage(): React.ReactElement {
               />
             </div>
           </div>
+
+          <AudioOutputDeviceSetting
+            deviceId={config.preferences.audio_output_device_id ?? ''}
+            deviceLabel={config.preferences.audio_output_device_label ?? ''}
+            defaultVoice={config.preferences.default_tts_voice ?? ''}
+            onChange={(id, label) =>
+              setConfig({
+                ...config,
+                preferences: {
+                  ...config.preferences,
+                  audio_output_device_id: id,
+                  audio_output_device_label: label,
+                },
+              })
+            }
+          />
 
           <div className="mt-4">
             <div className="mb-1 flex items-center justify-between">

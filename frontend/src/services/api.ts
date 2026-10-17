@@ -880,6 +880,23 @@ export function clearKokoroCache(): Promise<{ removed: number }> {
   return post<{ removed: number }>('/api/kokoro/clear-cache')
 }
 
+// ── Windows voices (routed TTS) ─────────────────────────────────────────────
+
+/**
+ * Render `text` in a built-in Windows (Web Speech) voice to a cached WAV so
+ * it can be played on the chosen alert output device — Web Speech itself
+ * only plays on the Windows default device. Empty voice = Windows default.
+ * Rejects (503) off Windows or on any synthesis failure; callers fall back to
+ * Web Speech.
+ */
+export function sapiSynthesize(
+  text: string,
+  voice: string,
+  rate: number,
+): Promise<{ path: string }> {
+  return post<{ path: string }>('/api/sapi/synthesize', { text, voice, rate })
+}
+
 // ── Zeal ───────────────────────────────────────────────────────────────────────
 
 export function detectZeal(path?: string): Promise<ZealInstallStatus> {

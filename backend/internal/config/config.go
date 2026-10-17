@@ -478,6 +478,17 @@ type Preferences struct {
 	// 100 = no dampening (default), 0 = mute everything.
 	MasterVolume int `yaml:"master_volume" json:"master_volume"`
 
+	// AudioOutputDeviceID routes every trigger / alert sound and TTS
+	// utterance to a specific output device (a Chromium audiooutput
+	// deviceId) instead of the Windows default — e.g. alerts in the headset
+	// while the game plays on speakers. Empty = system default (the
+	// pre-existing behaviour). AudioOutputDeviceLabel is the device's name at
+	// selection time, used to re-find it if the id changes and to show the
+	// choice while the device is unplugged. Default-voice TTS reaches the
+	// device by rendering through internal/sapitts.
+	AudioOutputDeviceID    string `yaml:"audio_output_device_id,omitempty" json:"audio_output_device_id"`
+	AudioOutputDeviceLabel string `yaml:"audio_output_device_label,omitempty" json:"audio_output_device_label"`
+
 	// DefaultTTSVoice is the voice used for any text_to_speech alert whose
 	// own voice field is empty ("App default" in the editor). It names a
 	// SpeechSynthesisVoice on the user's machine; the frontend resolves it at
