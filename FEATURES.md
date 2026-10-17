@@ -2014,6 +2014,27 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.28.2 — Alert Output Device, Per-Overlay Fade, Saved Roll Groupings
+
+- **Alert output device** — `audio_output_device_id` / `_label`; sound
+  files and Piper/Kokoro are routed via `setSinkId`. Web Speech can't pick a
+  device, so with one chosen the Windows voices are rendered to a cached
+  WAV by `internal/sapitts` (persistent hidden PowerShell worker: WinRT
+  OneCore voices, System.Speech fallback). Any failure falls back to Web
+  Speech on the default device; an unplugged device falls back to the
+  default and is re-routed on `devicechange`.
+- **Per-overlay fade** — `overlay_fade_modes` (on/off, `''` = follow the
+  global toggle) with a Fade dropdown per overlay in Settings → Overlays.
+- **Saved roll groupings** — `roll_tracker_saved_profiles`, listed under
+  the presets in the Grouping dropdown with Save / Save as / delete.
+- **Spells and items** — scrolls show a Teaches link (`scroll_effect`);
+  spells link back to their scroll and list components, reagents and bard
+  instrument type.
+- **Caster level** — own casts use the active character's level, others'
+  come from /who history (fallback 65); pack durations corrected and
+  test-enforced; discipline cooldowns scale −54s/level; Divine
+  Intervention is 10 min.
+
 ## v0.28.0 — Kill Tracker, Event Presets, Raid Event Timers
 
 - **Kill Tracker** (`internal/killtracker`, Parsing → Kill Tracker) — the
