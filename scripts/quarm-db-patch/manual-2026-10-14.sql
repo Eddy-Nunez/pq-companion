@@ -152,3 +152,65 @@ DROP TABLE hoh_trial_starter_sync;
 -- @@ after: 2026_10_07_Nitram_Open_World_Escort.sql
 UPDATE spawn2 SET raid_target_spawnpoint = 0, enabled = 1
 WHERE id = 345275 AND zone = 'poinnovation' AND spawngroupID = 206033;
+
+-- @@ after: 2026_10_11_PoK_Gork_Mork_Library_Teleports.sql
+-- The upstream file stages rows in CREATE TEMPORARY TABLE ... LIKE copies;
+-- insert the same values directly (unlisted columns take their defaults).
+INSERT OR IGNORE INTO npc_types
+    (id, name, face, helmtexture, lastname, level, race, class, bodytype, hp,
+     mana, gender, texture, size, chesttexture, armtexture, bracertexture,
+     handtexture, legtexture, feettexture, luclin_hairstyle, luclin_haircolor,
+     luclin_eyecolor, luclin_eyecolor2, luclin_beardcolor, luclin_beard,
+     armortint_id, armortint_red, armortint_green, armortint_blue,
+     d_melee_texture1, d_melee_texture2, light, flymode, npc_faction_id,
+     loottable_id, merchant_id, npc_spells_id, npc_spells_effects_id, emoteid,
+     special_abilities, npc_aggro, aggro_pc, aggroradius, assistradius,
+     runspeed, walkspeed, exp_pct, raid_target, rare_spawn, loot_lockout,
+     instance_spawn_timer_override, skip_global_loot, spawn_limit,
+     unique_spawn_by_name, underwater, ignore_despawn, qglobal)
+SELECT v.id, v.name, v.face, v.helm, '', 65, 10, 1, 1, 10000,
+       0, 0, 1, 7.5, 1, 1, 1,
+       1, 1, 1, 255, 255,
+       255, 255, 255, 255,
+       0, 0, 0, 0,
+       0, 0, 0, -1, 1424,
+       0, 0, 0, 0, 0,
+       '14,1^19,1^20,1^24,1^25,1^35,1', 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0,
+       0, 1, 1,
+       0, 0, 0, 0
+FROM (SELECT 7151301 AS id, 'Gork,_Theoretical_Physicist' AS name, 4 AS face,
+             0 AS helm
+      UNION ALL SELECT 7151302, 'Mork,_Applied_Physicist', 0, 3) AS v;
+INSERT OR IGNORE INTO spawngroup
+    (id, name, spawn_limit, despawn, rand_spawns, wp_spawns,
+     max_x, min_x, max_y, min_y)
+VALUES (7151301, 'pok_library_gork', 1, 0, 0, 0, 0, 0, 0, 0),
+       (7151302, 'pok_library_mork', 1, 0, 0, 0, 0, 0, 0, 0);
+INSERT OR IGNORE INTO spawnentry
+    (spawngroupID, npcID, chance, mintime, maxtime, min_expansion,
+     max_expansion, content_flags, content_flags_disabled)
+VALUES (7151301, 7151301, 100, 0, 0, -1, -1, NULL, NULL),
+       (7151302, 7151302, 100, 0, 0, -1, -1, NULL, NULL);
+INSERT OR IGNORE INTO spawn2
+    (id, spawngroupID, zone, x, y, z, heading, respawntime, variance,
+     pathgrid, _condition, cond_value, enabled, animation, boot_respawntime,
+     clear_timer_onboot, boot_variance, force_z, min_expansion,
+     max_expansion, raid_target_spawnpoint, content_flags,
+     content_flags_disabled)
+VALUES (7151301, 7151301, 'poknowledge', 949, 25, 3.4, 157, 60, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, -1, -1, 0, NULL, NULL),
+       (7151302, 7151302, 'poknowledge', 948, 44, 389.4, 157, 60, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, -1, -1, 0, NULL, NULL);
+
+-- @@ after: 2026_10_15_Torment_Key_Progression.sql
+-- The plain UPDATE spawn2 (Baraguj entry form -> 1800s) replays as-is; this
+-- is the avatar-weight UPDATE ... JOIN. Its eligibility guard only accepts
+-- the old 15/42/43 or new 45/27/28 weights, both of which map to these.
+UPDATE spawnentry SET chance = CASE npcID
+    WHEN 207313 THEN 45 WHEN 207009 THEN 27 WHEN 207282 THEN 28
+    WHEN 207314 THEN 45 WHEN 207288 THEN 27 WHEN 207043 THEN 28
+    WHEN 207315 THEN 45 WHEN 207041 THEN 27 WHEN 207286 THEN 28
+    WHEN 207316 THEN 45 WHEN 207218 THEN 14 WHEN 207290 THEN 15
+    WHEN 207294 THEN 26 ELSE chance END
+WHERE spawngroupID IN (225595, 225594, 207041, 225596);

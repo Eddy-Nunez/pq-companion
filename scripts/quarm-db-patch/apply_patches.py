@@ -8,8 +8,11 @@ app's respawn/lockout/loot data matches the live server until the next dump.
 
 Two upstream sources (the quests repo's sql/ is applied manually on the server
 and overrides EQMacEmu's values, e.g. PoP trash 750/930s -> 930/1230s):
-  - SecretsOTheP/EQMacEmu  utils/sql/git/content/  @ cde578e3
-  - SecretsOTheP/quests    sql/                    @ 13976ec0
+  - SecretsOTheP/EQMacEmu  utils/sql/git/content/  @ b61ec17 (none newer
+                                                     than 2026_10_02)
+  - SecretsOTheP/quests    sql/                    @ ea4bad3
+Then the local LOCAL_FILES run last: live changes from the official patch
+notes that no upstream SQL file carries.
 
 MySQL-only statements are rewritten where mechanical (ON DUPLICATE KEY UPDATE,
 FROM DUAL, LEAST) or hand-translated in manual-2026-10-14.sql. Statements on
@@ -20,7 +23,7 @@ Usage:
   python3 -I apply_patches.py --db quarm.db \
       --eqmacemu-dir <EQMacEmu>/utils/sql/git/content --quests-dir <quests>/sql
 
-Drop this once a dump taken after 2026-10-11 has been converted.
+Drop this once a dump taken after 2026-10-17 has been converted.
 """
 
 import argparse
@@ -82,11 +85,15 @@ QUESTS_FILES = [
     "2026_10_07_Rizlona_First_Form_Loot_Lockout.sql",
     "2026_10_09_Elemental_Instrument_Lootdrops.sql",
     "2026_10_09_Elemental_Plane_View_Distances.sql",
+    "2026_10_11_PoK_Gork_Mork_Library_Teleports.sql",
+    "2026_10_15_Torment_Key_Progression.sql",
 ]
 
-# Not replayed: launcher/PvP/rule/timer-cleanup files touch server state only,
-# and PoK Gork/Mork clones whole table schemas (CREATE TABLE ... LIKE) for two
-# library teleporter NPCs.
+# Not replayed: launcher/PvP/rule/timer-cleanup files touch server state only.
+
+LOCAL_FILES = [
+    "patch-notes-2026-10-17.sql",
+]
 
 STATE_TABLES = ("respawn_times", "character_loot_lockouts",
                 "character_legacy_items", "data_buckets", "launcher_zones")
@@ -169,6 +176,9 @@ def main():
         run_file(db, os.path.join(args.eqmacemu_dir, f), manual, failures)
     for f in QUESTS_FILES:
         run_file(db, os.path.join(args.quests_dir, f), manual, failures)
+    here = os.path.dirname(os.path.abspath(__file__))
+    for f in LOCAL_FILES:
+        run_file(db, os.path.join(here, f), manual, failures)
     if manual:
         failures.append(f"unused manual blocks: {sorted(manual)}")
     if failures:
