@@ -18,6 +18,12 @@ export interface RollProfile {
   tiers?: ProfileTier[]
 }
 
+// SavedRollProfile mirrors the Go config.RollSavedProfile: a named custom
+// grouping kept in preferences.roll_tracker_saved_profiles.
+export interface SavedRollProfile extends RollProfile {
+  name: string
+}
+
 export interface Roll {
   roller: string
   value: number

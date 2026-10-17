@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { Plus, Trash2, ArrowUp, ArrowDown, Check, Layers, Info, ChevronDown, ChevronRight } from 'lucide-react'
-import type { RollProfile, ProfileScheme, ProfileTier } from '../types/rolls'
+import {
+  Plus, Trash2, ArrowUp, ArrowDown, Check, Layers, Info, ChevronDown,
+  ChevronRight, Save,
+} from 'lucide-react'
+import type { RollProfile, ProfileScheme, ProfileTier, SavedRollProfile } from '../types/rolls'
+import type { Config } from '../types/config'
+import { getConfig, saveConfigChanges } from '../services/api'
 import {
   ROLL_PROFILE_PRESETS,
   presetIdFor,
@@ -24,6 +29,22 @@ function seedDraft(profile: RollProfile): RollProfile {
   return profile.mode === 'tiered' ? normalizeProfile(profile) : { ...CUSTOM_STARTER }
 }
 
+// Saved custom profiles are addressed in the dropdown as "saved:<name>".
+const SAVED_PREFIX = 'saved:'
+
+function toProfile(s: SavedRollProfile): RollProfile {
+  return normalizeProfile({ mode: s.mode, scheme: s.scheme, divisor: s.divisor, tiers: s.tiers })
+}
+
+/** selectionFor resolves the dropdown id for a live profile: a built-in
+ *  preset, else a saved custom with identical tiers, else plain 'custom'. */
+function selectionFor(profile: RollProfile, saved: SavedRollProfile[]): string {
+  const id = presetIdFor(profile)
+  if (id !== 'custom') return id
+  const hit = saved.find((s) => profilesEqual(toProfile(s), profile))
+  return hit ? SAVED_PREFIX + hit.name : 'custom'
+}
+
 /**
  * RollProfileControl renders the grouping-profile selector (Simple / presets /
  * Custom) plus, when Custom is selected, an inline tier editor. It owns the
@@ -36,32 +57,99 @@ export default function RollProfileControl({
   profile: RollProfile
   onChange: (p: RollProfile) => void
 }): React.ReactElement {
+  const [config, setConfig] = useState<Config | null>(null)
+  const saved = config?.preferences.roll_tracker_saved_profiles ?? []
   const [selected, setSelected] = useState(() => presetIdFor(profile))
   const [draft, setDraft] = useState<RollProfile>(() => seedDraft(profile))
+  const [name, setName] = useState('')
   const [infoOpen, setInfoOpen] = useState(false)
+
+  useEffect(() => {
+    getConfig().then(setConfig).catch(() => {})
+  }, [])
 
   // Re-sync when the live profile changes from outside (another window, a WS
   // broadcast), unless the user is mid-edit on a matching custom draft.
   useEffect(() => {
-    const id = presetIdFor(profile)
+    const id = selectionFor(profile, saved)
     setSelected(id)
+    if (id.startsWith(SAVED_PREFIX)) setName(id.slice(SAVED_PREFIX.length))
     if (id !== 'custom' || !profilesEqual(profile, draft)) {
       setDraft(seedDraft(profile))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile])
 
+  // When the saved library loads or changes, label a live profile that
+  // matches a saved entry by that entry's name. Selection only — the draft
+  // is left alone so a save doesn't flash the old tiers back before the
+  // new live profile echoes in.
+  useEffect(() => {
+    const id = selectionFor(profile, saved)
+    if (id.startsWith(SAVED_PREFIX) && profilesEqual(profile, draft)) {
+      setSelected(id)
+      setName(id.slice(SAVED_PREFIX.length))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config])
+
   const handleSelect = (id: string): void => {
     setSelected(id)
     if (id === 'custom') {
       setDraft(seedDraft(profile))
+      setName('')
+      return
+    }
+    if (id.startsWith(SAVED_PREFIX)) {
+      const entry = saved.find((s) => SAVED_PREFIX + s.name === id)
+      if (!entry) return
+      const p = toProfile(entry)
+      setName(entry.name)
+      setDraft(p)
+      onChange(p)
       return
     }
     const preset = ROLL_PROFILE_PRESETS.find((p) => p.id === id)
     if (preset) onChange(preset.profile)
   }
 
-  const editing = selected === 'custom'
+  // Persist the saved-profile library. An empty list is sent as [] (not
+  // dropped) so deleting the last entry actually clears it server-side.
+  const writeSaved = (list: SavedRollProfile[]): void => {
+    if (!config) return
+    const next: Config = {
+      ...config,
+      preferences: { ...config.preferences, roll_tracker_saved_profiles: list },
+    }
+    setConfig(next)
+    saveConfigChanges(next, config).then(setConfig).catch(() => {})
+  }
+
+  const savedName = selected.startsWith(SAVED_PREFIX)
+    ? selected.slice(SAVED_PREFIX.length)
+    : null
+
+  // Save upserts by name; editing a saved profile and renaming it replaces
+  // that entry rather than leaving the old name behind. Saving also applies.
+  const handleSave = (): void => {
+    const trimmed = name.trim()
+    if (!trimmed || !valid) return
+    const p = normalizeProfile(draft)
+    const entry: SavedRollProfile = { name: trimmed, ...p }
+    const rest = saved.filter((s) => s.name !== trimmed && s.name !== savedName)
+    writeSaved([...rest, entry].sort((a, b) => a.name.localeCompare(b.name)))
+    setSelected(SAVED_PREFIX + trimmed)
+    if (!profilesEqual(p, profile)) onChange(p)
+  }
+
+  const handleDelete = (): void => {
+    if (savedName === null) return
+    writeSaved(saved.filter((s) => s.name !== savedName))
+    setSelected('custom')
+    setName('')
+  }
+
+  const editing = selected === 'custom' || savedName !== null
   const selectedPreset = ROLL_PROFILE_PRESETS.find((p) => p.id === selected)
   const tiers = draft.tiers ?? []
 
@@ -121,6 +209,15 @@ export default function RollProfileControl({
               {p.name}
             </option>
           ))}
+          {saved.length > 0 && (
+            <optgroup label="Saved">
+              {saved.map((s) => (
+                <option key={s.name} value={SAVED_PREFIX + s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
           <option value="custom">Custom…</option>
         </select>
         {!editing && selectedPreset && (
@@ -286,6 +383,41 @@ export default function RollProfileControl({
                 <Check size={12} /> Apply
               </button>
             </div>
+          </div>
+
+          {/* Save to the library so the setup survives switching presets */}
+          <div
+            className="flex items-center gap-2 border-t pt-2"
+            style={{ borderColor: 'var(--color-border)' }}
+          >
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              placeholder="Name this grouping to save it"
+              maxLength={40}
+              className="flex-1 rounded bg-transparent px-2 py-1 text-xs outline-none"
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-foreground)' }}
+            />
+            <button
+              onClick={handleSave}
+              disabled={!valid || !name.trim() || !config}
+              className="flex items-center gap-1 rounded px-2.5 py-1 text-xs transition-colors hover:bg-(--color-surface-3) disabled:opacity-30"
+              style={{ border: '1px solid var(--color-border)', color: 'var(--color-foreground)' }}
+              title="Save (and apply) this grouping so it stays in the Grouping list"
+            >
+              <Save size={12} /> {savedName !== null ? 'Save' : 'Save as'}
+            </button>
+            {savedName !== null && (
+              <button
+                onClick={handleDelete}
+                className="rounded p-1 transition-colors hover:bg-(--color-surface-3)"
+                style={{ color: 'var(--color-muted)' }}
+                title={`Delete saved grouping "${savedName}"`}
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
           </div>
         </div>
       )}

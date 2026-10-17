@@ -1,4 +1,5 @@
 import type { OverlayName, LockedMode } from '../lib/overlays'
+import type { SavedRollProfile } from './rolls'
 
 export interface NPCOverlaySections {
   identity: boolean
@@ -240,6 +241,9 @@ export interface Preferences {
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing
   // keys default to "interactive". See lib/overlays.ts.
   overlay_locked_modes?: Partial<Record<OverlayName, LockedMode>>
+  // Named custom Roll Tracker grouping profiles, listed with the presets so
+  // a custom setup survives switching to Simple and back.
+  roll_tracker_saved_profiles?: SavedRollProfile[]
   // Side-nav route keys the user has hidden from the navigation menu (the
   // page is still reachable by URL). The fixed controls are never hideable.
   sidebar_hidden?: string[]

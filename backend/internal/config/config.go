@@ -366,6 +366,23 @@ const (
 )
 
 // Preferences holds optional UI and overlay settings.
+// RollSavedProfile is a named custom Roll Tracker grouping profile. The
+// profile body mirrors rolltracker.RollProfile field for field (the config
+// package can't import rolltracker); the frontend validates it before saving.
+type RollSavedProfile struct {
+	Name    string          `yaml:"name" json:"name"`
+	Mode    string          `yaml:"mode" json:"mode"`
+	Scheme  string          `yaml:"scheme,omitempty" json:"scheme,omitempty"`
+	Divisor int             `yaml:"divisor,omitempty" json:"divisor,omitempty"`
+	Tiers   []RollSavedTier `yaml:"tiers,omitempty" json:"tiers,omitempty"`
+}
+
+// RollSavedTier mirrors rolltracker.ProfileTier.
+type RollSavedTier struct {
+	Match int    `yaml:"match" json:"match"`
+	Label string `yaml:"label" json:"label"`
+}
+
 type Preferences struct {
 	// OverlayOpacity is the transparency of overlay windows (0.0–1.0).
 	OverlayOpacity float64 `yaml:"overlay_opacity" json:"overlay_opacity"`
@@ -696,6 +713,11 @@ type Preferences struct {
 	// blob (the structured RollProfile lives in the rolltracker package; the
 	// config layer round-trips it opaquely). Empty means the simple default.
 	RollTrackerProfile string `yaml:"roll_tracker_profile,omitempty" json:"roll_tracker_profile,omitempty"`
+	// RollTrackerSavedProfiles are the user's named custom grouping profiles,
+	// listed alongside the built-in presets so switching to Simple (or any
+	// preset) and back doesn't lose a custom tier setup. Purely a library —
+	// the active profile is still RollTrackerProfile.
+	RollTrackerSavedProfiles []RollSavedProfile `yaml:"roll_tracker_saved_profiles,omitempty" json:"roll_tracker_saved_profiles,omitempty"`
 
 	// SidebarHidden lists side-nav route keys (e.g. "/loot") the user has
 	// hidden from the navigation menu. Hiding only removes the tab from the
