@@ -9,6 +9,25 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.28.2 — 2026-10-17
+
+You can now pick which speaker or headset trigger alerts play on, set fade per overlay, and save custom roll groupings. Spell and discipline timers also catch up with PoP's level 65 cap.
+
+### Highlights
+- **Alert output device** — Settings → Audio → Alert Output Device sends trigger sounds and spoken alerts to a chosen speaker or headset, separate from the Windows default. Example: alerts in your headset with Discord while the game stays on speakers. Includes a Test button. If the device is unplugged, alerts fall back to the default device.
+- **Fade per overlay** — each overlay in Settings → Overlays has its own Fade setting (Default / On / Off), so overlays over the game window can fade while ones on a second monitor stay solid.
+- **Saved roll groupings** — name and save custom Roll Tracker groupings. They stay in the Grouping list, so switching to Simple and back no longer wipes them.
+- **Spell scrolls link to their spell** — scroll, song, tome and ancient items show a Teaches row linking to the spell, and the spell page links back to its scroll.
+- **Spell components** — the spell page lists the reagents a spell consumes, focus items it needs, and the instrument type for bard songs.
+- **Other players' caster level** — buff and debuff durations from other players' casts use their level from your /who history when the caster can be identified, instead of assuming 65.
+
+### Fixes
+- **Spell durations at levels 61–65** — about 165 spells (charm, tash, malo, slows and more) still lengthen between 60 and 65, but timers always used level 60. Your own casts now use your level.
+- **Wrong trigger-pack spell durations** — Calm/Soothe/Wake, Enthrall, Entrapping Roots and Immobilize ran about 3x too long, and several debuffs (Malo, Malosini, Ensnare, Cripple, Plague and others) were off. All now match the server's formulas.
+- **Discipline cooldowns ignored level** — cooldowns now shrink with level the way the server's do (Duelist is 24:36 at 65, not 30:00).
+- **Divine Intervention timer** — now 10 minutes at level 60 and above, not 6.
+- **Game data updates** — Torment's Baraguj entry form now respawns every 30 minutes, the PoK library teleporters are added, and Sorrowsong plus Ralthazor, Edium and Halon of Marr no longer have loot lockouts.
+
 ## v0.28.1 — 2026-10-14
 
 A maintenance release: PoP respawn timers catch up with Project Quarm's latest changes, Settings no longer undoes changes made elsewhere, and replaying a log no longer re-records old events or posts to Discord.
