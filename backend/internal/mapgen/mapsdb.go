@@ -130,6 +130,72 @@ func WriteMapsDB(path string, zones []ZoneOutput, pois []POI) error {
 			return fmt.Errorf("insert %s zone: %w", z.Zone, err)
 		}
 	}
+	if err := insertPOIs(tx, pois); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	// VACUUM cannot run inside a transaction and materially shrinks the file.
+	if _, err := db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("vacuum: %w", err)
+	}
+	return nil
+}
+
+// RefreshPOIs replaces the generated POIs in an existing maps.db and leaves the
+// geometry alone.
+//
+// POIs come from quarm.db, geometry from the EQ client, and only the geometry
+// needs the client. Without this, picking up a quarm.db change (new PoP
+// vendors, a trap the generator used to miss) meant a full extraction on a
+// machine with the client installed, so the POIs went stale instead.
+//
+// Every db:* row is dropped, plus any row whose source the fresh set also
+// carries (the shipped research annotations), so a removed or corrected pin
+// does not linger. Rows from any other source survive.
+func RefreshPOIs(path string, pois []POI) error {
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("maps.db %s: %w", path, err)
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer db.Close()
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	sources := map[string]bool{}
+	for _, p := range pois {
+		sources[p.Source] = true
+	}
+	if _, err := tx.Exec(`DELETE FROM map_poi WHERE source LIKE 'db:%'`); err != nil {
+		return fmt.Errorf("clear generated pois: %w", err)
+	}
+	for src := range sources {
+		if _, err := tx.Exec(`DELETE FROM map_poi WHERE source = ?`, src); err != nil {
+			return fmt.Errorf("clear %s pois: %w", src, err)
+		}
+	}
+	if err := insertPOIs(tx, pois); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	if _, err := db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("vacuum: %w", err)
+	}
+	return nil
+}
+
+func insertPOIs(tx *sql.Tx, pois []POI) error {
 	insPOI, err := tx.Prepare(`INSERT OR IGNORE INTO map_poi
 		(zone, x, y, z, category, label, source, ref_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
@@ -146,14 +212,6 @@ func WriteMapsDB(path string, zones []ZoneOutput, pois []POI) error {
 			p.Category, p.Label, p.Source, p.RefID); err != nil {
 			return fmt.Errorf("insert poi %s/%s: %w", p.Zone, p.Label, err)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
-	// VACUUM cannot run inside a transaction and materially shrinks the file.
-	if _, err := db.Exec(`VACUUM`); err != nil {
-		return fmt.Errorf("vacuum: %w", err)
 	}
 	return nil
 }

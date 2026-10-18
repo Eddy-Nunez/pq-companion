@@ -8,6 +8,7 @@
 //	go run ./cmd/mapgen -client /Volumes/T7/EQ/TAKPv22
 //	go run ./cmd/mapgen -client <dir> -zones unrest,akheva -out /tmp/maps.db
 //	go run ./cmd/mapgen -client <dir> -report      # classify only, write nothing
+//	go run ./cmd/mapgen -pois-only                 # refresh POIs from quarm.db, no client
 //
 // See docs/maps-feasibility.md for the format research and the technique
 // selection rules.
@@ -34,7 +35,13 @@ func main() {
 	zoneList := flag.String("zones", "", "comma-separated zone short names (default: all)")
 	report := flag.Bool("report", false, "print the classification table and write nothing")
 	compareDir := flag.String("compare", "", "write per-zone side-by-side SVGs of all three techniques here, and write no maps.db")
+	poisOnly := flag.Bool("pois-only", false, "regenerate only the POIs in the existing -out maps.db from -db; needs no client")
 	flag.Parse()
+
+	if *poisOnly {
+		refreshPOIs(*dbPath, *outPath)
+		return
+	}
 
 	if *clientDir == "" {
 		log.Fatal("-client is required")
@@ -125,28 +132,7 @@ func main() {
 
 	// POIs come from quarm.db, not the client: everything here is source="db:*"
 	// and is rebuilt on every run.
-	poiDB, err := db.Open(*dbPath)
-	if err != nil {
-		log.Fatalf("open %s for POIs: %v", *dbPath, err)
-	}
-	pois, err := mapgen.GeneratePOIs(poiDB.DB)
-	poiDB.Close()
-	if err != nil {
-		log.Fatalf("generate POIs: %v", err)
-	}
-	byCategory := map[string]int{}
-	for _, p := range pois {
-		byCategory[p.Category]++
-	}
-	fmt.Printf("\n%d POIs\n", len(pois))
-	for _, c := range []string{
-		mapgen.CategoryVendor, mapgen.CategoryDoor, mapgen.CategoryGroundSpawn,
-		mapgen.CategoryZoneLine, mapgen.CategoryRaidTarget, mapgen.CategoryTradeskill,
-		mapgen.CategorySuccor, mapgen.CategoryTrap,
-		mapgen.CategoryLocked, mapgen.CategorySwitch, mapgen.CategoryTeleport,
-	} {
-		fmt.Printf("   %-14s %5d\n", c, byCategory[c])
-	}
+	pois := generatePOIs(*dbPath)
 
 	if err := mapgen.WriteMapsDB(*outPath, outputs, pois); err != nil {
 		log.Fatalf("write %s: %v", *outPath, err)
@@ -201,4 +187,40 @@ func resolveZones(dbPath, clientDir, explicit string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// generatePOIs builds every POI from quarm.db and prints a per-category count.
+func generatePOIs(dbPath string) []mapgen.POI {
+	poiDB, err := db.Open(dbPath)
+	if err != nil {
+		log.Fatalf("open %s for POIs: %v", dbPath, err)
+	}
+	pois, err := mapgen.GeneratePOIs(poiDB.DB)
+	poiDB.Close()
+	if err != nil {
+		log.Fatalf("generate POIs: %v", err)
+	}
+	byCategory := map[string]int{}
+	for _, p := range pois {
+		byCategory[p.Category]++
+	}
+	fmt.Printf("\n%d POIs\n", len(pois))
+	for _, c := range []string{
+		mapgen.CategoryVendor, mapgen.CategoryDoor, mapgen.CategoryGroundSpawn,
+		mapgen.CategoryZoneLine, mapgen.CategoryRaidTarget, mapgen.CategoryTradeskill,
+		mapgen.CategorySuccor, mapgen.CategoryTrap,
+		mapgen.CategoryLocked, mapgen.CategorySwitch, mapgen.CategoryTeleport,
+	} {
+		fmt.Printf("   %-14s %5d\n", c, byCategory[c])
+	}
+	return pois
+}
+
+// refreshPOIs rewrites only the POIs of an existing maps.db.
+func refreshPOIs(dbPath, outPath string) {
+	pois := generatePOIs(dbPath)
+	if err := mapgen.RefreshPOIs(outPath, pois); err != nil {
+		log.Fatalf("refresh POIs in %s: %v", outPath, err)
+	}
+	fmt.Printf("\nrefreshed POIs in %s\n", outPath)
 }

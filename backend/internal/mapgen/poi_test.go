@@ -128,3 +128,56 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// TestGeneratePOIs_ScriptNamedTraps guards the trap NPCs whose script names
+// look like plumbing. Plane of Earth A's are TrapMan1-13 and Bastion of
+// Thunder's are *TrapSpawner; the utility denylist used to drop both zones'
+// traps entirely, leaving the Traps layer empty where it matters most.
+func TestGeneratePOIs_ScriptNamedTraps(t *testing.T) {
+	pois := generatePOIs(t)
+	traps := map[string]int{}
+	labels := map[string]bool{}
+	for _, p := range pois {
+		if p.Category == mapgen.CategoryTrap && p.Source == "db:spawn2-trap" {
+			traps[p.Zone]++
+			labels[p.Label] = true
+		}
+	}
+	for _, tc := range []struct {
+		zone string
+		min  int
+	}{
+		{"poeartha", 60},
+		{"bothunder", 25},
+	} {
+		if traps[tc.zone] < tc.min {
+			t.Errorf("%s: %d trap NPC POIs, want at least %d", tc.zone, traps[tc.zone], tc.min)
+		}
+	}
+	for _, want := range []string{"Trap 1", "Trap 13", "Trap: Air Trap"} {
+		if !labels[want] {
+			t.Errorf("missing trap label %q", want)
+		}
+	}
+}
+
+// TestGeneratePOIs_PoPRaidTargets guards the PoP bosses Quarm marks with
+// loot_lockout but not raid_target. On raid_target alone these zones had no
+// raid pins at all.
+func TestGeneratePOIs_PoPRaidTargets(t *testing.T) {
+	pois := generatePOIs(t)
+	found := map[string]bool{}
+	for _, p := range pois {
+		if p.Category == mapgen.CategoryRaidTarget {
+			found[p.Zone+"/"+p.Label] = true
+		}
+	}
+	for _, want := range []string{
+		"potorment/Saryrn", "potactics/Tallon Zek", "nightmareb/Terris Thule",
+		"bothunder/Agnarr the Storm Lord",
+	} {
+		if !found[want] {
+			t.Errorf("missing raid target %s", want)
+		}
+	}
+}

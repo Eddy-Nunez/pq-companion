@@ -305,12 +305,19 @@ func poiRaidTargets(qdb *sql.DB, _ map[int]string) ([]POI, error) {
 	// Deliberately narrower than "named NPCs": that heuristic matches 9,018
 	// NPCs, most of them guards and vendors, which would bury the map. The
 	// raid_target flag is the server's own designation.
+	//
+	// loot_lockout is the other half. Quarm's Sep 2026 PoP patch gave 83
+	// raid and trial bosses a loot lockout without setting raid_target, so
+	// on raid_target alone every Planes of Power zone had no raid pins at all
+	// — Saryrn, the Zeks, Terris Thule, the Fire generals. Same rule the
+	// Lockouts tab uses (db.GetRaidTargetsByZone). Script-spawned bosses with
+	// no spawn2 row stay off the map: there is no position to pin.
 	rows, err := qdb.Query(`
 		SELECT DISTINCT s2.zone, s2.x, s2.y, s2.z, n.name, n.id
 		FROM spawn2 s2
 		JOIN spawnentry se ON se.spawngroupID = s2.spawngroupID
 		JOIN npc_types n   ON n.id = se.npcID
-		WHERE n.raid_target = 1`)
+		WHERE n.raid_target = 1 OR n.loot_lockout > 0`)
 	if err != nil {
 		return nil, err
 	}
@@ -513,6 +520,42 @@ func looksLikeUtility(name string) bool {
 	return false
 }
 
+// namedAsTrap reports whether a script author called the NPC a trap outright.
+// That beats the utility denylist: Plane of Earth A's traps are TrapMan1-13 and
+// Bastion of Thunder's are AirTrapSpawner and friends, both CamelCase and the
+// latter containing "spawner", so the denylist dropped every trap in either
+// zone. Their quest scripts (poeartha/encounters/Traps.lua,
+// bothunder/*TrapSpawner.lua) spawn a mob or a storm at the spot on aggro,
+// which is exactly what the Traps layer exists to warn about.
+func namedAsTrap(name string) bool {
+	return strings.Contains(strings.ToLower(name), "trap")
+}
+
+// trapNPCLabel turns a script name into something readable: "TrapMan1" is
+// "Trap 1" and "AirTrapSpawner" is "Air Trap". Ordinary underscored names
+// ("a_pit_trap") only lose their underscores.
+func trapNPCLabel(name string) string {
+	if strings.Contains(name, "_") || !namedAsTrap(name) {
+		return cleanName(name)
+	}
+	n := strings.TrimSuffix(name, "Spawner")
+	n = strings.Replace(n, "TrapMan", "Trap", 1)
+	var b strings.Builder
+	for i, r := range n {
+		if i > 0 {
+			prev := rune(n[i-1])
+			upper := r >= 'A' && r <= 'Z'
+			digit := r >= '0' && r <= '9'
+			prevDigit := prev >= '0' && prev <= '9'
+			if upper || (digit && !prevDigit) {
+				b.WriteByte(' ')
+			}
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 func poiTrapNPCs(qdb *sql.DB, _ map[int]string) ([]POI, error) {
 	rows, err := qdb.Query(`
 		SELECT DISTINCT s2.zone, s2.x, s2.y, s2.z, n.name, n.id
@@ -551,7 +594,7 @@ func poiTrapNPCs(qdb *sql.DB, _ map[int]string) ([]POI, error) {
 		if err := rows.Scan(&zone, &gx, &gy, &gz, &name, &npcID); err != nil {
 			return nil, err
 		}
-		if zone == "" || looksLikeUtility(name) {
+		if zone == "" || (!namedAsTrap(name) && looksLikeUtility(name)) {
 			continue
 		}
 		x, y, z, ok := toMapPoint(gx, gy, gz)
@@ -563,7 +606,7 @@ func poiTrapNPCs(qdb *sql.DB, _ map[int]string) ([]POI, error) {
 			order = append(order, k)
 			refs[k] = npcID
 		}
-		names[k] = append(names[k], cleanName(name))
+		names[k] = append(names[k], trapNPCLabel(name))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -575,8 +618,13 @@ func poiTrapNPCs(qdb *sql.DB, _ map[int]string) ([]POI, error) {
 		sort.Strings(v)
 		// Name every flavour: which one is up tells a player what to expect, and
 		// at one label per spot there is room to say so.
+		label := strings.Join(v, " / ")
+		// "Trap 1" already says it; "Trap: Trap 1" would say it twice.
+		if !strings.HasPrefix(label, "Trap ") {
+			label = "Trap: " + label
+		}
 		out = append(out, POI{Zone: k.zone, X: k.x, Y: k.y, Z: k.z,
-			Category: CategoryTrap, Label: "Trap: " + strings.Join(v, " / "),
+			Category: CategoryTrap, Label: label,
 			Source: "db:spawn2-trap", RefID: refs[k]})
 	}
 	return out, nil
