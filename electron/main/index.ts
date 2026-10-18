@@ -7,6 +7,7 @@ import { constants as fsConstants } from 'fs'
 import { homedir } from 'os'
 import { autoUpdater } from 'electron-updater'
 import { appendLine, closeLogger, initLogger } from './logger'
+import { findOtherRunningCopies, otherCopyMessage } from './otherCopy'
 
 const isDev = !app.isPackaged
 
@@ -166,9 +167,24 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 // existing window (the same path the tray uses). On macOS the OS already
 // enforces single-instance for packaged .app bundles, but the lock is harmless
 // there and keeps `npm run dev` honest too.
+//
+// The lock holder can also be a different copy of the app — e.g. an old
+// extracted setup folder in Downloads. Then the copy the auto-updater just
+// installed quits on every launch while the stale one keeps running (issue
+// #160). For packaged Windows builds we check for that before quitting and
+// warn the user (see otherCopy.ts). app.exit() rather than app.quit() so the
+// before-quit handlers (overlay auto-open snapshot, sidecar stop) never run
+// in this instance and can't clobber the running copy's saved state.
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
-  app.quit()
+  if (process.platform === 'win32' && app.isPackaged) {
+    app.whenReady()
+      .then(warnIfOtherCopyRunning)
+      .catch((err) => appendLine('WARN', `[main] other-copy check failed: ${err}`))
+      .finally(() => app.exit(0))
+  } else {
+    app.quit()
+  }
 } else {
   app.on('second-instance', () => {
     // A second launch was attempted; bring our window back to the foreground
@@ -176,6 +192,27 @@ if (!gotSingleInstanceLock) {
     // tray / un-minimizes / re-creates the window as needed.
     showMainWindow()
   })
+}
+
+// warnIfOtherCopyRunning shows a warning when the single-instance lock is held
+// by a copy of the app installed in a different folder. A second launch of
+// the SAME install finds nothing and stays silent, as before.
+async function warnIfOtherCopyRunning(): Promise<void> {
+  const others = await findOtherRunningCopies()
+  if (others.length === 0) return
+  const other = others[0]
+  appendLine('WARN', `[main] single-instance lock held by another copy: path=${other.path} version=${other.version || 'unknown'}`)
+  const { message, detail } = otherCopyMessage(other, app.getVersion())
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'PQ Companion',
+    message,
+    detail,
+    buttons: ['OK', 'Show Old Copy in Explorer'],
+    defaultId: 0,
+    noLink: true,
+  })
+  if (response === 1) shell.showItemInFolder(other.path)
 }
 
 // Resolve the app icon for runtime BrowserWindow use.
@@ -3741,6 +3778,9 @@ ipcMain.handle('updater:quit-and-install', async () => {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // Lost the single-instance lock: this instance only exists to hand off to
+  // (or warn about) the running copy and then exit. Start nothing.
+  if (!gotSingleInstanceLock) return
   // Bail early if the bundled EQ database is missing OR unreadable.
   // existsSync alone isn't enough: an AV that ACL-locks the file post-install
   // (without quarantining it) leaves stat() succeeding while open-for-read
@@ -3944,6 +3984,7 @@ app.on('window-all-closed', () => {
 // still alive. The X-to-quit path is covered by closeAllOverlays(); the shared
 // guard makes whichever fires first authoritative.
 app.on('before-quit', () => {
+  if (!gotSingleInstanceLock) return
   snapshotAutoOpenOverlays()
 })
 
