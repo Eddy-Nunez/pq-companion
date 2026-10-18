@@ -6,7 +6,7 @@ import { usePlayerPosition } from '../../hooks/usePlayerPosition'
 import { useGroupPositions } from '../../hooks/useGroupPositions'
 import { useMapStyle } from '../../hooks/useMapStyle'
 import { useZoneMap } from '../../hooks/useZoneMap'
-import { ZoneMap } from './ZoneMap'
+import { ZoneMap, type MapHighlight } from './ZoneMap'
 import { ErrorBoundary } from '../ErrorBoundary'
 import {
   mapMarkerCommand,
@@ -41,10 +41,22 @@ const ANNOTATION_CATEGORIES: { key: UserAnnotation['category']; label: string }[
 ]
 
 // SearchHit is one row in the search dropdown: either a curated map POI or a
-// plain NPC spawn point.
+// plain NPC. Grouped by name, so an NPC with five spawn points is one row that
+// highlights all five — listing each spot separately and lighting only the one
+// clicked made the other four look like they did not exist.
 type SearchHit =
-  | { kind: 'poi'; poi: MapPOI }
-  | { kind: 'npc'; npc: ZoneNPCLocation }
+  | { kind: 'poi'; poi: MapPOI; spots: MapPOI[] }
+  | { kind: 'npc'; npc: ZoneNPCLocation; spots: ZoneNPCLocation[] }
+
+// SearchGroup is what "Show all" selects: every spot behind every hit for one
+// query, so a whole family ("trap") lights up at once.
+interface SearchGroup {
+  query: string
+  hits: number
+  spots: MapHighlight[]
+}
+
+const MAX_SEARCH_ROWS = 40
 
 // Inspection is the selected thing reduced to what the inspector bar shows, so
 // a POI and an NPC render through one piece of markup instead of two that drift.
@@ -59,6 +71,9 @@ interface Inspection {
   // poi is set only for map POIs, and gates the edit/delete actions that apply
   // to the user's own markers.
   poi: MapPOI | null
+  // spots is every location highlighted for this selection. More than one
+  // when the thing has several spawn points; x/y/z is the first of them.
+  spots: MapHighlight[]
 }
 
 // Negative ids keep user annotations from colliding with map_poi ids in the same
@@ -68,6 +83,10 @@ function annotationToPOI(a: UserAnnotation): MapPOI {
     id: -a.id, x: a.x, y: a.y, z: a.z,
     category: a.category, label: a.label, source: USER_SOURCE,
   }
+}
+
+function toSpot(p: { x: number; y: number; z: number }): MapHighlight {
+  return { x: p.x, y: p.y, z: p.z }
 }
 
 // ZoneMapPanel is the full-zone map with layer toggles and a POI inspector.
@@ -182,10 +201,18 @@ export function ZoneMapPanel({
     LAYERS.filter((l) => l.on).map((l) => l.key),
   )
   const [selected, setSelected] = useState<MapPOI | null>(null)
-  // An NPC found by search. Held apart from `selected` because it is not a POI
-  // and must not pretend to be one — it belongs to no layer, has no category
-  // toggle, and is only ever on screen because it was asked for.
-  const [selectedNPC, setSelectedNPC] = useState<ZoneNPCLocation | null>(null)
+  // Every spot of the POI picked from search, when it has more than one (one
+  // trap name repeated across a zone). Empty for a map click, which is about
+  // the single pin under the cursor.
+  const [selectedSpots, setSelectedSpots] = useState<MapPOI[]>([])
+  // An NPC found by search, as every one of its spawn points. Held apart from
+  // `selected` because it is not a POI and must not pretend to be one — it
+  // belongs to no layer, has no category toggle, and is only ever on screen
+  // because it was asked for.
+  const [selectedNPCs, setSelectedNPCs] = useState<ZoneNPCLocation[]>([])
+  const selectedNPC = selectedNPCs[0] ?? null
+  // "Show all" from the search box.
+  const [searchGroup, setSearchGroup] = useState<SearchGroup | null>(null)
   const [showDetail, setShowDetail] = useCachedState('maps.detail', true)
   // On by default: in a multi-level zone it is the difference between two lines
   // crossing and two lines at different heights, which a flat rendering cannot
@@ -211,6 +238,15 @@ export function ZoneMapPanel({
   // Container the map's height control is portalled into, so it spans the full
   // panel width below the rail instead of being indented by it.
   const [depthHost, setDepthHost] = useState<HTMLDivElement | null>(null)
+
+  // A selection is a set of coordinates in one zone; carried into the next
+  // zone it would put crosshairs on unrelated spots.
+  useEffect(() => {
+    setSelected(null)
+    setSelectedSpots([])
+    setSelectedNPCs([])
+    setSearchGroup(null)
+  }, [zoneShortName])
 
   useEffect(() => {
     if (!zoneShortName) {
@@ -256,6 +292,7 @@ export function ZoneMapPanel({
         x: selected.x, y: selected.y, z: selected.z,
         route: selected.source !== USER_SOURCE ? entityRoute(selected) : null,
         poi: selected,
+        spots: (selectedSpots.length > 0 ? selectedSpots : [selected]).map(toSpot),
       }
     : selectedNPC
       ? {
@@ -264,10 +301,16 @@ export function ZoneMapPanel({
           x: selectedNPC.x, y: selectedNPC.y, z: selectedNPC.z,
           route: `/npcs?select=${selectedNPC.npc_id}`,
           poi: null,
+          spots: selectedNPCs.map(toSpot),
         }
       : null
 
-  const clearSelection = (): void => { setSelected(null); setSelectedNPC(null) }
+  const clearSelection = (): void => {
+    setSelected(null)
+    setSelectedSpots([])
+    setSelectedNPCs([])
+    setSearchGroup(null)
+  }
 
   const visible = useMemo(() => new Set(enabled), [enabled])
   const counts = useMemo(() => {
@@ -284,23 +327,46 @@ export function ZoneMapPanel({
   // should lead with the marked banker rather than a same-named guard. NPC
   // names are stored underscored, so both the match and the display go through
   // formatNPCName or "Ward Pungill" would never match "Ward_Pungill".
+  //
+  // Not capped: "Show all" has to reach every match, not just the rows the
+  // dropdown has room for. The dropdown slices its own view.
   const matches = useMemo((): SearchHit[] => {
     const q = query.trim().toLowerCase()
     if (!live || q.length < 2) return []
-    const hits: SearchHit[] = allPois
-      .filter((p) => p.label.toLowerCase().includes(q))
-      .map((poi) => ({ kind: 'poi', poi }))
-    // Skip NPCs already surfaced as a POI, so a vendor is not listed twice.
-    const seen = new Set(allPois.map((p) => p.ref_id).filter(Boolean))
-    for (const npc of npcs) {
-      if (hits.length >= 40) break
-      if (seen.has(npc.npc_id)) continue
-      if (formatNPCName(npc.name).toLowerCase().includes(q)) {
-        hits.push({ kind: 'npc', npc })
+    const hits: SearchHit[] = []
+    const poiRow = new Map<string, Extract<SearchHit, { kind: 'poi' }>>()
+    for (const poi of allPois) {
+      if (!poi.label.toLowerCase().includes(q)) continue
+      const key = `${poi.category}|${poi.label}`
+      const row = poiRow.get(key)
+      if (row) {
+        row.spots.push(poi)
+      } else {
+        const hit = { kind: 'poi' as const, poi, spots: [poi] }
+        poiRow.set(key, hit)
+        hits.push(hit)
       }
     }
-    return hits.slice(0, 40)
+    // Skip NPCs already surfaced as a POI, so a vendor is not listed twice.
+    const seen = new Set(allPois.map((p) => p.ref_id).filter(Boolean))
+    const npcRow = new Map<string, Extract<SearchHit, { kind: 'npc' }>>()
+    for (const npc of npcs) {
+      if (seen.has(npc.npc_id)) continue
+      if (!formatNPCName(npc.name).toLowerCase().includes(q)) continue
+      // By name, not id: a named mob often has one npc_types row per spawn
+      // point, and they are still the same thing to a player.
+      const row = npcRow.get(npc.name)
+      if (row) {
+        row.spots.push(npc)
+      } else {
+        const hit = { kind: 'npc' as const, npc, spots: [npc] }
+        npcRow.set(npc.name, hit)
+        hits.push(hit)
+      }
+    }
+    return hits
   }, [live, query, allPois, npcs])
+  const matchSpots = matches.reduce((n, h) => n + h.spots.length, 0)
 
   const saveDraft = (category: string, label: string): void => {
     if (!draft || !zoneShortName) return
@@ -555,7 +621,35 @@ export function ZoneMapPanel({
                 borderColor: 'var(--color-border)',
               }}
             >
-              {matches.map((hit) => (
+              {matchSpots > 1 && (
+                // Every spot behind every row, at once — the answer to "where
+                // are all the traps", which picking rows one by one never gave.
+                <button
+                  onClick={() => {
+                    const q = query.trim()
+                    setQuery('')
+                    setSelected(null)
+                    setSelectedSpots([])
+                    setSelectedNPCs([])
+                    setSearchGroup({
+                      query: q,
+                      hits: matches.length,
+                      spots: matches.flatMap((h) =>
+                        (h.spots as (MapPOI | ZoneNPCLocation)[]).map(toSpot)),
+                    })
+                    const layers = new Set(
+                      matches.flatMap((h) => (h.kind === 'poi' ? [h.poi.category] : [])),
+                    )
+                    const hidden = [...layers].filter((c) => !visible.has(c))
+                    if (hidden.length > 0) setEnabled((prev) => [...prev, ...hidden])
+                  }}
+                  className="flex w-full items-center gap-2 border-b px-2 py-1 text-left text-xs font-medium"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-primary)' }}
+                >
+                  Show all {matchSpots} on the map
+                </button>
+              )}
+              {matches.slice(0, MAX_SEARCH_ROWS).map((hit) => (
                 <button
                   key={hit.kind === 'poi' ? `p${hit.poi.id}` : `n${hit.npc.npc_id}`}
                   onClick={() => {
@@ -564,13 +658,16 @@ export function ZoneMapPanel({
                     // same place a map click does rather than growing a second
                     // path to the same actions.
                     setQuery('')
+                    setSearchGroup(null)
                     if (hit.kind === 'npc') {
                       setSelected(null)
-                      setSelectedNPC(hit.npc)
+                      setSelectedSpots([])
+                      setSelectedNPCs(hit.spots)
                       return
                     }
-                    setSelectedNPC(null)
+                    setSelectedNPCs([])
                     setSelected(hit.poi)
+                    setSelectedSpots(hit.spots)
                     // A hidden layer would highlight something invisible. NPC
                     // hits need no equivalent — they belong to no layer, and the
                     // highlight is drawn regardless of the toggles.
@@ -594,14 +691,16 @@ export function ZoneMapPanel({
                   <span className="truncate" style={{ color: 'var(--color-foreground)' }}>
                     {hit.kind === 'poi' ? hit.poi.label : formatNPCName(hit.npc.name)}
                   </span>
-                  {hit.kind === 'npc' && (
+                  {(hit.spots.length > 1 || hit.kind === 'npc') && (
                     // Level disambiguates the six identically-named guards a city
-                    // zone routinely has.
+                    // zone routinely has; the count says one row is several spots.
                     <span
                       className="ml-auto shrink-0 text-[9px] tabular-nums"
                       style={{ color: 'var(--color-muted)' }}
                     >
-                      L{hit.npc.level}
+                      {hit.spots.length > 1 && `×${hit.spots.length}`}
+                      {hit.spots.length > 1 && hit.kind === 'npc' && ' · '}
+                      {hit.kind === 'npc' && `L${hit.npc.level}`}
                     </span>
                   )}
                 </button>
@@ -706,8 +805,13 @@ export function ZoneMapPanel({
             pois={allPois}
             visibleCategories={visible}
             poiIgnoreZFade={poiIgnoreZFade}
-            highlights={inspect ? [{ x: inspect.x, y: inspect.y, z: inspect.z }] : []}
-            onPOIClick={(p) => { setSelectedNPC(null); setSelected(p) }}
+            highlights={searchGroup ? searchGroup.spots : inspect ? inspect.spots : []}
+            onPOIClick={(p) => {
+              setSelectedNPCs([])
+              setSelectedSpots([])
+              setSearchGroup(null)
+              setSelected(p)
+            }}
             onEmptyClick={
               adding ? (x, y, z) => { setDraft({ x, y, z }); setAdding(false) } : undefined
             }
@@ -770,7 +874,31 @@ export function ZoneMapPanel({
         />
       )}
 
-      {inspect && (
+      {searchGroup && (
+        <div
+          className="flex shrink-0 items-center gap-2 rounded border px-2 py-1.5 text-sm"
+          style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+        >
+          <span
+            className="shrink-0 text-[10px] uppercase tracking-widest"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            search
+          </span>
+          <span className="truncate" style={{ color: 'var(--color-foreground)' }}>
+            “{searchGroup.query}”
+          </span>
+          <span className="shrink-0 text-xs" style={{ color: 'var(--color-muted)' }}>
+            {searchGroup.spots.length} spots
+            {searchGroup.hits > 1 && ` across ${searchGroup.hits} names`}
+          </span>
+          <button className="ml-auto" onClick={clearSelection} title="Clear selection">
+            <X size={12} style={{ color: 'var(--color-muted)' }} />
+          </button>
+        </div>
+      )}
+
+      {!searchGroup && inspect && (
         <div
           className="flex shrink-0 items-center gap-2 rounded border px-2 py-1.5 text-sm"
           style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
@@ -799,6 +927,15 @@ export function ZoneMapPanel({
                 can be read straight across to the game. */}
             {-inspect.y}, {-inspect.x}, {inspect.z}
           </span>
+          {inspect.spots.length > 1 && (
+            <span
+              className="shrink-0 text-xs"
+              title="Every spawn point is highlighted; the coordinates and pin are the first"
+              style={{ color: 'var(--color-muted)' }}
+            >
+              +{inspect.spots.length - 1} more
+            </span>
+          )}
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {inspect.poi && inspect.poi.source === USER_SOURCE ? (
               <>
