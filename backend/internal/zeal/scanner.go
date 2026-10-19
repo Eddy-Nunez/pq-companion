@@ -84,7 +84,10 @@ func ScanAllInventories(eqPath string) ([]*Inventory, []InventoryEntry, error) {
 		// Split SharedBank entries from character-specific entries. Zeal exports
 		// modern-EQ shared bank slots 1–30, but Project Quarm only uses 1–10;
 		// drop the rest so the UI doesn't render 20 empty containers.
-		var charEnt, sbEnt []InventoryEntry
+		// charEnt starts non-nil so an export with no character rows encodes as
+		// `"entries": []`, not null — the frontend maps over it unguarded.
+		charEnt := []InventoryEntry{}
+		var sbEnt []InventoryEntry
 		for _, e := range inv.Entries {
 			if strings.HasPrefix(e.Location, "SharedBank") {
 				if sharedBankSlotInRange(e.Location) {

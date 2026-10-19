@@ -931,7 +931,17 @@ export function getZealSpellbook(character?: string): Promise<ZealSpellbookRespo
 }
 
 export function getAllInventories(): Promise<AllInventoriesResponse> {
-  return get<AllInventoriesResponse>('/api/zeal/all-inventories')
+  // Older servers sent `entries: null` for a character whose export held no
+  // non-shared-bank rows, which crashed every consumer that maps over it.
+  return get<AllInventoriesResponse>('/api/zeal/all-inventories').then(
+    (res) => ({
+      ...res,
+      characters: (res.characters ?? [])
+        .filter((c) => c)
+        .map((c) => ({ ...c, entries: c.entries ?? [] })),
+      shared_bank: res.shared_bank ?? [],
+    }),
+  )
 }
 
 export function getZealSpellsets(character?: string): Promise<ZealSpellsetsResponse> {

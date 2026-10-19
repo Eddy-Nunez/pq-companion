@@ -1,8 +1,10 @@
 package zeal
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -205,5 +207,41 @@ func TestScanAllMacros_ExcludesUIandBZR(t *testing.T) {
 	}
 	if got["BZR_Feane"] || got["UI_Osui"] {
 		t.Errorf("client config files leaked as characters: %v", got)
+	}
+}
+
+func TestScanAllInventories_SharedBankOnlyExportHasEmptyEntries(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"header only", "Location\tName\tID\tCount\tSlots\n"},
+		{"shared bank only", "Location\tName\tID\tCount\tSlots\n" +
+			"SharedBank1\tValid Item\t1001\t1\t0\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "TestChar-Inventory.txt")
+			if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			chars, _, err := ScanAllInventories(dir)
+			if err != nil {
+				t.Fatalf("ScanAllInventories: %v", err)
+			}
+			if len(chars) != 1 {
+				t.Fatalf("expected 1 character, got %d", len(chars))
+			}
+
+			b, err := json.Marshal(chars[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(b), `"entries":[]`) {
+				t.Errorf("entries must encode as [], got %s", b)
+			}
+		})
 	}
 }
