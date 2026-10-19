@@ -124,6 +124,24 @@ export interface ZealMacrosResponse {
   macros: MacroFile | null
 }
 
+// Zeal Page 10 social keybinds from eqclient.ini. Values are as EQ writes
+// them ("SHIFT+0", "l"); '' = unbound.
+export interface KeyBind {
+  slot: number // 1..12 = SocialPage10Slot<N> = Page10Button<N>
+  primary: string
+  alternate: string
+}
+
+export interface Page10Binds {
+  found: boolean // false when eqclient.ini is missing
+  per_character: boolean // Zeal's PerCharKeybinds
+  section: string // KeyMaps or KeyMaps_<Name>
+  modified_at: string // eqclient.ini mtime, sent back on save
+  social: KeyBind[]
+  // Upper-cased key → every bind in the section using it, for clash warnings.
+  bound_to: Record<string, string[]>
+}
+
 export interface AllMacrosResponse {
   configured: boolean
   characters: MacroFile[]

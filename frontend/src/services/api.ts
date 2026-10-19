@@ -27,6 +27,8 @@ import type {
   BandolierSlotItemsResponse,
   BandolierBagStatus,
   ZealMacrosResponse,
+  KeyBind,
+  Page10Binds,
   AllMacrosResponse,
   MacroButton,
   TextColorsResponse,
@@ -1032,6 +1034,24 @@ export function updateMacros(
     character,
     buttons,
     base_modified_at: baseModifiedAt ?? null,
+  })
+}
+
+export function getPage10Keybinds(character: string): Promise<Page10Binds> {
+  return get<Page10Binds>(
+    `/api/zeal/keybinds/page10?character=${encodeURIComponent(character)}`,
+  )
+}
+
+export function updatePage10Keybinds(
+  character: string,
+  social: KeyBind[],
+  baseModifiedAt: string,
+): Promise<Page10Binds> {
+  return put<Page10Binds>('/api/zeal/keybinds/page10', {
+    character,
+    social,
+    base_modified_at: baseModifiedAt,
   })
 }
 

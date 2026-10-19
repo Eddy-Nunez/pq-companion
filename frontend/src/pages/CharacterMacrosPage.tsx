@@ -28,13 +28,16 @@ import {
 } from '@dnd-kit/core'
 import {
   getAllMacros,
+  getPage10Keybinds,
   getTextColors,
   listCharacters,
   parseMacrosFile,
   updateMacros,
   type Character,
 } from '../services/api'
-import type { MacroButton, MacroColor, MacroFile } from '../types/zeal'
+import type { KeyBind, MacroButton, MacroColor, MacroFile, Page10Binds } from '../types/zeal'
+import { Page10KeybindPanel } from '../components/Page10KeybindPanel'
+import { formatKeybind } from '../lib/eqKeybind'
 import { useActiveCharacter } from '../contexts/ActiveCharacterContext'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { BuffPicker } from '../components/BuffPicker'
@@ -815,6 +818,8 @@ interface MacroSlotProps {
   button: MacroButton | undefined
   palette: Map<number, MacroColor>
   onEdit: () => void
+  // Page 10 only: the Zeal keybind that fires this slot, shown as a badge.
+  keybind?: KeyBind
 }
 
 // One cell of the 2×6 macro grid. The whole slot is both draggable (when it
@@ -828,7 +833,7 @@ interface MacroSlotProps {
 // click still open the editor without starting a drag. Page 1's built-in
 // socials arrive as ordinary pre-filled buttons, so they render and drag just
 // like any other.
-function MacroSlot({ btn, button, palette, onEdit }: MacroSlotProps): React.ReactElement {
+function MacroSlot({ btn, button, palette, onEdit, keybind }: MacroSlotProps): React.ReactElement {
   const isEmpty = !button || buttonIsEmpty(button)
   const id = String(btn)
   const {
@@ -898,10 +903,23 @@ function MacroSlot({ btn, button, palette, onEdit }: MacroSlotProps): React.Reac
         >
           {isEmpty ? 'Empty' : button!.name || '(unnamed)'}
         </span>
+        {keybind?.primary && (
+          <span
+            className="ml-auto shrink-0 rounded border px-1 font-mono text-[9px]"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-primary)' }}
+            title={
+              keybind.alternate
+                ? `Keybind ${formatKeybind(keybind.primary)}, alternate ${formatKeybind(keybind.alternate)}`
+                : `Keybind ${formatKeybind(keybind.primary)}`
+            }
+          >
+            {formatKeybind(keybind.primary)}
+          </span>
+        )}
         {!isEmpty && (
           <GripVertical
             size={12}
-            className="ml-auto shrink-0"
+            className={keybind?.primary ? 'shrink-0' : 'ml-auto shrink-0'}
             style={{ color: 'var(--color-muted)' }}
           />
         )}
@@ -939,6 +957,10 @@ export default function CharacterMacrosPage(): React.ReactElement {
   const [importing, setImporting] = useState(false)
   const [importState, setImportState] = useState<{ sourceCharacter: string; rows: ImportRow[] } | null>(null)
   const [draggingBtn, setDraggingBtn] = useState<number | null>(null)
+  // Zeal Page 10 keybinds for the viewed character, from eqclient.ini. Null
+  // until loaded or when the file cannot be read; the panel is simply absent.
+  const [page10Binds, setPage10Binds] = useState<Page10Binds | null>(null)
+  const [bindsReload, setBindsReload] = useState(0)
 
   // Pointer-based drag with a 6px activation distance: a plain click still opens
   // the editor, only a real drag rearranges. dnd-kit (not native HTML5 drag)
@@ -978,6 +1000,19 @@ export default function CharacterMacrosPage(): React.ReactElement {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!viewed) {
+      setPage10Binds(null)
+      return
+    }
+    let cancelled = false
+    getPage10Keybinds(viewed)
+      .then((b) => { if (!cancelled) setPage10Binds(b.found ? b : null) })
+      // Keybinds are additive to the macro editor; never take it down.
+      .catch(() => { if (!cancelled) setPage10Binds(null) })
+    return () => { cancelled = true }
+  }, [viewed, bindsReload])
 
   useEffect(() => {
     if (files.length === 0) {
@@ -1272,7 +1307,7 @@ export default function CharacterMacrosPage(): React.ReactElement {
           <Download size={12} className={importing ? 'animate-pulse' : ''} /> Import
         </button>
         <button
-          onClick={load}
+          onClick={() => { load(); setBindsReload((n) => n + 1) }}
           disabled={saving}
           className="flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40"
           style={{ color: 'var(--color-muted-foreground)' }}
@@ -1406,6 +1441,9 @@ export default function CharacterMacrosPage(): React.ReactElement {
                     button={buttonsByKey.get(keyOf(page, btn))}
                     palette={palette}
                     onEdit={() => setEditing({ page, button: btn })}
+                    keybind={
+                      page === 10 ? page10Binds?.social.find((k) => k.slot === btn) : undefined
+                    }
                   />
                 ))}
               </div>
@@ -1434,6 +1472,14 @@ export default function CharacterMacrosPage(): React.ReactElement {
                 })()}
               </DragOverlay>
             </DndContext>
+            {page === 10 && page10Binds && (
+              <Page10KeybindPanel
+                character={viewedFile.character}
+                binds={page10Binds}
+                buttons={viewedFile.buttons}
+                onSaved={setPage10Binds}
+              />
+            )}
           </>
         )}
       </div>

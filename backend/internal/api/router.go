@@ -96,7 +96,7 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 	charactersH := &charactersHandler{store: charStore, mgr: cfgMgr, db: database, watcher: zealWatcher}
 	statSnapshotsH := &statSnapshotsHandler{charStore: charStore, store: mystatsStore}
 	search := &searchHandler{db: database}
-	zealH := &zealHandler{watcher: zealWatcher, cfgMgr: cfgMgr, db: database, pipe: pipeSupervisor, latest: zeal.NewLatestFetcher(), charStore: charStore}
+	zealH := &zealHandler{watcher: zealWatcher, cfgMgr: cfgMgr, db: database, pipe: pipeSupervisor, latest: zeal.NewLatestFetcher(), charStore: charStore, backupMgr: backupMgr}
 	keysH := &keysHandler{watcher: zealWatcher, keyring: keyringStore}
 	backupH := &backupHandler{mgr: backupMgr}
 	appBackupH := &appBackupHandler{mgr: appBackupMgr}
@@ -388,6 +388,8 @@ func NewRouter(database *db.DB, hub *ws.Hub, cfgMgr *config.Manager, zealWatcher
 			r.Put("/macros", zealH.updateMacros)
 			r.Get("/macros/all", zealH.allMacros)
 			r.Post("/macros/parse-file", zealH.parseMacrosFile)
+			r.Get("/keybinds/page10", zealH.page10Keybinds)
+			r.Put("/keybinds/page10", zealH.updatePage10Keybinds)
 			r.Get("/text-colors", zealH.textColors)
 		})
 		r.Route("/keys", func(r chi.Router) {

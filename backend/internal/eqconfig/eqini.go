@@ -197,7 +197,14 @@ func setINIKeyInSection(content, section, key, value string) string {
 	}
 
 	if inTarget && !done { // target section ran to EOF
-		out = append(out, key+"="+value)
+		// Insert after the section's last line, not after the empty string a
+		// trailing newline leaves at the end — appending there would leave a
+		// blank line inside the section and the file without a final newline.
+		at := len(out)
+		for at > 0 && strings.TrimSpace(out[at-1]) == "" {
+			at--
+		}
+		out = append(out[:at], append([]string{key + "=" + value}, out[at:]...)...)
 		done = true
 	}
 	if !sectionExists && !done { // section not present anywhere → append it

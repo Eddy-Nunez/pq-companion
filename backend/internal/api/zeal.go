@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jasonsoprovich/pq-companion/backend/internal/backup"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/character"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/config"
 	"github.com/jasonsoprovich/pq-companion/backend/internal/db"
@@ -36,6 +37,8 @@ type zealHandler struct {
 	pipe      *zealpipe.Supervisor
 	latest    *zeal.LatestFetcher
 	charStore *character.Store
+	// backupMgr snapshots the EQ config files before a write to eqclient.ini.
+	backupMgr *backup.Manager
 }
 
 // enrichEntries fills in the Icon and MaxCharges fields on each entry by looking
@@ -841,6 +844,100 @@ func (h *zealHandler) updateMacros(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(struct {
 		Macros *zeal.MacroFile `json:"macros"`
 	}{Macros: reloaded})
+}
+
+// GET /api/zeal/keybinds/page10?character=Name
+// Returns the character's Zeal Page 10 social keybinds from eqclient.ini, read
+// from [KeyMaps_<Name>] or [KeyMaps] per Zeal's PerCharKeybinds.
+func (h *zealHandler) page10Keybinds(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("character")
+	if !isSafeCharacterName(name) {
+		writeError(w, http.StatusBadRequest, "invalid character name")
+		return
+	}
+	cfg := h.cfgMgr.Get()
+	if cfg.EQPath == "" {
+		writeError(w, http.StatusBadRequest, "EQ path not configured")
+		return
+	}
+	binds, err := eqconfig.ReadPage10Binds(cfg.EQPath, name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(binds)
+}
+
+// PUT /api/zeal/keybinds/page10
+// Body: {"character": "Name", "social": [{"slot","primary","alternate"}, ...],
+//
+//	"base_modified_at": "<modified_at from the GET>"}
+//
+// Writes only the given Page 10 social binds, after an automatic config backup.
+// 409 when eqclient.ini changed since the GET — the client rewrites it on exit,
+// and that must never be silently overwritten. Returns the re-read binds.
+func (h *zealHandler) updatePage10Keybinds(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Character      string             `json:"character"`
+		Social         []eqconfig.KeyBind `json:"social"`
+		BaseModifiedAt *time.Time         `json:"base_modified_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if !isSafeCharacterName(body.Character) {
+		writeError(w, http.StatusBadRequest, "invalid character name")
+		return
+	}
+	for _, kb := range body.Social {
+		if kb.Slot < 1 || kb.Slot > eqconfig.Page10SocialSlots {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("slot %d out of range", kb.Slot))
+			return
+		}
+		for _, v := range []string{kb.Primary, kb.Alternate} {
+			if !eqconfig.ValidBindValue(v) {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("slot %d: unsupported key %q", kb.Slot, v))
+				return
+			}
+		}
+	}
+	cfg := h.cfgMgr.Get()
+	if cfg.EQPath == "" {
+		writeError(w, http.StatusBadRequest, "EQ path not configured")
+		return
+	}
+	var base time.Time
+	if body.BaseModifiedAt != nil {
+		base = *body.BaseModifiedAt
+	}
+	// Checked here as well as in SetPage10Binds so a stale editor gets its 409
+	// before a backup is taken for a write that will not happen.
+	if cur, err := eqconfig.ReadPage10Binds(cfg.EQPath, body.Character); err == nil &&
+		cur.Found && !base.IsZero() && !cur.ModifiedAt.Equal(base) {
+		writeError(w, http.StatusConflict, "eqclient.ini changed on disk since it was loaded — Refresh, then reapply your keybind edits")
+		return
+	}
+	if h.backupMgr != nil {
+		if _, err := h.backupMgr.Create("Before changing Page 10 keybinds", "Auto-backup before writing eqclient.ini"); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("backup before write failed: %s", err))
+			return
+		}
+	}
+	if err := eqconfig.SetPage10Binds(cfg.EQPath, body.Character, body.Social, base); err != nil {
+		if errors.Is(err, eqconfig.ErrChangedOnDisk) {
+			writeError(w, http.StatusConflict, "eqclient.ini changed on disk since it was loaded — Refresh, then reapply your keybind edits")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	binds, err := eqconfig.ReadPage10Binds(cfg.EQPath, body.Character)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "wrote file but failed to re-read it")
+		return
+	}
+	json.NewEncoder(w).Encode(binds)
 }
 
 // GET /api/zeal/macros/all
