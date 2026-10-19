@@ -2014,6 +2014,24 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.29.0 — Page 10 Keybinds, Per-Overlay Opacity, Map Search Highlights
+
+- **Page 10 social keybinds** — Macros Page 10 shows each slot's SocialPage10
+  bind; edits primary/alternate in eqclient.ini [KeyMaps] or
+  [KeyMaps_<Name>] (Zeal PerCharKeybinds). Two-modifier combos refused,
+  config backup first, 409 on external change, clashes flagged.
+- **Per-overlay opacity** — `overlay_opacities` (0–1, negative = follow
+  global) with an Opacity dropdown per overlay; Overlay Windows table gets
+  column headers, a lock-mode dropdown, and horizontal scroll.
+- **Live-map search** — results grouped by name with ×N and highlight-all;
+  "Show all N" highlights every match. mapgen pins PoP traps and
+  loot_lockout raid bosses; `-pois-only` refreshes POIs without a client.
+- **Install guards** — unmanaged (no NSIS uninstaller) copies report updates
+  as manual downloads and warn if a registered install exists elsewhere;
+  a lock-holding older copy in another folder is named with Show in Explorer.
+- **Wine/Proton** — native frame (`PQC_NATIVE_FRAME`), device scale factor 1
+  (`PQC_SCALE_FACTOR`), Zeal pipe discovery via eqgame.exe PIDs.
+
 ## v0.28.2 — Alert Output Device, Per-Overlay Fade, Saved Roll Groupings
 
 - **Alert output device** — `audio_output_device_id` / `_label`; sound
