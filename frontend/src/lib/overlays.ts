@@ -132,3 +132,17 @@ export function resolveFadeEnabled(
   if (mode === 'off') return false
   return globalEnabled
 }
+
+/**
+ * Resolve an overlay's background opacity: its own override when set (0–1),
+ * otherwise the global overlay_opacity. A negative override means "Default" —
+ * see Preferences.overlay_opacities for why it is not a deleted key.
+ */
+export function resolveOverlayOpacity(
+  overrides: Partial<Record<string, number>> | undefined,
+  name: OverlayName,
+  globalOpacity: number,
+): number {
+  const v = overrides?.[name]
+  return typeof v === 'number' && v >= 0 && v <= 1 ? v : globalOpacity
+}

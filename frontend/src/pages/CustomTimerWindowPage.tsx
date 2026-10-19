@@ -209,7 +209,7 @@ export default function CustomTimerWindowPage(): React.ReactElement {
   const groupId = searchParams.get('group') ?? ''
   const groupName = searchParams.get('name') ?? ''
 
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('customTimer')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('customTimer')
   const chrome = useOverlayChromeFade('customTimer', mode === 'display-only')

@@ -979,7 +979,7 @@ export default function SettingsPage(): React.ReactElement {
       {/* The Overlays tab holds a wide per-overlay control table (Pop out /
           Reset / Monitor / lock-mode), so it gets more horizontal room than
           the other tabs to keep those columns from clipping. */}
-      <div className={`mx-auto p-6 ${tab === 'overlays' ? 'max-w-3xl' : 'max-w-xl'}`}>
+      <div className={`mx-auto p-6 ${tab === 'overlays' ? 'max-w-4xl' : 'max-w-xl'}`}>
       {/* Page header — shows the active tab's name; the sidebar carries the
           overall "Settings" branding. */}
       <div className="mb-6 flex items-center gap-3">
@@ -2147,7 +2147,7 @@ export default function SettingsPage(): React.ReactElement {
             Overlays
           </h2>
           <p className="mb-4 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-            Controls transparency for all popout overlay windows (DPS, Buff Timers, NPC, Triggers).
+            Background transparency for popout overlay windows. To set one overlay differently (say, solid on a second monitor), use its Opacity dropdown under Overlay Windows below.
           </p>
 
           <div className="flex items-center gap-4">
@@ -2436,6 +2436,17 @@ export default function SettingsPage(): React.ReactElement {
               preferences: {
                 ...config.preferences,
                 overlay_fade_modes: next,
+              },
+            })
+          }
+          opacities={config.preferences.overlay_opacities ?? {}}
+          opacityGlobal={config.preferences.overlay_opacity}
+          onOpacityChange={(next) =>
+            setConfig({
+              ...config,
+              preferences: {
+                ...config.preferences,
+                overlay_opacities: next,
               },
             })
           }
@@ -4325,18 +4336,69 @@ const VISIBLE_OVERLAY_DEFS = DEV_HPS
   ? OVERLAY_DEFS
   : OVERLAY_DEFS.filter((def) => def.name !== 'hps')
 
+// Per-overlay opacity steps. The global slider runs 10–100%, so these match.
+const OVERLAY_OPACITY_STEPS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
+// OverlayOpacitySelect overrides the global overlay opacity for one overlay.
+// "Default" is stored as -1 rather than deleting the key, for the same reason
+// the Fade dropdown stores '': the config PUT decodes over the existing map,
+// so a removed key would survive server-side.
+function OverlayOpacitySelect({
+  label,
+  value,
+  globalValue,
+  onChange,
+}: {
+  label: string
+  value: number | undefined
+  globalValue: number
+  onChange: (v: number) => void
+}): React.ReactElement {
+  const pct = value != null && value >= 0 ? Math.round(value * 100) : null
+  // A value set some other way (an imported config) still shows as itself.
+  const steps =
+    pct != null && !OVERLAY_OPACITY_STEPS.includes(pct)
+      ? [...OVERLAY_OPACITY_STEPS, pct].sort((a, b) => a - b)
+      : OVERLAY_OPACITY_STEPS
+  return (
+    <select
+      value={pct ?? ''}
+      onChange={(e) => onChange(e.target.value === '' ? -1 : Number(e.target.value) / 100)}
+      className="rounded px-1.5 py-1 outline-none"
+      style={{
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-foreground)',
+        cursor: 'pointer',
+      }}
+      title={`Background opacity of the ${label} overlay — Default follows the global Overlay Opacity setting`}
+    >
+      <option value="">Default ({Math.round(globalValue * 100)}%)</option>
+      {steps.map((n) => (
+        <option key={n} value={n}>{n}%</option>
+      ))}
+    </select>
+  )
+}
+
 function OverlayLockModeCard({
   modes,
   onChange,
   fadeModes,
   fadeGlobal,
   onFadeChange,
+  opacities,
+  opacityGlobal,
+  onOpacityChange,
 }: {
   modes: Partial<Record<OverlayName, LockedMode>>
   onChange: (next: Partial<Record<OverlayName, LockedMode>>) => void
   fadeModes: Partial<Record<OverlayName, FadeMode | ''>>
   fadeGlobal: boolean
   onFadeChange: (next: Partial<Record<OverlayName, FadeMode | ''>>) => void
+  opacities: Partial<Record<OverlayName, number>>
+  opacityGlobal: number
+  onOpacityChange: (next: Partial<Record<OverlayName, number>>) => void
 }): React.ReactElement {
   // Per-overlay popout open-state + the monitor each overlay currently sits on,
   // keyed by canonical overlay name. Polled like the dashboard's manager since
@@ -4399,7 +4461,7 @@ function OverlayLockModeCard({
         className="mb-1 text-sm font-semibold uppercase tracking-wide"
         style={{ color: 'var(--color-muted)' }}
       >
-        Overlay Lock Behaviour
+        Overlay Windows
       </h2>
       <p className="mb-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
         When an overlay is locked it can&rsquo;t be moved or resized. Choose how
@@ -4410,10 +4472,11 @@ function OverlayLockModeCard({
         dropdown to send it to another screen.{' '}
         <span style={{ color: 'var(--color-foreground)' }}>Reset position</span>{' '}
         recenters a drifted overlay on your primary monitor.{' '}
-        <span style={{ color: 'var(--color-foreground)' }}>Fade</span> overrides
-        the Fade When Inactive setting for just that overlay — handy for
-        fading overlays over the game while keeping ones on another screen
-        solid.
+        <span style={{ color: 'var(--color-foreground)' }}>Opacity</span> and{' '}
+        <span style={{ color: 'var(--color-foreground)' }}>Fade</span> override
+        the global Overlay Opacity and Fade When Inactive settings for just
+        that overlay — handy for keeping overlays over the game see-through
+        while ones on another screen stay solid.
       </p>
 
       {/* Mode legend */}
@@ -4451,20 +4514,38 @@ function OverlayLockModeCard({
       </div>
 
       {/* Per-overlay rows — a single grid so the Pop out / Reset / Monitor /
-          lock-mode columns line up cleanly across rows regardless of label
+          Opacity / Fade / lock-mode columns line up cleanly across rows regardless of label
           length. The Monitor column only appears on multi-monitor setups. */}
+      {/* Scrolls sideways rather than clipping when the window is too narrow
+          for every column (the Monitor column adds one on multi-monitor
+          setups). */}
+      <div className="overflow-x-auto">
       <div
         className="text-xs"
         style={{
           display: 'grid',
           gridTemplateColumns: multiMonitor
-            ? 'minmax(80px,1fr) auto auto auto auto auto'
-            : 'minmax(80px,1fr) auto auto auto auto',
+            ? 'minmax(80px,1fr) auto auto auto auto auto auto'
+            : 'minmax(80px,1fr) auto auto auto auto auto',
           columnGap: 10,
           rowGap: 8,
           alignItems: 'center',
         }}
       >
+        {/* Column labels, so each dropdown can show just its value — with a
+            "Opacity:" style prefix in every option the row ran past the
+            card's edge. */}
+        {['', '', '', ...(multiMonitor ? ['Monitor'] : []), 'Opacity', 'Fade', 'When locked'].map(
+          (h, i) => (
+            <span
+              key={i}
+              className="text-[10px] uppercase tracking-wide"
+              style={{ color: 'var(--color-muted)' }}
+            >
+              {h}
+            </span>
+          ),
+        )}
         {VISIBLE_OVERLAY_DEFS.map((def) => {
           const mode = resolveLockedMode(modes, def.name)
           return (
@@ -4529,6 +4610,12 @@ function OverlayLockModeCard({
                   ))}
                 </select>
               )}
+              <OverlayOpacitySelect
+                label={def.label}
+                value={opacities[def.name]}
+                globalValue={opacityGlobal}
+                onChange={(v) => onOpacityChange({ ...opacities, [def.name]: v })}
+              />
               <select
                 value={fadeModes[def.name] ?? ''}
                 // "Default" is stored as '' rather than deleting the key: the
@@ -4546,11 +4633,12 @@ function OverlayLockModeCard({
                 }}
                 title={`Fade the ${def.label} overlay when inactive — Default follows the global Fade When Inactive setting`}
               >
-                <option value="">Fade: Default ({fadeGlobal ? 'on' : 'off'})</option>
-                <option value="on">Fade: On</option>
-                <option value="off">Fade: Off</option>
+                <option value="">Default ({fadeGlobal ? 'on' : 'off'})</option>
+                <option value="on">On</option>
+                <option value="off">Off</option>
               </select>
-              <LockModeToggle
+              <LockModeSelect
+                label={def.label}
                 value={mode}
                 onChange={(next) => onChange({ ...modes, [def.name]: next })}
               />
@@ -4558,41 +4646,42 @@ function OverlayLockModeCard({
           )
         })}
       </div>
+      </div>
     </section>
   )
 }
 
 // LockModeToggle is a two-segment control choosing between the locked modes.
-function LockModeToggle({
+// LockModeSelect picks an overlay's locked behaviour. A dropdown rather than
+// three side-by-side buttons so the row fits beside the Opacity and Fade
+// dropdowns; the buttons pushed it past the card's edge. The legend above
+// the table still explains each mode.
+function LockModeSelect({
+  label,
   value,
   onChange,
 }: {
+  label: string
   value: LockedMode
   onChange: (next: LockedMode) => void
 }): React.ReactElement {
   return (
-    <div
-      className="inline-flex overflow-hidden rounded"
-      style={{ border: '1px solid var(--color-border)' }}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as LockedMode)}
+      className="rounded px-1.5 py-1 outline-none"
+      style={{
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-foreground)',
+        cursor: 'pointer',
+      }}
+      title={`How the ${label} overlay reacts to the mouse while locked`}
     >
-      {LOCK_MODE_OPTIONS.map((opt) => {
-        const active = value === opt.value
-        return (
-          <button
-            key={opt.value}
-            onClick={() => onChange(opt.value)}
-            className="whitespace-nowrap px-2 py-1 text-xs"
-            style={{
-              backgroundColor: active ? 'var(--color-primary)' : 'transparent',
-              color: active ? '#fff' : 'var(--color-muted-foreground)',
-              cursor: 'pointer',
-            }}
-          >
-            {opt.label}
-          </button>
-        )
-      })}
-    </div>
+      {LOCK_MODE_OPTIONS.map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
   )
 }
 

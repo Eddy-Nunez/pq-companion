@@ -17,7 +17,7 @@ import { useWindowDrag } from '../hooks/useWindowDrag'
 import OverlayLockButton from '../components/OverlayLockButton'
 
 export default function FilteredTimerWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('filteredTimer')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('filteredTimer')
   const chrome = useOverlayChromeFade('filteredTimer', mode === 'display-only')

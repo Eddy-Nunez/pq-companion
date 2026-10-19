@@ -19,7 +19,7 @@ import type { ZoneLockoutBoss } from '../types/lockouts'
 import { deriveZoneLockoutRow, sortZoneLockoutRows, ZoneLockoutRow } from '../components/overlays/zoneLockoutsShared'
 
 export default function ZoneLockoutsWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('zoneLockouts')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('zoneLockouts')
   const chrome = useOverlayChromeFade('zoneLockouts', mode === 'display-only')

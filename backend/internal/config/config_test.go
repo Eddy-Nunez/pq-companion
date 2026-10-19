@@ -74,6 +74,8 @@ func TestLoadFrom_roundTrip(t *testing.T) {
 			OverlayOpacity: 0.75,
 			MinimizeToTray: false,
 			ParseCombatLog: false,
+			// -1 is the "follow the global setting" sentinel and must survive.
+			OverlayOpacities: map[string]float64{"buffTimer": 1, "dps": -1},
 		},
 	}
 	if err := m.Update(want); err != nil {
@@ -98,6 +100,9 @@ func TestLoadFrom_roundTrip(t *testing.T) {
 	}
 	if got.Preferences.OverlayOpacity != want.Preferences.OverlayOpacity {
 		t.Errorf("OverlayOpacity: got %v, want %v", got.Preferences.OverlayOpacity, want.Preferences.OverlayOpacity)
+	}
+	if o := got.Preferences.OverlayOpacities; o["buffTimer"] != 1 || o["dps"] != -1 {
+		t.Errorf("OverlayOpacities: got %v, want buffTimer=1 dps=-1", o)
 	}
 	if got.Preferences.MinimizeToTray != want.Preferences.MinimizeToTray {
 		t.Errorf("MinimizeToTray: got %v, want %v", got.Preferences.MinimizeToTray, want.Preferences.MinimizeToTray)

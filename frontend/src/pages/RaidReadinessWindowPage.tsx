@@ -14,7 +14,7 @@ import OverlayLockButton from '../components/OverlayLockButton'
 import { deriveGapRows, RaidGapRow } from '../components/overlays/raidReadinessShared'
 
 export default function RaidReadinessWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('raidReadiness')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('raidReadiness')
   const chrome = useOverlayChromeFade('raidReadiness', mode === 'display-only')

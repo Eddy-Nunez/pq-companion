@@ -39,7 +39,7 @@ import { getConfig } from '../services/api'
 import { isValidStreamKitVoiceUrl } from '../lib/overlays'
 
 export default function DiscordVoiceOverlayWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('discordVoice')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('discordVoice')
   const chrome = useOverlayChromeFade('discordVoice', mode === 'display-only')

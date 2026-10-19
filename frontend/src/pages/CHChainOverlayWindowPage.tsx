@@ -256,7 +256,7 @@ function ChainRow({
 }
 
 export default function CHChainOverlayWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('chChain')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('chChain')
   const chrome = useOverlayChromeFade('chChain', mode === 'display-only')

@@ -22,7 +22,7 @@ import { RespawnRow } from '../components/overlays/respawnShared'
 import type { RespawnState } from '../types/respawn'
 
 export default function RespawnTimerWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('respawnTimer')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('respawnTimer')
   const chrome = useOverlayChromeFade('respawnTimer', mode === 'display-only')

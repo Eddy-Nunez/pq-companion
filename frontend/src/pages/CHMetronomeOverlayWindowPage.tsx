@@ -177,7 +177,7 @@ function ChainSwitch({ chain, onChange }: { chain: ChainView; onChange: (v: Chai
 }
 
 export default function CHMetronomeOverlayWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('chMetronome')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('chMetronome')
   const chrome = useOverlayChromeFade('chMetronome', mode === 'display-only')

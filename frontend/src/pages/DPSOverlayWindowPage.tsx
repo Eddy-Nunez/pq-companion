@@ -204,7 +204,7 @@ function FightTable({ fight, showAll, combine, mode, palette }: { fight: FightSt
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function DPSOverlayWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('dps')
   const palette = useDPSClassColors()
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('dps')

@@ -165,7 +165,7 @@ function TimerRow({
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function BuffTimerWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('buffTimer')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('buffTimer')
   const chrome = useOverlayChromeFade('buffTimer', mode === 'display-only')

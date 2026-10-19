@@ -227,7 +227,7 @@ function TimerRow({
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function DetrimTimerWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('detrimTimer')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('detrimTimer')
   const chrome = useOverlayChromeFade('detrimTimer', mode === 'display-only')

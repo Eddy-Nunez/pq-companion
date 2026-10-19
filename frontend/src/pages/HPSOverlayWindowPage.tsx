@@ -135,7 +135,7 @@ function HealTable({ fight, showAll }: { fight: FightState; showAll: boolean }):
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function HPSOverlayWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('hps')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('hps')
   const chrome = useOverlayChromeFade('hps', mode === 'display-only')

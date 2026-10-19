@@ -249,6 +249,10 @@ export interface Preferences {
   // Per-overlay override of overlay_fade_enabled ('on' / 'off'). Missing keys
   // (or '') follow the global toggle. See lib/overlays.ts resolveFadeEnabled.
   overlay_fade_modes?: Partial<Record<OverlayName, FadeMode | ''>>
+  // Per-overlay override of overlay_opacity (0–1). Missing keys, or a
+  // negative value ("Default"), follow the global setting. See lib/overlays.ts
+  // resolveOverlayOpacity.
+  overlay_opacities?: Partial<Record<OverlayName, number>>
   // Named custom Roll Tracker grouping profiles, listed with the presets so
   // a custom setup survives switching to Simple and back.
   roll_tracker_saved_profiles?: SavedRollProfile[]

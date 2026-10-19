@@ -33,7 +33,7 @@ const DEFAULT_LAYERS: MapPOICategory[] = [
 ]
 
 export default function LiveMapWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('liveMap')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('liveMap')
   const chrome = useOverlayChromeFade('liveMap', mode === 'display-only')

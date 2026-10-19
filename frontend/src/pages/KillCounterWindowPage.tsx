@@ -15,7 +15,7 @@ import { useWindowDrag } from '../hooks/useWindowDrag'
 import OverlayLockButton from '../components/OverlayLockButton'
 
 export default function KillCounterWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('killCounter')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps, rowsInteractive } =
     useOverlayLock('killCounter')
   const chrome = useOverlayChromeFade('killCounter', mode === 'display-only')

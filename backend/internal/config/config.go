@@ -719,6 +719,14 @@ type Preferences struct {
 	// keeping ones on another screen solid.
 	OverlayFadeModes map[string]string `yaml:"overlay_fade_modes,omitempty" json:"overlay_fade_modes,omitempty"`
 
+	// OverlayOpacities overrides OverlayOpacity per popout overlay (same
+	// canonical names), 0.0-1.0. A negative or missing value follows the global
+	// setting. Negative rather than a deleted key because a config PUT decodes
+	// over the existing map, so a removed key would survive server-side. Lets
+	// multi-monitor users keep overlays over the game see-through while ones on
+	// another screen stay solid.
+	OverlayOpacities map[string]float64 `yaml:"overlay_opacities,omitempty" json:"overlay_opacities,omitempty"`
+
 	// Roll Tracker overlay defaults, remembered across sessions. The tracker
 	// is otherwise stateless across restarts, but these UI preferences (e.g.
 	// a guild that always rolls lowest-wins, or runs in timer mode) should

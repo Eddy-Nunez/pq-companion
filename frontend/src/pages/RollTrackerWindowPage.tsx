@@ -453,7 +453,7 @@ function ContestRow({
 }
 
 export default function RollTrackerWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('rollTracker')
   const { locked, mode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('rollTracker')
   const chrome = useOverlayChromeFade('rollTracker', mode === 'display-only')

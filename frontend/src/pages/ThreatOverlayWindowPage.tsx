@@ -28,7 +28,7 @@ function loadMode(): ThreatMode {
 }
 
 export default function ThreatOverlayWindowPage(): React.ReactElement {
-  const opacity = useOverlayOpacity()
+  const opacity = useOverlayOpacity('threat')
   const { locked, mode: lockedMode, toggleLocked, rootInteractionProps, headerInteractionProps } =
     useOverlayLock('threat')
   const chrome = useOverlayChromeFade('threat', lockedMode === 'display-only')
