@@ -22312,8 +22312,7 @@
     "triggers": [
      "tiam sent me",
      "instrument",
-     "other item",
-     "tiam sent me"
+     "other item"
     ],
     "text": "Seems you've slain quite a few kobolds, then. This is good. You will need to kill many more to fulfill your quest. While the kobolds are fairly primitive, they are an ancient race and have learned to wield the powers of the spirits. This ability is the only thing that has kept us from eradicating them completely. We need you to find instruments of their craft."
    },
@@ -22520,8 +22519,7 @@
     "triggers": [
      "new priest",
      "protect the depth",
-     "convert fishermen in qeynos",
-     "new priest"
+     "convert fishermen in qeynos"
     ],
     "text": "As I suspected. I shall assist you with your training and you shall assist the temple with your service. A young priest can help out by asking to [convert fishermen in Qeynos] or maybe even something truly great such as requesting to [protect the depths]."
    },
@@ -22681,8 +22679,7 @@
    {
     "triggers": [
      "protect the peace",
-     "catch the poachers",
-     "protect the peace"
+     "catch the poachers"
     ],
     "text": "It was a fine decision. We are in need of your services.  It seems there is a disturbance in Toxxulia Forest.  There are poachers from other nations who have sought to cause turbulence among the creatures there.  Will you help us [catch the poachers] or are you skeptical about this mission?"
    },
@@ -22827,8 +22824,7 @@
      "kobold shaman",
      "slay",
      "powerful",
-     "greater kobold",
-     "kobold shaman"
+     "greater kobold"
     ],
     "text": "The primitive kobold race has begun to show signs of healing ability. No doubt this was granted by some evil deity. Since they are of little power compared to a much more superior race such as ours. we only require the talents of young priests to [slay the kobold shaman]."
    },
@@ -23050,8 +23046,7 @@
      "retrieve the peacekeeper staffs",
      "battle the undead",
      "important missions",
-     "track down the staff",
-     "new acolyte of peace"
+     "track down the staff"
     ],
     "text": "Then you shall learn the ways of Quellious and learn to do as you are told by higher ranking members. It is time for you to do the lesser duties of a young priest. Which will it be? [Retrieve the Peacekeeper staffs] or [battle the undead]?"
    },
@@ -24200,8 +24195,7 @@
    {
     "triggers": [
      "collect component",
-     "special matter",
-     "collect component"
+     "special matter"
     ],
     "text": "Of course you may assist me!! We have much need of a certain item which can only be found in the frigid peaks of Everfrost. There you shall find creatures called ice goblins. Take this bag and fill it with ice goblin beads and be sure to combine them before you return them. Well, then... Off with you!! And be quick about it and I shall give you a fine wizard's weapon. None of this rust-covered garbage offered by our associates!",
     "grants": [
@@ -24798,8 +24792,7 @@
    {
     "triggers": [
      "slight problem",
-     "summoning",
-     "slight problem"
+     "summoning"
     ],
     "text": "We have heard rumor of an troll who has taken residence within the forest of Toxxulia. During your travels in Toxxulia, we command you to keep a watchful eye out for the beast. Slay it on sight and return its head to me. To do so will earn you the spell Fire Flux or Burn, whichever may be available at the time."
    },
@@ -45201,8 +45194,7 @@
     "triggers": [
      "serve halas",
      "orc troopers",
-     "protect the pass",
-     "serve halas"
+     "protect the pass"
     ],
     "text": "Halas is surrounded by barren arctic tundra. We've many foes. Among them are the [orc troopers]. [ice goblins] and the ever-present polar bears."
    },
@@ -45349,8 +45341,7 @@
     "triggers": [
      "apprehend the fugitives",
      "young shaman",
-     "member of the court",
-     "apprehend the fugitives"
+     "member of the court"
     ],
     "text": "Maybe so, however, there are some who may be too much fer ye to handle. I'll need to know if ye're a [young shaman] or a [standin' member of the court]."
    },
@@ -45858,8 +45849,7 @@
     "triggers": [
      "cure disease",
      "bind wounds",
-     "cure poison",
-     "cure disease"
+     "cure poison"
     ],
     "text": "Two small quantities o' wooly fungus are needed before we can cure yer malady."
    },
@@ -50450,8 +50440,7 @@
      "sacred way",
      "faith in my heart",
      "willing",
-     "azure idol of karana",
-     "hail"
+     "azure idol of karana"
     ],
     "text": "Good day to you, . I am Annous Pineshadow, high priest of The Rainkeeper and ambassador of Qeynos. It has been a [long] time since I last set foot within the Jaggedpine, and although not surprised, I am amazed and awestruck at the untouched purity of these sacred grounds. It is very much a relief to know that the forest has been sparred the taint of the venomous world that has become Norrath."
    },
@@ -50490,8 +50479,7 @@
      "prove myself worthy",
      "dormant crystal sphere",
      "unique to the rainkeeper",
-     "writ",
-     "prove myself worthy"
+     "writ"
     ],
     "text": "Then your endeavor shall continue, my child. Take this scroll -- to you now it holds no meaning but in due time you shall understand. Keep the scroll close to you until you have sought and successfully acquired the [Dormant Crystal Sphere] and [The Rainkeeper's Writ].",
     "grants": [
@@ -51076,8 +51064,7 @@
      "turned",
      "victor",
      "blade",
-     "purge the corruption",
-     "hail"
+     "purge the corruption"
     ],
     "text": "closes his eyes and gives a mid-bow of his head toward you. 'Greetings, traveler. It is an honor to be reunited with our kindred of the outside world of Norrath, and a great pleasure to make your acquaintance. I am Kaithys Galestrider, citizen and formerly one of many dedicated protectors of the Jaggedpine. Alas, the cycle of life has grown gray in this once vibrant body. Aaaah. . . but do not think that my spirit has grown weary as this body, dear child. I still retain a will of iron and my wisdom has only strengthened with the passing of time. [I still hold a great knowledge] unique to this old mind and my dedication toward this forest and our people is quite strong yet. Do not underestimate the power of sheer will, child, for it can be more cunning and deadly than even the sharpest of blades wielded by the mightiest of warriors.'"
    },
@@ -51306,8 +51293,7 @@
      "decision",
      "truth",
      "doubt",
-     "have his tale",
-     "hail"
+     "have his tale"
     ],
     "text": "closes her eyes and gives a formal, polite bow to you, 'I am Lady Deira, Veteran of Thunder and one of several ambassadors to the Jaggedpine from Qeynos. It is a pleasure to make your acquaintance, although I fear that I am not one for words or company at the moment. I have [duties] to uphold and must give the fullest of my attentions to the fort.'"
    },
@@ -51541,8 +51527,7 @@
      "ask of her",
      "guide me",
      "silver griffon",
-     "jade studded",
-     "hail"
+     "jade studded"
     ],
     "text": "gives a gentle nod to . 'Greetings. I am Nolan Greenwood, warder of the Jaggedpine and retainer of our [ancient ways]. The recent introduction of [outsiders] whose faith and loyalties mimic our own toward The Rainkeeper has led to the rebirth of a long lost excitement and use for my talents, thus my presence here today. Usually, I would not be so easily found for when presented with the choice, for I prefer the sanctuary of the open forest to the confining walls of my room here at Fort Jaggedpine.'"
    },
@@ -51889,8 +51874,7 @@
      "stolen",
      "retrieve the ancient ashwood tome",
      "aid the order",
-     "components",
-     "hail"
+     "components"
     ],
     "text": "gives a soft smile and delicate motion with her hand and bow of her head, 'Greetings, . It is a pleasure to make your acquaintance. I am Shayna Thunderhand -- sorceress of The Rainkeeper and one of many ambassadors to the Jaggedpine. The recent events have yielded quite an interesting turn in our [organization's] duties -- and we are very excited to once again be reunited with our brethren and homeland.'"
    },
@@ -52048,8 +52032,7 @@
      "hail",
      "patty melt",
      "grilled cheese sandwich",
-     "dryad pate",
-     "hail"
+     "dryad pate"
     ],
     "text": "Whatchoo want?"
    },
@@ -52130,8 +52113,7 @@
      "treant finger",
      "bear liver",
      "griffon down",
-     "griffon skull",
-     "favor"
+     "griffon skull"
     ],
     "text": "I see that you truly respect our temple and more importantly, myself. Since I have great power and you have given me many gifts, I am willing to give you a gift if you are skilled in the ways of the [mystic] or the [heretic]."
    },
@@ -52218,8 +52200,7 @@
      "respect temple",
      "food",
      "dryad pate",
-     "necklace",
-     "hail"
+     "necklace"
     ],
     "text": "Shhh. quiet! This is place of solitude and peace! You [respect temple] while you here if you know what good for you!"
    },
@@ -65499,6 +65480,8 @@
   "npc": "Venenzi Oberzendi",
   "rewards": [
    15199,
+   15456,
+   16441,
    20643,
    20649
   ],
@@ -65506,6 +65489,10 @@
    1320,
    11819,
    11820,
+   11865,
+   11866,
+   11867,
+   11868,
    20642
   ],
   "dialogue": [
@@ -65564,6 +65551,24 @@
     ],
     "grants": [
      15199
+    ]
+   },
+   {
+    "turnin": [
+     11865,
+     11866
+    ],
+    "grants": [
+     16441
+    ]
+   },
+   {
+    "turnin": [
+     11867,
+     11868
+    ],
+    "grants": [
+     15456
     ]
    }
   ]
@@ -76498,7 +76503,6 @@
   "dialogue": [
    {
     "triggers": [
-     "hail",
      "hail"
     ],
     "text": "Oh my hello!  It has been such a long time since I have had visitors.  Have you come to learn of [advanced tinkering] as well?"
@@ -77513,7 +77517,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Good day t'ye, traveler. The adepts of New Tanaan 'ave worked very laboriously t'properly welcome ye t'the Plane of Knowledge. Many of us 'ave delved into the past lives of our ventures upon Norrath an' 'ave brought forth from the recesses of our memories the spells that we once wielded as might t'our cause. Now, we no longer be needin' them, but we understand that ye may very well find them t'be of use yet. Oh, and if ye find an item of arcane nature though it seems t'be mundane or useless t'ye, dinnae disregard it! The planes 'old many items that are not what they seem, friend. Return such incorporeal runes and scrolls t'me and I shall make them spells worhty of any crusading paladin!"
    },
@@ -77548,7 +77552,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Greetings, . I am channeler Olaemos, one of five scholars in the art of evocation to reside here in Myrist. We have volunteered to temporarily halt our personal quests for knowledge and power beyond the material world so that we may aid the travelers in our midst. The spells we have scribed are native to your world, though in our hands they are available to all practitioners of the evocational arts despite race or religious differences. There is one other thing that I can aid you with should you truly be a wizard and that is the scribing of a most foreign and potent spell. I require you to find a piece of the untainted, fledgling magical manifestations upon the plane. These items appear as scrolls or runes that seem mundane to the eyes of mortals, though they are far more powerful than you realize. If you are fortunate enough to stumble across such a treasure, do not discard it but return it to me and I shall turn it into a power most befitting of the plane's travelers."
    },
@@ -78290,7 +78294,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Salutations. The keepers of necromancy in New Tanaan are neither your enemy or foe, as they may have been upon the material world of Norrath. Though our natures are in tact, we have elevated ourselves beyond the petty, debased bickering that Norrath has come to embody over the passing eras. All adventurers and intelligent beings are welcome in our midst, for we share only the common goal of knowledge and personal betterment in our power. I have gathered tomes and spells that I no longer have use for, as I have ascended beyond Norrath's limitations of the dark arts. However, you remain a mortal still and your abilities may never reach the esteemed levels of ours, bur do not let this discourage you. Search my tomes and perhaps I hold something of importance or relevance to your current quest for power. There is another realm of magic that I am quite familiar with, as well -- the aspects of planar magic."
    },
@@ -78599,7 +78603,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Hail and well met, my friend. New Tanaan greets you most warmly and is grateful to have you in our midst. All residents of this great Plane of Knowledge have come together in recent times with the unexpected, though warmly embraced presence of Norrathian visitors. We hope that we might be able to aid you in lending our wisdom and timeless knowledge wherever possible to your cause. I wish I could do more, my friend, but I am but a humble bard and my services may only benefit those of like profession. However, if you believe that my services could be of use, then do not hesitate to peruse my inventory and purchase what you will. If by chance you come across a curious parchment or other arcane item of seemingly unidentifiable purpose, then do not hesitate to bring it to me. Besides having composed many a song in my day, I do know a thing or two regarding mysteries of the planes' magics."
    },
@@ -78667,7 +78671,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "The mystics of New Tanaan embrace your presence among us most kindly - regard us as a friend and mentor, should you need our guidance we have offered our services to the shamans of Norrath that venture in our city. Though our guidance is that of spells native to your world, the mystic scribes in this city may hold some convenience for we do not hold the prejudice of the material world's citizens. Beyond these familiar scrolls, I may be able to aid you further should you bring me a fledgling arcane item from the planes. You will know of that which I speak if and when you stumble upon such a rare and seemingly mundane item. Do not be fooled by its plain appearance - the primordial essence of pure magic resides in these arcane relics and I can be the key to unlock them to the shamanistic powers."
    },
@@ -78882,7 +78886,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Greetings, friend, and welcome to New Tanaan. We have worked hard to properly greet you into our midst, and hope that our efforts shall not be in vain. As a ranger of Tunare in my former life upon Norrath, I have joined my fellow Pathfinders in scribing spells from memory of our journeys upon your world. These spells are not unique to the Plane of Knowledge, for they are the same as those Norrath offers to its guardians. However, they may be convenient for you to purchase here while you are browsing our libraries and engaging in the wonders of our beautiful, peaceful city. However, do not forget the scholars whilst you are engaging in the planes. You may stumble across a piece of pure arcane manifestation that may appear mundane at first, but with my help can become a spell of great power to all of nature's wardens."
    },
@@ -80001,7 +80005,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Greetings, . I am Ceraen, priest of Tunare and resident of New Tanaan for over three centuries of my existence. Do not fear those whom may have been your enemy upon the prime. The scholars are equal and without bias toward one another, thus there is no safer place in the cosmos than New Tanaan. Each resident strives to bring knowledge closer to the curious and willing, and I am not exempt from this. If you are a priest in your world and seek to gain a higher understanding of the divine power that your faith has allowed you to wield, then perhaps what spells I have penned from memory of your world would be of use. I have also mastered levels in the workings of planar magic and its chaotic ways of forming upon the manifested planes. If by chance you come across a fledgling arcane item -- you will know it for its incorporeal state -- then do not hesitate to bring it to me. I may be able to infuse it with the powers of the divine and forge from it a spell of priestly might."
    },
@@ -80159,7 +80163,7 @@
   "dialogue": [
    {
     "triggers": [
-     "Hail"
+     "hail"
     ],
     "text": "Greetings traveler. I am Wanderer Astobin, warden of nature and guardian of Tunare's most blessed and sacred of treasures -- life and balance. I have pledged my existence to upholding this vow and even here, that vow remains. Though I no longer carry my scimitar or scout the wilds of the world as one of its many guardians, my pledge shall remain whole through my guidance of others whose pledge is akin to mine. If you are a druid -- your deity matters not -- then allow me to guide you if I may. What spells I have scribed are for you to search through and purchase should you find them worthy of your abilities. If through your travels in the outer planes you discover incorporeal items seemingly of an arcane nature, do not disregard them. I am well-trained in the ways and manner of planar magic and will be more than willing to turn these fledgling arcane items into tangible spells suited for those of druidic vows."
    },
@@ -80680,7 +80684,6 @@
    {
     "triggers": [
      "hail",
-     "hail",
      "dagger",
      "help",
      "ready"
@@ -80788,7 +80791,6 @@
    {
     "triggers": [
      "destruction",
-     "continue",
      "continue"
     ],
     "text": "While you have shown yourself so far to be somewhat odd, and perhaps a bit overbearing, I must say that you are the first hope I have had that anyone might aid me in this problem. I have waited patiently for someone to come along to defeat this scourge on the land, and you may just be the one. If you feel you are courageous enough to go forth, please let me know and I will make preparations to assist you through the brush to end whatever suffering the forest is feeling beyond. I have waited patiently for someone to come along to defeat this scourge on the land, and you may just be the one. If you feel you are courageous enough to go forth, please let me know and I will make preparations to assist you through the brush to end whatever suffering the forest is feeling beyond."
@@ -86054,10 +86056,7 @@
      "bat fur",
      "rat whiskers",
      "beetle eye",
-     "experiment",
-     "bat fur",
-     "rat whiskers",
-     "beetle eye"
+     "experiment"
     ],
     "text": "You can probably find some outside the city gates... in the hills and plains."
    },
@@ -87811,8 +87810,7 @@
    {
     "triggers": [
      "retrieve key seven",
-     "second escaped gladiator",
-     "retrieve key seven"
+     "second escaped gladiator"
     ],
     "text": "Hmmm. You seem a bit young, but I shall give you a chance. Seek out the catman named Nomala. He most likely returned to [Kerra Isle]. He is not very powerful, but his people are surely watching over him. Retrieve the key for me and be rewarded."
    },
@@ -90157,8 +90155,7 @@
    {
     "triggers": [
      "follower of karana",
-     "wish to assist",
-     "follower of karana"
+     "wish to assist"
     ],
     "text": "So you are one with our cause? This is good. Be aware that there are forces at work which not even the Qeynos Guard can keep at bay. We are here to spread the words of Karana and smite those who should try to end His children. We and Antonius Bayle shall work together in our destruction of evil. He requests our aid. Do you also [wish to assist Lord Bayle]?"
    },
@@ -100631,9 +100628,7 @@
      "orc remnant",
      "orc onslaught",
      "blue orc",
-     "odd druid",
-     "candle of bravery",
-     "chalice of conquest"
+     "odd druid"
     ],
     "text": "You must be the one Sir Dru of Kaladim sent to retrieve the candlestick which was broken in the [orc onslaught]. I have only this piece in my possession as the other portion was taken by an [odd druid] of these mountains. Should you reclaim it, I am sure the maker of the candlestick can patch it together.",
     "grants": [
@@ -110741,8 +110736,7 @@
      "make a batch",
      "luclin clover",
      "drop of moonlight",
-     "essence of sonnet",
-     "know about hoober"
+     "essence of sonnet"
     ],
     "text": "I will try not to repeat what Ragnar has already told you.' After taking a deep breath, clearly taxed by the memories, he continues, 'My research had brought me to Katta Castellum. After a long day's work I took a seat at the end of the bar in a local pub. Trying to get my mind off of potions for a while, I overheard a story about a crazy man roaming Tenebrous Mountains. Everyone seemed to know him as Hoober the Delirious. Seems he had become something of a local legend for his very odd habit of asking people to gather some rather obscure ingredients in exchange for a very rare reward."
    },
@@ -133047,8 +133041,7 @@
    {
     "triggers": [
      "vex thal",
-     "dark prophet",
-     "vex thal"
+     "dark prophet"
     ],
     "text": "The city of shadow is sealed by powerful magic. Only one that wears the talisman of Akelha Ra can pass through the seals on the gate. I have not been beyond the gates but rumors of dark prophets that possess great power have been heard throughout the ages."
    },

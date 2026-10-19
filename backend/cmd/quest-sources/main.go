@@ -260,6 +260,24 @@ func parseScript(src string) (rewards, turnins []int, dialogue []dialogueBranch)
 		}
 		toks = append(toks, dlgToken{pos: c.pos, kind: tokTurnIn, items: ids})
 	}
+	// The PoK class spell vendors count hand-ins through the
+	// pop_spell_turnins module instead: `local X = spell_turnins.Count(e, ID)`,
+	// hoisted and guarded the same way as count_handed_item.
+	for _, c := range callMatches(src, "spell_turnins.Count") {
+		var ids []int
+		for _, f := range splitTopLevel(c.args)[1:] {
+			if id, err := strconv.Atoi(strings.TrimSpace(f)); err == nil && id > 0 {
+				ids = append(ids, id)
+			}
+		}
+		lookback := 64
+		if c.pos < lookback {
+			lookback = c.pos
+		}
+		if m := reDeclSuffix.FindStringSubmatch(src[c.pos-lookback : c.pos]); m != nil && len(ids) > 0 {
+			handedVars[m[1]] = ids
+		}
+	}
 	for _, m := range reHandedItemGuard.FindAllStringSubmatchIndex(src, -1) {
 		varName := src[m[2]:m[3]]
 		if ids, ok := handedVars[varName]; ok {
@@ -320,7 +338,15 @@ func parseScript(src string) (rewards, turnins []int, dialogue []dialogueBranch)
 			}
 			has = true
 			if t.kind == tokKeyword {
-				cur.Triggers = append(cur.Triggers, t.keyword)
+				// Skip case-only repeats, e.g. a module's findi("hail")
+				// hook ahead of the script's own findi("Hail").
+				dup := false
+				for _, k := range cur.Triggers {
+					dup = dup || strings.EqualFold(k, t.keyword)
+				}
+				if !dup {
+					cur.Triggers = append(cur.Triggers, t.keyword)
+				}
 			} else {
 				cur.TurnIn = append(cur.TurnIn, t.items...)
 				for _, id := range t.items {
