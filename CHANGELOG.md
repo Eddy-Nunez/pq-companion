@@ -9,6 +9,26 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.29.0 — 2026-10-19
+
+Edit your Page 10 social keybinds from the Macros tab, set opacity per overlay, and highlight every spawn point from live-map search. This release also fixes a batch of Wine/Proton issues and adds guards so old copies of the app stop shadowing the current install.
+
+### Highlights
+- **Page 10 social keybinds** — the Macros tab shows each Page 10 slot's keybind as a badge, and you can edit its primary and alternate keys there. The binds are read from and saved to eqclient.ini, and per-character keybinds from Zeal are respected. Before saving, the app backs up your config, and it warns you if a key is already used by another bind.
+- **Opacity per overlay** — each overlay in Settings → Overlays has its own Opacity setting, so overlays on a second monitor can stay solid while the ones over the game are see-through. The settings table now has column headers and scrolls sideways on narrow windows.
+- **Live-map search highlights every spawn point** — an NPC or POI with several spawn points now shows as one result with a ×N count and lights up all of them. "Show all N" highlights every match at once, for example every trap in a zone.
+- **Warnings about duplicate installs** — if an older copy in another folder is already running and blocking launch, you get a warning that names its version and location, with a Show in Explorer button. Portable or copied folders now offer updates as a manual download, instead of installing a second copy into the default location.
+
+### Fixes
+- **Buffs overwritten by a stacking conflict stayed on the overlay** — when a new buff replaces a conflicting one (e.g. Tranquility over Koadic's Endless Intellect), the old timer is removed and Live Buffs no longer adds up both buffs' stats.
+- **WIS/INT stat cap swapped** — the stat-cap raises for WIS and INT were applied to the wrong stats.
+- **Inventory page black screen** — a Zeal inventory export with only shared-bank rows no longer crashes the Inventory page.
+- **Wine/Proton: Zeal pipe never connected** — the app now finds the pipe through the running eqgame.exe processes, because Wine doesn't support listing pipes. (#161)
+- **Wine/Proton: clicks landed below the cursor** — under Wine the main window now uses the native title bar, and display scaling is fixed at 1×. `PQC_NATIVE_FRAME` and `PQC_SCALE_FACTOR` override these.
+- **Map pins missing in PoP** — Plane of Earth and Bastion of Thunder traps, and PoP raid bosses, now show on the map.
+- **PoK class spell turn-ins missing from item Quests tab** — all twelve class spell vendors are back after Quarm's turn-in rework, along with Venenzi Oberzendi's new necro spells.
+- **Game data updates** — Torment constructs and twisted crawlers drop Putrescent Blood, and corpses in Plane of Time B move to the graveyard after 30 minutes.
+
 ## v0.28.2 — 2026-10-17
 
 You can now pick which speaker or headset trigger alerts play on, set fade per overlay, and save custom roll groupings. Spell and discipline timers also catch up with PoP's level 65 cap.
