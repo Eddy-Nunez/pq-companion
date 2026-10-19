@@ -166,6 +166,17 @@ protocol.registerSchemesAsPrivileged([
 // set before app is ready.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
+// Under Wine/Proton, Chromium picks up a non-1 DPI scale (e.g. from KDE's
+// fractional scaling) that Wine's mouse coordinates don't follow, so clicks
+// drift away from the cursor. Pinning the scale to 1 fixed this for a Linux
+// reporter; the in-app zoom setting can enlarge the UI instead. An explicit
+// --force-device-scale-factor wins; PQC_SCALE_FACTOR=<n> picks another value
+// and PQC_SCALE_FACTOR=auto leaves Chromium's own choice alone.
+if (isRunningUnderWine() && !app.commandLine.hasSwitch('force-device-scale-factor')) {
+  const scale = process.env['PQC_SCALE_FACTOR'] ?? '1'
+  if (scale !== 'auto') app.commandLine.appendSwitch('force-device-scale-factor', scale)
+}
+
 // Single-instance lock. Without this, launching the shortcut again while the
 // app is already running (e.g. it's hidden in the tray and the user forgets
 // it's open) spins up a whole second copy — sidecar, windows and all — instead

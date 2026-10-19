@@ -1039,8 +1039,12 @@ These are inherent to log-file parsing and affect multiple features:
 - **Mitigation:** Under Wine (detected via `WINEPREFIX` /
   `STEAM_COMPAT_DATA_PATH` / `WINELOADER` env or `system32\winecfg.exe`) the
   main window now uses a native frame and the renderer hides `TitleBar`.
-  `PQC_NATIVE_FRAME=1` / `=0` forces it either way. Not yet confirmed by
-  the reporter.
+  `PQC_NATIVE_FRAME=1` / `=0` forces it either way. Separately, the reporter
+  found `--force-device-scale-factor=1` fixed most of the offset (Chromium
+  picks up a DPI scale Wine's mouse coordinates don't follow), so under Wine
+  that switch is now applied by default (`PQC_SCALE_FACTOR=<n>` picks
+  another value, `=auto` disables it). Native-frame part not yet confirmed
+  by the reporter.
 - **Could a future data source fix this?** **N/A (Wine/Electron
   interaction, not a data gap).**
 
