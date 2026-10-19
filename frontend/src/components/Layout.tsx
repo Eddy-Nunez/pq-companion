@@ -27,7 +27,9 @@ export default function Layout(): React.ReactElement {
       className="flex h-screen flex-col overflow-hidden"
       style={{ backgroundColor: 'var(--color-background)' }}
     >
-      <TitleBar />
+      {/* Under Wine the window manager draws the frame (see main's
+          useNativeMainFrame), so our own title bar would be a second one. */}
+      {!window.electron?.window.nativeFrame && <TitleBar />}
       <div className="flex min-h-0 flex-1">
         <Sidebar onSearchClick={() => setSearchOpen(true)} />
         <main

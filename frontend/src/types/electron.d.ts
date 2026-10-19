@@ -33,6 +33,7 @@ export interface ElectronAPI {
     dragEnd: () => Promise<void>
     setZoom: (factor: number) => Promise<void>
     getZoom: () => number
+    nativeFrame: boolean
     setMinimizeToTray: (enabled: boolean) => Promise<void>
   }
   overlay: {

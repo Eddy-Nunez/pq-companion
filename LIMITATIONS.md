@@ -1027,6 +1027,23 @@ These are inherent to log-file parsing and affect multiple features:
   reporter's own account of testing on/off predates being asked to file
   verbose logs).
 
+### 13.4 Main-window click offset under Wine/Proton on Linux (fix unconfirmed)
+
+- **What's missing:** A Bazzite (KDE) user running the portable zip through
+  Steam + Proton 10 reported clicks landing ~10px below the cursor in the
+  main window, with KDE's title bar drawn above our own custom one.
+- **Why:** The main window uses `titleBarStyle: 'hidden'`, which on Windows
+  relies on Electron overriding the non-client area. Wine doesn't honour
+  that the way real Windows does, so the WM decorates the window anyway and
+  hit-testing is offset from what's rendered (about the resize-border height).
+- **Mitigation:** Under Wine (detected via `WINEPREFIX` /
+  `STEAM_COMPAT_DATA_PATH` / `WINELOADER` env or `system32\winecfg.exe`) the
+  main window now uses a native frame and the renderer hides `TitleBar`.
+  `PQC_NATIVE_FRAME=1` / `=0` forces it either way. Not yet confirmed by
+  the reporter.
+- **Could a future data source fix this?** **N/A (Wine/Electron
+  interaction, not a data gap).**
+
 ---
 
 ## 14. Bazaar / Trader tracking

@@ -1252,8 +1252,36 @@ function closeAllOverlays(): void {
   }
 }
 
+// Linux users run the Windows build under Wine/Proton. There the custom title
+// bar (titleBarStyle 'hidden') breaks: Electron's non-client-area override
+// isn't honoured the way real Windows honours it, so the window manager draws
+// its own title bar on top and mouse hit-testing ends up offset from what's
+// rendered by roughly the resize-border height (~10px). Under Wine we fall
+// back to a native frame and the renderer hides its own TitleBar.
+// PQC_NATIVE_FRAME=1 / =0 forces it either way (e.g. via Steam launch options).
+function isRunningUnderWine(): boolean {
+  if (process.platform !== 'win32') return false
+  // Wine passes the Unix environment through to Windows processes.
+  if (process.env['WINEPREFIX'] || process.env['STEAM_COMPAT_DATA_PATH'] || process.env['WINELOADER']) {
+    return true
+  }
+  // Every Wine prefix ships builtin program stubs in system32.
+  const sysRoot = process.env['SystemRoot'] ?? 'C:\\windows'
+  return existsSync(join(sysRoot, 'system32', 'winecfg.exe'))
+}
+
+function useNativeMainFrame(): boolean {
+  const override = process.env['PQC_NATIVE_FRAME']
+  if (override === '1') return true
+  if (override === '0') return false
+  return isRunningUnderWine()
+}
+
 function createMainWindow(): void {
   nativeTheme.themeSource = 'dark'
+
+  const nativeFrame = useNativeMainFrame()
+  if (nativeFrame) console.log('[main] using native window frame (Wine detected or PQC_NATIVE_FRAME=1)')
 
   // Restore the last-used size/position when it still falls on a connected
   // display; otherwise fall back to the first-run default. isOnScreen()
@@ -1269,11 +1297,17 @@ function createMainWindow(): void {
     minHeight: 640,
     backgroundColor: '#0a0a0a',
     icon: appIconPath,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    // A native frame on Windows also brings Electron's default File/Edit/View
+    // menu bar; auto-hide keeps its accelerators without showing it.
+    ...(nativeFrame
+      ? { autoHideMenuBar: true }
+      : { titleBarStyle: process.platform === 'darwin' ? ('hiddenInset' as const) : ('hidden' as const) }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Read synchronously by the preload so TitleBar never flashes.
+      additionalArguments: nativeFrame ? ['--pqc-native-frame'] : []
     },
     show: false // show after ready-to-show to avoid flash
   })

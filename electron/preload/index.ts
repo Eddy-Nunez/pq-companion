@@ -55,6 +55,9 @@ contextBridge.exposeInMainWorld('electron', {
     // read it to cancel out zoom that leaks in from same-origin windows (see
     // useOverlayZoom).
     getZoom: (): number => webFrame.getZoomFactor(),
+    // True when the main window uses the OS/window-manager frame instead of
+    // our custom TitleBar (Wine/Proton on Linux — see useNativeMainFrame).
+    nativeFrame: process.argv.includes('--pqc-native-frame'),
     setMinimizeToTray: (enabled: boolean): Promise<void> =>
       ipcRenderer.invoke('window:set-minimize-to-tray', enabled)
   },
