@@ -10,7 +10,7 @@ Two upstream sources (the quests repo's sql/ is applied manually on the server
 and overrides EQMacEmu's values, e.g. PoP trash 750/930s -> 930/1230s):
   - SecretsOTheP/EQMacEmu  utils/sql/git/content/  @ b61ec17 (none newer
                                                      than 2026_10_02)
-  - SecretsOTheP/quests    sql/                    @ ea4bad3
+  - SecretsOTheP/quests    sql/                    @ d4625cd
 Then the local LOCAL_FILES run last: live changes from the official patch
 notes that no upstream SQL file carries.
 
@@ -87,6 +87,8 @@ QUESTS_FILES = [
     "2026_10_09_Elemental_Plane_View_Distances.sql",
     "2026_10_11_PoK_Gork_Mork_Library_Teleports.sql",
     "2026_10_15_Torment_Key_Progression.sql",
+    "2026_10_15_Time_B_Graveyard_Recovery.sql",
+    "2026_10_17_Torment_Putrescent_Blood.sql",
 ]
 
 # Not replayed: launcher/PvP/rule/timer-cleanup files touch server state only.

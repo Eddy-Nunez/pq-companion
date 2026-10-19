@@ -214,3 +214,64 @@ UPDATE spawnentry SET chance = CASE npcID
     WHEN 207316 THEN 45 WHEN 207218 THEN 14 WHEN 207290 THEN 15
     WHEN 207294 THEN 26 ELSE chance END
 WHERE spawngroupID IN (225595, 225594, 207041, 225596);
+
+-- @@ after: 2026_10_15_Time_B_Graveyard_Recovery.sql
+-- UPDATE zone ... JOIN graveyard, guarded on Time B's own graveyard.
+UPDATE zone SET graveyard_time = 30
+WHERE zoneidnumber = 223 AND short_name = 'potimeb'
+  AND graveyard_id IN (SELECT id FROM graveyard WHERE zone_id = 223);
+
+-- @@ after: 2026_10_17_Torment_Putrescent_Blood.sql
+-- The file threads new ids through MySQL @variables, which SQLite binds as
+-- NULL (every guarded statement no-ops). Same steps, keyed by the new rows'
+-- names: a 7% Putrescent Blood lootdrop cloned from 96885, and a clone of
+-- loottable 3699 plus that drop for ten construct/crawler npc_types. 3699
+-- itself stays as-is for the summoned adds.
+INSERT INTO lootdrop (name, min_expansion, max_expansion, content_flags,
+    content_flags_disabled)
+SELECT 'potorment_putrescent_blood_26635', min_expansion, max_expansion,
+       content_flags, content_flags_disabled
+FROM lootdrop WHERE id = 96885
+AND NOT EXISTS (SELECT 1 FROM lootdrop
+                WHERE name = 'potorment_putrescent_blood_26635');
+INSERT OR IGNORE INTO lootdrop_entries
+    (lootdrop_id, item_id, item_charges, equip_item, chance, minlevel,
+     maxlevel, multiplier, disabled_chance, min_expansion, max_expansion,
+     min_looter_level, item_loot_lockout_timer, content_flags_disabled,
+     content_flags)
+SELECT (SELECT MIN(id) FROM lootdrop
+        WHERE name = 'potorment_putrescent_blood_26635'),
+       item_id, item_charges, equip_item, 7, minlevel, maxlevel, multiplier,
+       disabled_chance, min_expansion, max_expansion, min_looter_level,
+       item_loot_lockout_timer, content_flags_disabled, content_flags
+FROM lootdrop_entries WHERE lootdrop_id = 96885 AND item_id = 26635;
+INSERT INTO loottable (name, mincash, maxcash, avgcoin, done, min_expansion,
+    max_expansion, content_flags, content_flags_disabled)
+SELECT 'potorment_constructs_putrescent_blood_26635', mincash, maxcash,
+       avgcoin, done, min_expansion, max_expansion, content_flags,
+       content_flags_disabled
+FROM loottable WHERE id = 3699
+AND NOT EXISTS (SELECT 1 FROM loottable
+                WHERE name = 'potorment_constructs_putrescent_blood_26635');
+INSERT OR IGNORE INTO loottable_entries
+    (loottable_id, lootdrop_id, multiplier, probability, droplimit, mindrop,
+     multiplier_min)
+SELECT (SELECT MIN(id) FROM loottable
+        WHERE name = 'potorment_constructs_putrescent_blood_26635'),
+       lootdrop_id, multiplier, probability, droplimit, mindrop,
+       multiplier_min
+FROM loottable_entries WHERE loottable_id = 3699;
+INSERT OR IGNORE INTO loottable_entries
+    (loottable_id, lootdrop_id, multiplier, probability, droplimit, mindrop,
+     multiplier_min)
+SELECT (SELECT MIN(id) FROM loottable
+        WHERE name = 'potorment_constructs_putrescent_blood_26635'),
+       (SELECT MIN(id) FROM lootdrop
+        WHERE name = 'potorment_putrescent_blood_26635'),
+       multiplier, probability, droplimit, mindrop, multiplier_min
+FROM loottable_entries WHERE loottable_id = 91732 AND lootdrop_id = 96885;
+UPDATE npc_types SET loottable_id = (SELECT MIN(id) FROM loottable
+        WHERE name = 'potorment_constructs_putrescent_blood_26635')
+WHERE id IN (207009, 207021, 207041, 207043, 207218, 207282, 207286, 207288,
+             207290, 207294)
+  AND race = 281 AND bodytype = 24 AND loottable_id = 3699;
