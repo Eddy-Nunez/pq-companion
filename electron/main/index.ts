@@ -8,6 +8,15 @@ import { homedir } from 'os'
 import { autoUpdater } from 'electron-updater'
 import { appendLine, closeLogger, initLogger } from './logger'
 import { findOtherRunningCopies, otherCopyMessage } from './otherCopy'
+import {
+  SKIP_ENV,
+  findManagedInstall,
+  isManagedCopy,
+  isWarningSilenced,
+  silenceWarning,
+  unmanagedCopyMessage,
+  unmanagedUpdateMessage,
+} from './installCheck'
 
 const isDev = !app.isPackaged
 
@@ -1173,11 +1182,16 @@ function stopSidecar(): Promise<void> {
 
 // ── Auto-updater ──────────────────────────────────────────────────────────────
 
+// False for a copy the NSIS installer doesn't manage (portable zip, copied
+// folder). Its updater would run the installer into the default folder and
+// leave a second copy behind, so it only reports updates — see installCheck.ts.
+let canSelfUpdate = true
+
 function setupAutoUpdater(): void {
   if (isDev) return // not applicable outside a packaged build
 
   autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = canSelfUpdate
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[updater] Checking for updates…')
@@ -1185,6 +1199,10 @@ function setupAutoUpdater(): void {
 
   autoUpdater.on('update-available', (info) => {
     console.log(`[updater] Update available: ${info.version}`)
+    if (!canSelfUpdate) {
+      mainWindow?.webContents.send('updater:error', unmanagedUpdateMessage(info.version))
+      return
+    }
     mainWindow?.webContents.send('updater:available', { version: info.version })
   })
 
@@ -3764,16 +3782,54 @@ ipcMain.handle('updater:check', () => {
 })
 
 ipcMain.handle('updater:download', () => {
-  if (!isDev) autoUpdater.downloadUpdate()
+  if (!isDev && canSelfUpdate) autoUpdater.downloadUpdate()
 })
 
 ipcMain.handle('updater:quit-and-install', async () => {
   // Kill the sidecar before handing off to the updater. quitAndInstall exits
   // the main process quickly; if the sidecar is still alive the NSIS updater
   // cannot replace pq-companion-server.exe and the install wedges.
+  if (!canSelfUpdate) return
   await stopSidecar()
   autoUpdater.quitAndInstall(true, true)
 })
+
+// checkInstallLocation runs before anything starts. On a copy the installer
+// doesn't manage it disables self-update, and if an installed copy exists
+// elsewhere it warns and offers to switch. Returns true when this instance is
+// handing off to the installed copy and must start nothing.
+async function checkInstallLocation(): Promise<boolean> {
+  if (process.platform !== 'win32' || isDev || isManagedCopy()) return false
+  canSelfUpdate = false
+  const managed = await findManagedInstall()
+  console.log(`[main] unmanaged copy (self-update disabled); installed copy: ${managed ? `${managed.exePath} v${managed.version || '?'}` : 'none'}`)
+  if (!managed || process.env[SKIP_ENV]) return false
+  const userData = app.getPath('userData')
+  if (isWarningSilenced(userData)) return false
+
+  const { message, detail } = unmanagedCopyMessage(managed, app.getVersion())
+  const { response, checkboxChecked } = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'PQ Companion',
+    message,
+    detail,
+    buttons: ['Open Installed Copy', 'Keep Using This Copy', 'Show This Folder in Explorer'],
+    defaultId: 0,
+    cancelId: 1,
+    checkboxLabel: "Don't warn me about this folder again",
+    noLink: true,
+  })
+  if (checkboxChecked) silenceWarning(userData)
+  if (response === 0) {
+    // Nothing has started yet, so exiting skips no cleanup; the relaunch
+    // fires once this process (and its single-instance lock) is gone.
+    app.relaunch({ execPath: managed.exePath, args: [] })
+    app.exit(0)
+    return true
+  }
+  if (response === 2) shell.showItemInFolder(process.execPath)
+  return false
+}
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 
@@ -3781,6 +3837,7 @@ app.whenReady().then(async () => {
   // Lost the single-instance lock: this instance only exists to hand off to
   // (or warn about) the running copy and then exit. Start nothing.
   if (!gotSingleInstanceLock) return
+  if (await checkInstallLocation()) return
   // Bail early if the bundled EQ database is missing OR unreadable.
   // existsSync alone isn't enough: an AV that ACL-locks the file post-install
   // (without quarantining it) leaves stat() succeeding while open-for-read
