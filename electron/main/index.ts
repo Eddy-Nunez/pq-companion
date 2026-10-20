@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, nativeTheme, dialog, screen, protocol, globalShortcut, Tray, Menu, nativeImage, WebContentsView, session } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, nativeTheme, dialog, screen, protocol, globalShortcut, Tray, Menu, nativeImage, WebContentsView, session, powerMonitor } from 'electron'
 import { join, extname, dirname } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, unlinkSync } from 'fs'
@@ -137,6 +137,14 @@ app.on('web-contents-created', (_event, contents) => {
     const title = win && !win.isDestroyed() ? win.getTitle() : `webcontents-${contents.id}`
     appendLine('RENDERER-ERR', `[${title}] render process gone: ${details.reason} (exitCode=${details.exitCode})`)
   })
+})
+
+// Non-renderer helper processes (GPU, utility, network). A GPU-process crash is
+// invisible otherwise, yet it's a known way for transparent overlay windows to
+// stop painting until reopened, so log it for "overlays disappeared" reports.
+app.on('child-process-gone', (_event, details) => {
+  const name = details.name ? ` name=${details.name}` : ''
+  console.warn(`[main] child process gone: type=${details.type}${name} reason=${details.reason} (exitCode=${details.exitCode})`)
 })
 
 // pq-audio:// is a custom protocol used by the renderer's Audio elements to
@@ -289,10 +297,14 @@ function createTray(): void {
   // Left-click (Windows) restores the window; on other platforms the context
   // menu covers it, but wiring click everywhere is harmless.
   tray.on('click', () => showMainWindow())
+  console.log('[main] tray icon created')
 }
 
 function destroyTray(): void {
-  if (tray && !tray.isDestroyed()) tray.destroy()
+  if (tray && !tray.isDestroyed()) {
+    tray.destroy()
+    console.log('[main] tray icon destroyed')
+  }
   tray = null
 }
 
@@ -1359,8 +1371,14 @@ function createMainWindow(): void {
     if (minimizeToTray && !isQuittingApp) {
       event.preventDefault()
       mainWindow?.hide()
+      console.log('[main] main window hidden to tray')
     }
   })
+
+  // A main-process or renderer stall shows up to the user as a frozen/ghosted
+  // taskbar entry; log both edges so a log export shows when and how long.
+  mainWindow.on('unresponsive', () => console.warn('[main] main window unresponsive'))
+  mainWindow.on('responsive', () => console.log('[main] main window responsive again'))
 
   mainWindow.on('closed', () => {
     closeAllOverlays()
@@ -3167,6 +3185,22 @@ ipcMain.handle('overlay:rolltracker:toggle', () => {
 // button on "Close All Popouts" with nothing actually popped out. Closing it
 // would also stop trigger alerts from rendering, so it's left alone by the
 // bulk close as well.
+// Re-applies the topmost flag to every open overlay. Windows can drop a
+// window out of the topmost band (display wake, resume, Explorer restart),
+// and a one-time setAlwaysOnTop at creation never recovers from that. Never
+// shows a hidden window — the trigger overlay is hidden whenever it's idle.
+// Discord Voice goes last so it stays above the rest (issue #150).
+function reassertOverlaysOnTop(): void {
+  const wins = userPopoutWindows().filter((w) => w !== discordVoiceOverlayWindow)
+  if (triggerOverlayWindow) wins.push(triggerOverlayWindow)
+  if (discordVoiceOverlayWindow) wins.push(discordVoiceOverlayWindow)
+  for (const win of wins) {
+    if (win.isDestroyed()) continue
+    win.setAlwaysOnTop(true, 'screen-saver')
+    if (win.isVisible()) win.moveTop()
+  }
+}
+
 function userPopoutWindows(): BrowserWindow[] {
   const fixed = [
     dpsOverlayWindow,
@@ -4055,14 +4089,32 @@ app.whenReady().then(async () => {
   const resizeTriggerOverlay = (): void => {
     if (!triggerOverlayWindow || triggerOverlayWindow.isDestroyed()) return
     triggerOverlayWindow.setBounds(overlayDisplayBounds())
-    // A display-metrics-changed event (resolution/DPI change, a monitor
-    // waking) is also a plausible point where Windows resets the topmost
-    // z-order band — reassert it here too, not just on the interval.
-    if (triggerOverlayWindow.isVisible()) triggerOverlayWindow.moveTop()
   }
-  screen.on('display-added', resizeTriggerOverlay)
-  screen.on('display-removed', resizeTriggerOverlay)
-  screen.on('display-metrics-changed', resizeTriggerOverlay)
+  // A display change (resolution/DPI change, a monitor waking) and a resume
+  // or unlock are plausible points where Windows resets the topmost z-order
+  // band, leaving overlays open but buried behind the game. Only the trigger
+  // and Discord Voice windows reassert on an interval; every other overlay
+  // set topmost once at creation, so reassert all of them here.
+  const onDisplayChanged = (): void => {
+    resizeTriggerOverlay()
+    reassertOverlaysOnTop()
+  }
+  screen.on('display-added', onDisplayChanged)
+  screen.on('display-removed', onDisplayChanged)
+  screen.on('display-metrics-changed', onDisplayChanged)
+
+  // Log power/session transitions so an "overlays vanished" report can be
+  // lined up against a sleep/wake or lock/unlock in the exported logs.
+  powerMonitor.on('suspend', () => console.log('[main] power: suspend'))
+  powerMonitor.on('resume', () => {
+    console.log('[main] power: resume')
+    reassertOverlaysOnTop()
+  })
+  powerMonitor.on('lock-screen', () => console.log('[main] power: lock-screen'))
+  powerMonitor.on('unlock-screen', () => {
+    console.log('[main] power: unlock-screen')
+    reassertOverlaysOnTop()
+  })
 
   // macOS: re-create window when dock icon is clicked and no windows are open
   app.on('activate', () => {
