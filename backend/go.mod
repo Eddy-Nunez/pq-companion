@@ -2,6 +2,8 @@ module github.com/jasonsoprovich/pq-companion/backend
 
 go 1.22
 
+toolchain go1.26.10
+
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/go-chi/chi/v5 v5.2.5
