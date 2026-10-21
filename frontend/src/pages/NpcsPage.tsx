@@ -24,6 +24,7 @@ import {
   mapShowZoneCommand,
 } from '../lib/zealMap'
 import { NPCSpawnMap } from '../components/maps/NPCSpawnMap'
+import { NPCZoneLinks, zoneListLabel } from '../components/NPCZoneLinks'
 import CreateTriggerModal, { type TriggerPrefill } from '../components/CreateTriggerModal'
 import { ItemIcon } from '../components/Icon'
 import RawDataModal from './../components/RawDataModal'
@@ -377,8 +378,9 @@ function SearchPane({ selectedId, onSelect }: SearchPaneProps): React.ReactEleme
               >
                 {npcDisplayName(npc)}
               </div>
-              <div className="mt-0.5 text-[11px]" style={{ color: 'var(--color-muted)' }}>
+              <div className="mt-0.5 truncate text-[11px]" style={{ color: 'var(--color-muted)' }}>
                 {`Lv ${npcLevelLabel(npc)} ${className(npc.class)}`}
+                {npc.zones && npc.zones.length > 0 && ` · ${zoneListLabel(npc.zones, 1)}`}
               </div>
             </button>
           ))}
@@ -993,6 +995,12 @@ function DetailPanel({ npc }: DetailPanelProps): React.ReactElement {
         <div className="mt-0.5 text-xs" style={{ color: 'var(--color-muted)' }}>
           {bodyTypeName(npc.body_type)}
         </div>
+        {npc.zones && npc.zones.length > 0 && (
+          <div className="mt-0.5 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+            {npc.zones.length > 1 ? 'Zones: ' : 'Zone: '}
+            <NPCZoneLinks zones={npc.zones} max={4} />
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="mt-3 flex gap-0 overflow-x-auto">

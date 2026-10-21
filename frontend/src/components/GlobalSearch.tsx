@@ -9,6 +9,7 @@ import type { Zone } from '../types/zone'
 import { effectiveItemTypeLabel } from '../lib/itemHelpers'
 import { castableClassesShort } from '../lib/spellHelpers'
 import { npcDisplayName, className as npcClassName, npcLevelLabel } from '../lib/npcHelpers'
+import { zoneListLabel } from './NPCZoneLinks'
 import { ItemIcon, SpellIcon } from './Icon'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ function ResultRow({ entry, active, onHover, onClick }: ResultRowProps): React.R
   } else if (entry.kind === 'npc') {
     name = npcDisplayName(entry.npc)
     subtitle = `Level ${npcLevelLabel(entry.npc)} ${npcClassName(entry.npc.class)}`
+    if (entry.npc.zones?.length) subtitle += ` · ${zoneListLabel(entry.npc.zones, 1)}`
   } else {
     name = entry.zone.long_name
     subtitle = entry.zone.short_name

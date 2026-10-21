@@ -552,31 +552,8 @@ func collectItems(rows *sql.Rows) ([]Item, error) {
 
 // GetItemSources returns all the ways to obtain the item with the given ID.
 func (db *DB) GetItemSources(itemID int) (*ItemSources, error) {
-	// Representative-zone subqueries. Previously the query LEFT JOINed the
-	// spawn chain and took independent MIN(z.long_name) / MIN(s2.zone) — for a
-	// multi-zone NPC those two MINs came from different rows, so the label and
-	// the nav short-name pointed at different zones (e.g. Sea_King showed label
-	// "Erud's Crossing" but short-name "erudnext"). Both subqueries select from
-	// the same row set ordered identically (alphabetically-first s2.zone,
-	// LIMIT 1), so the long_name and short_name are always the same zone.
-	const zoneShortSubquery = `COALESCE((
-		SELECT s2z.zone
-		FROM spawnentry sez
-		JOIN spawn2 s2z ON s2z.spawngroupID = sez.spawngroupid
-		WHERE sez.npcid = n.id
-		ORDER BY s2z.zone LIMIT 1), '')`
-	const zoneNameSubquery = `COALESCE((
-		SELECT z2.long_name
-		FROM spawnentry sez
-		JOIN spawn2 s2z ON s2z.spawngroupID = sez.spawngroupid
-		LEFT JOIN zone z2 ON z2.short_name = s2z.zone
-		WHERE sez.npcid = n.id
-		ORDER BY s2z.zone LIMIT 1), '')`
-
 	dropRows, err := db.Query(`
 		SELECT n.id, n.name,
-		       `+zoneNameSubquery+` AS zone_name,
-		       `+zoneShortSubquery+` AS zone_short_name,
 		       ROUND(MAX(CAST(lte.probability AS REAL) * lde.chance / 100.0), 2) AS drop_rate,
 		       MAX(lde.min_looter_level) AS min_looter_level
 		FROM npc_types n
@@ -599,9 +576,7 @@ func (db *DB) GetItemSources(itemID int) (*ItemSources, error) {
 	}
 
 	merchantRows, err := db.Query(`
-		SELECT n.id, n.name,
-		       `+zoneNameSubquery+` AS zone_name,
-		       `+zoneShortSubquery+` AS zone_short_name
+		SELECT n.id, n.name
 		FROM npc_types n
 		JOIN merchantlist ml ON ml.merchantid = n.merchant_id
 		WHERE ml.item = ? AND n.merchant_id > 0
@@ -614,6 +589,9 @@ func (db *DB) GetItemSources(itemID int) (*ItemSources, error) {
 	defer merchantRows.Close()
 	merchants, err := collectSourceNPCs(merchantRows, false)
 	if err != nil {
+		return nil, err
+	}
+	if err := db.fillSourceNPCZones(drops, merchants); err != nil {
 		return nil, err
 	}
 
@@ -711,17 +689,46 @@ func collectSourceNPCs(rows *sql.Rows, withDropRate bool) ([]ItemSourceNPC, erro
 	for rows.Next() {
 		var s ItemSourceNPC
 		if withDropRate {
-			if err := rows.Scan(&s.ID, &s.Name, &s.ZoneName, &s.ZoneShortName, &s.DropRate, &s.MinLooterLevel); err != nil {
+			if err := rows.Scan(&s.ID, &s.Name, &s.DropRate, &s.MinLooterLevel); err != nil {
 				return nil, fmt.Errorf("scan source npc: %w", err)
 			}
 		} else {
-			if err := rows.Scan(&s.ID, &s.Name, &s.ZoneName, &s.ZoneShortName); err != nil {
+			if err := rows.Scan(&s.ID, &s.Name); err != nil {
 				return nil, fmt.Errorf("scan source npc: %w", err)
 			}
 		}
 		result = append(result, s)
 	}
 	return result, rows.Err()
+}
+
+// fillSourceNPCZones sets Zones on every source NPC, plus ZoneName and
+// ZoneShortName (the first zone) where not already set. Zones come from
+// NPCZones, so a multi-zone NPC lists all of them and a spawn2-less
+// (script-spawned) NPC falls back to its id-encoded zone instead of
+// showing none.
+func (db *DB) fillSourceNPCZones(lists ...[]ItemSourceNPC) error {
+	var ids []int
+	for _, l := range lists {
+		for _, s := range l {
+			ids = append(ids, s.ID)
+		}
+	}
+	zones, err := db.NPCZones(ids)
+	if err != nil {
+		return err
+	}
+	for _, l := range lists {
+		for i := range l {
+			z := zones[l[i].ID]
+			l[i].Zones = z
+			if l[i].ZoneShortName == "" && len(z) > 0 {
+				l[i].ZoneShortName = z[0].ShortName
+				l[i].ZoneName = z[0].LongName
+			}
+		}
+	}
+	return nil
 }
 
 // ─── NPCs ─────────────────────────────────────────────────────────────────────
@@ -1059,6 +1066,9 @@ func (db *DB) SearchNPCs(query string, limit, offset int, hidePlaceholders bool)
 
 	npcs, err := collectNPCs(rows)
 	if err != nil {
+		return nil, err
+	}
+	if err := db.FillNPCZones(npcs); err != nil {
 		return nil, err
 	}
 	return &SearchResult[NPC]{Items: npcs, Total: total}, nil
@@ -2594,6 +2604,9 @@ func (db *DB) GetNPCsByZone(shortName string, limit, offset int) (*SearchResult[
 
 	npcs, err := collectNPCs(rows)
 	if err != nil {
+		return nil, err
+	}
+	if err := db.FillNPCZones(npcs); err != nil {
 		return nil, err
 	}
 	return &SearchResult[NPC]{Items: npcs, Total: total}, nil

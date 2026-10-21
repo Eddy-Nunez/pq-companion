@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ItemSourceNPC } from '../types/item'
+import { NPCZoneLinks, sourceNPCZones } from './NPCZoneLinks'
 
 // formatNPCName turns underscore-delimited DB names into display names.
 export function formatNPCName(name: string): string {
@@ -8,7 +9,7 @@ export function formatNPCName(name: string): string {
 }
 
 // SourceNPCLink renders one NPC source row (vendor or drop): the NPC name links
-// to the NPC page, with an optional drop rate and a zone link. Shared by the
+// to the NPC page, with an optional drop rate and links to its zones. Shared by the
 // item detail modal and the spell acquisition panel so both look identical.
 export function SourceNPCLink({ npc, showRate }: { npc: ItemSourceNPC; showRate?: boolean }): React.ReactElement {
   const navigate = useNavigate()
@@ -27,15 +28,7 @@ export function SourceNPCLink({ npc, showRate }: { npc: ItemSourceNPC; showRate?
             {npc.drop_rate.toFixed(2)}%
           </span>
         )}
-        {npc.zone_name && (
-          <button
-            onClick={() => navigate(`/zones?select=${npc.zone_short_name}`)}
-            className="text-xs underline decoration-dotted"
-            style={{ color: 'var(--color-muted)' }}
-          >
-            {npc.zone_name}
-          </button>
-        )}
+        <NPCZoneLinks zones={sourceNPCZones(npc)} />
       </div>
     </div>
   )

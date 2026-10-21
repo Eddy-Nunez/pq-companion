@@ -202,6 +202,10 @@ type NPC struct {
 	SpellScale float64 `json:"spell_scale"`
 	HealScale  float64 `json:"heal_scale"`
 	ExpPct     int     `json:"exp_pct"`
+
+	// Zones the NPC appears in. Filled only by the NPC search and detail
+	// endpoints (via NPCZones), not by every NPC lookup.
+	Zones []NPCZone `json:"zones,omitempty"`
 }
 
 // SpawnPoint is one (spawngroup, world position) slot at which an NPC variant
@@ -429,6 +433,9 @@ type ItemSourceNPC struct {
 	// here is the script's own chance rather than a DB-derived rate. See
 	// internal/db/scripted_loot.go.
 	Scripted bool `json:"scripted,omitempty"`
+	// Zones lists every zone the NPC appears in; ZoneName/ZoneShortName
+	// above are the first of these, kept for single-zone consumers.
+	Zones []NPCZone `json:"zones,omitempty"`
 }
 
 // ItemForageZone is a zone where an item can be obtained via the Forage skill.

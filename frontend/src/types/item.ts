@@ -1,3 +1,5 @@
+import type { NPCZone } from './npc'
+
 export interface Item {
   id: number
   name: string
@@ -104,6 +106,8 @@ export interface ItemSourceNPC {
   // all, so drop_rate here is the script's own chance rather than a
   // DB-derived rate.
   scripted?: boolean
+  // Every zone the NPC appears in; zone_name/zone_short_name are the first.
+  zones?: NPCZone[]
 }
 
 export interface ItemForageZone {

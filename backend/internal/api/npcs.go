@@ -27,6 +27,9 @@ func (h *npcsHandler) get(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if zones, err := h.db.NPCZones([]int{npc.ID}); err == nil {
+		npc.Zones = zones[npc.ID]
+	}
 	writeJSON(w, http.StatusOK, npc)
 }
 

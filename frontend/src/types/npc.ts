@@ -60,6 +60,17 @@ export interface NPC {
   spell_scale: number
   heal_scale: number
   exp_pct: number
+
+  // Zones the NPC appears in. Set by the search and detail endpoints only.
+  zones?: NPCZone[]
+}
+
+// NPCZone mirrors db.NPCZone. inferred means the NPC has no spawn point (it is
+// script- or event-spawned) and the zone comes from its id instead.
+export interface NPCZone {
+  short_name: string
+  long_name: string
+  inferred?: boolean
 }
 
 export interface LootDropItem {

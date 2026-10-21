@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ItemSourceNPC } from '../types/item'
 import { formatNPCName } from './SourceNPCLink'
+import { NPCZoneLinks, sourceNPCZones } from './NPCZoneLinks'
 
 // SourceNPCTable renders the "Drops From" / "Purchased From" lists as a real
 // table: fixed columns, zebra rows, and sortable headers.
@@ -116,15 +117,7 @@ export function SourceNPCTable({
               )}
             </td>
             <td className="truncate px-1.5 py-1">
-              {npc.zone_name && (
-                <button
-                  onClick={() => navigate(`/zones?select=${npc.zone_short_name}`)}
-                  className="max-w-full truncate text-left text-xs underline decoration-dotted"
-                  style={{ color: 'var(--color-muted)' }}
-                >
-                  {npc.zone_name}
-                </button>
-              )}
+              <NPCZoneLinks zones={sourceNPCZones(npc)} />
             </td>
             {showLootLevel && (
               <td
