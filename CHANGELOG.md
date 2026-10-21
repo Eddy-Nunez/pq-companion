@@ -9,6 +9,17 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.29.1 — 2026-10-21
+
+NPC zones now show wherever you look up an NPC or where an item drops, plus security updates and an overlay fix.
+
+### Highlights
+- **NPC zones everywhere** — the NPC page now shows every zone an NPC spawns in right under its name, and NPC search results (including Ctrl+K search) show the zone too. Drop and vendor sources on item pages and in the Gear Upgrade Finder list all of an NPC's zones instead of just one. NPCs spawned by events or scripts, such as the Plane of Time bosses, used to show no zone at all. They now show the zone their NPC id belongs to, marked with * (hover for details).
+
+### Fixes
+- **Security updates** — updated the app's underlying components to their latest versions, which include recent security fixes.
+- **Overlays buried behind the game after wake** — waking the display, resuming from sleep or unlocking Windows could leave overlays open but hidden behind EverQuest. All overlays now come back on top. The app also logs these power and GPU events, so reports of missing overlays can be diagnosed.
+
 ## v0.29.0 — 2026-10-19
 
 Edit your Page 10 social keybinds from the Macros tab, set opacity per overlay, and highlight every spawn point from live-map search. This release also fixes a batch of Wine/Proton issues and adds guards so old copies of the app stop shadowing the current install.
