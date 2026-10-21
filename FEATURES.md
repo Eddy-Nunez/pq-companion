@@ -2014,6 +2014,18 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.29.1 — NPC Zones, Security Updates
+
+- **NPC zones** — `db.NPCZones` returns every spawn2 zone per NPC, falling
+  back to id / 1000 → zone.zoneidnumber (marked `inferred`) for spawn2-less
+  script/event NPCs. Filled on NPC search/detail and item drop/vendor
+  sources (`zones` list; `zone_name` = first). Shared `NPCZoneLinks`
+  renders zone links with "+N more" and `*` for inferred zones.
+- **Overlay topmost on wake** — every overlay reasserts always-on-top after
+  display wake, resume or unlock; power and GPU child-process events logged.
+- **Dependency security updates** — Electron 42.11.18, Go toolchain
+  1.26.10, electron-updater 6.8.9.
+
 ## v0.29.0 — Page 10 Keybinds, Per-Overlay Opacity, Map Search Highlights
 
 - **Page 10 social keybinds** — Macros Page 10 shows each slot's SocialPage10
