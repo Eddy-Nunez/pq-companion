@@ -14,6 +14,7 @@ import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFilt
 import NPCOverlayTagStyleCard from '../components/settings/NPCOverlayTagStyleCard'
 import NPCOverlayLayoutCard from '../components/settings/NPCOverlayLayoutCard'
 import NPCOverlayOutlineRulesCard from '../components/settings/NPCOverlayOutlineRulesCard'
+import NPCOverlayPreview from '../components/settings/NPCOverlayPreview'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, saveConfigChanges, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
@@ -73,7 +74,7 @@ import DeveloperTab from './DeveloperTab'
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'discarded' | 'error'
 type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error'
-type Tab = 'general' | 'audio' | 'accessibility' | 'navigation' | 'overlays' | 'spelltimers' | 'dpscolors' | 'discord' | 'logs' | 'backups' | 'maps' | 'advanced' | 'about' | 'changelog' | 'developer'
+type Tab = 'general' | 'audio' | 'accessibility' | 'navigation' | 'overlays' | 'npcoverlay' | 'spelltimers' | 'dpscolors' | 'discord' | 'logs' | 'backups' | 'maps' | 'advanced' | 'about' | 'changelog' | 'developer'
 
 interface TabBarProps {
   tabs: { id: Tab; label: string; icon: React.ReactNode }[]
@@ -87,7 +88,7 @@ interface TabBarProps {
 // end — so forgetting to register one degrades gracefully rather than hiding it.
 const TAB_GROUPS: { label: string; ids: Tab[] }[] = [
   { label: 'General', ids: ['general', 'audio', 'accessibility'] },
-  { label: 'Interface', ids: ['navigation', 'overlays', 'spelltimers', 'dpscolors', 'discord'] },
+  { label: 'Interface', ids: ['navigation', 'overlays', 'npcoverlay', 'spelltimers', 'dpscolors', 'discord'] },
   { label: 'System', ids: ['logs', 'backups', 'maps', 'advanced'] },
   { label: 'About', ids: ['about', 'changelog', 'developer'] },
 ]
@@ -331,7 +332,7 @@ export default function SettingsPage(): React.ReactElement {
   // Allow deep-linking to a specific tab via ?tab= (e.g. links to the Logs tab
   // for backfill). Falls back to General for unknown/absent values.
   const [tab, setTab] = useState<Tab>(() => {
-    const valid: Tab[] = ['general', 'audio', 'accessibility', 'navigation', 'overlays', 'spelltimers', 'dpscolors', 'discord', 'logs', 'backups', 'maps', 'advanced', 'about', 'changelog', 'developer']
+    const valid: Tab[] = ['general', 'audio', 'accessibility', 'navigation', 'overlays', 'npcoverlay', 'spelltimers', 'dpscolors', 'discord', 'logs', 'backups', 'maps', 'advanced', 'about', 'changelog', 'developer']
     const t = searchParams.get('tab') ?? ''
     // 'gamemaps' was its own tab until the two map tabs merged. Kept as an
     // alias so links written against the old name still land somewhere useful.
@@ -356,6 +357,9 @@ export default function SettingsPage(): React.ReactElement {
     }
   }, [tab])
   const [config, setConfig] = useState<Config | null>(null)
+  // NPC Overlay tab: the character whose per-character lists the live preview
+  // applies ('' = defaults). Follows the cards' "Editing" selectors.
+  const [npcPreviewCharacter, setNpcPreviewCharacter] = useState('')
   const [originalConfig, setOriginalConfig] = useState<Config | null>(null)
   // Latest config / last-saved config mirrored into refs so the unmount flush
   // can read them without re-subscribing.
@@ -785,6 +789,7 @@ export default function SettingsPage(): React.ReactElement {
     { id: 'accessibility', label: 'Accessibility', icon: <Eye size={13} /> },
     { id: 'navigation', label: 'Navigation', icon: <PanelLeft size={13} /> },
     { id: 'overlays', label: 'Overlays', icon: <Layers size={13} /> },
+    { id: 'npcoverlay', label: 'NPC Overlay', icon: <Crosshair size={13} /> },
     { id: 'spelltimers', label: 'Spell Timers', icon: <Sparkles size={13} /> },
     { id: 'dpscolors', label: 'DPS Meters', icon: <Palette size={13} /> },
     { id: 'discord', label: 'Discord', icon: <Headphones size={13} /> },
@@ -982,7 +987,11 @@ export default function SettingsPage(): React.ReactElement {
       {/* The Overlays tab holds a wide per-overlay control table (Pop out /
           Reset / Monitor / lock-mode), so it gets more horizontal room than
           the other tabs to keep those columns from clipping. */}
-      <div className={`mx-auto p-6 ${tab === 'overlays' ? 'max-w-4xl' : 'max-w-xl'}`}>
+      <div
+        className={`mx-auto p-6 ${
+          tab === 'npcoverlay' ? 'max-w-7xl' : tab === 'overlays' ? 'max-w-4xl' : 'max-w-xl'
+        }`}
+      >
       {/* Page header — shows the active tab's name; the sidebar carries the
           overall "Settings" branding. */}
       <div className="mb-6 flex items-center gap-3">
@@ -2456,116 +2465,27 @@ export default function SettingsPage(): React.ReactElement {
         />
         )}
 
-        {/* ── NPC Overlay sections ───────────────────────────────────────── */}
+        {/* ── NPC Overlay pointer (settings live on their own tab) ───────── */}
         {tab === 'overlays' && (
-        <NPCOverlaySectionsCard
-          dashboard={
-            config.preferences.npc_overlay_dashboard_sections ??
-            DEFAULT_NPC_OVERLAY_SECTIONS
-          }
-          popout={
-            config.preferences.npc_overlay_popout_sections ??
-            DEFAULT_NPC_OVERLAY_SECTIONS
-          }
-          onChangeDashboard={(next) =>
-            setConfig({
-              ...config,
-              preferences: {
-                ...config.preferences,
-                npc_overlay_dashboard_sections: next,
-              },
-            })
-          }
-          onChangePopout={(next) =>
-            setConfig({
-              ...config,
-              preferences: {
-                ...config.preferences,
-                npc_overlay_popout_sections: next,
-              },
-            })
-          }
-          castRange={config.preferences.npc_overlay_cast_range || 200}
-          rangedRange={config.preferences.npc_overlay_ranged_range || 0}
-          onChangeRanges={(cast, ranged) =>
-            setConfig({
-              ...config,
-              preferences: {
-                ...config.preferences,
-                npc_overlay_cast_range: cast,
-                npc_overlay_ranged_range: ranged,
-              },
-            })
-          }
-        />
-        )}
-
-        {/* ── NPC Overlay item filters ───────────────────────────────────── */}
-        {tab === 'overlays' && (
-        <NPCOverlayItemFiltersCard
-          hidden={config.preferences.npc_overlay_hidden_items ?? []}
-          byCharacter={config.preferences.npc_overlay_hidden_items_by_character ?? {}}
-          onChange={(hidden, byCharacter) =>
-            setConfig({
-              ...config,
-              preferences: {
-                ...config.preferences,
-                npc_overlay_hidden_items: hidden,
-                npc_overlay_hidden_items_by_character: byCharacter,
-              },
-            })
-          }
-        />
-        )}
-
-        {/* ── NPC Overlay tag colors ─────────────────────────────────────── */}
-        {tab === 'overlays' && (
-        <NPCOverlayTagStyleCard
-          style={config.preferences.npc_overlay_tag_style ?? {}}
-          onChange={(tagStyle) =>
-            setConfig({
-              ...config,
-              preferences: { ...config.preferences, npc_overlay_tag_style: tagStyle },
-            })
-          }
-        />
-        )}
-
-        {/* ── NPC Overlay layout (section + tag order) ───────────────────── */}
-        {tab === 'overlays' && (
-        <NPCOverlayLayoutCard
-          sectionOrder={config.preferences.npc_overlay_section_order ?? []}
-          tagOrder={config.preferences.npc_overlay_tag_order ?? []}
-          tagStyle={config.preferences.npc_overlay_tag_style ?? {}}
-          onChange={(sectionOrder, tagOrder) =>
-            setConfig({
-              ...config,
-              preferences: {
-                ...config.preferences,
-                npc_overlay_section_order: sectionOrder,
-                npc_overlay_tag_order: tagOrder,
-              },
-            })
-          }
-        />
-        )}
-
-        {/* ── NPC Overlay outline rules ──────────────────────────────────── */}
-        {tab === 'overlays' && (
-        <NPCOverlayOutlineRulesCard
-          rules={config.preferences.npc_overlay_outline_rules ?? []}
-          sets={config.preferences.npc_overlay_outline_rule_sets ?? []}
-          onChange={(rules, sets) =>
-            setConfig({
-              ...config,
-              preferences: {
-                ...config.preferences,
-                npc_overlay_outline_rules: rules,
-                npc_overlay_outline_rule_sets: sets,
-              },
-            })
-          }
-        />
+        <section
+          className="flex items-center justify-between gap-3 rounded-lg p-4"
+          style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+        >
+          <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+            NPC overlay sections, filters, tag colors, layout and outline rules
+            have their own tab, with a live preview.
+          </p>
+          <button
+            onClick={() => setTab('npcoverlay')}
+            className="shrink-0 rounded px-3 py-1.5 text-xs font-medium"
+            style={{
+              backgroundColor: 'var(--color-primary)',
+              color: 'var(--color-primary-foreground, #000)',
+            }}
+          >
+            Open NPC Overlay settings
+          </button>
+        </section>
         )}
 
         {/* ── Threat Meter ───────────────────────────────────────────────── */}
@@ -2640,6 +2560,124 @@ export default function SettingsPage(): React.ReactElement {
         )}
 
         {/* ── Spell Timers ───────────────────────────────────────────────── */}
+        {/* ── NPC Overlay: editing cards beside a sticky live preview ─────── */}
+        {tab === 'npcoverlay' && (
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="flex min-w-0 flex-col gap-6">
+            {/* ── NPC Overlay sections ───────────────────────────────────────── */}
+            <NPCOverlaySectionsCard
+              dashboard={
+                config.preferences.npc_overlay_dashboard_sections ??
+                DEFAULT_NPC_OVERLAY_SECTIONS
+              }
+              popout={
+                config.preferences.npc_overlay_popout_sections ??
+                DEFAULT_NPC_OVERLAY_SECTIONS
+              }
+              onChangeDashboard={(next) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_dashboard_sections: next,
+                  },
+                })
+              }
+              onChangePopout={(next) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_popout_sections: next,
+                  },
+                })
+              }
+              castRange={config.preferences.npc_overlay_cast_range || 200}
+              rangedRange={config.preferences.npc_overlay_ranged_range || 0}
+              onChangeRanges={(cast, ranged) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_cast_range: cast,
+                    npc_overlay_ranged_range: ranged,
+                  },
+                })
+              }
+            />
+
+            {/* ── NPC Overlay item filters ───────────────────────────────────── */}
+            <NPCOverlayItemFiltersCard
+              onScopeChange={setNpcPreviewCharacter}
+              hidden={config.preferences.npc_overlay_hidden_items ?? []}
+              byCharacter={config.preferences.npc_overlay_hidden_items_by_character ?? {}}
+              onChange={(hidden, byCharacter) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_hidden_items: hidden,
+                    npc_overlay_hidden_items_by_character: byCharacter,
+                  },
+                })
+              }
+            />
+
+            {/* ── NPC Overlay tag colors ─────────────────────────────────────── */}
+            <NPCOverlayTagStyleCard
+              style={config.preferences.npc_overlay_tag_style ?? {}}
+              onChange={(tagStyle) =>
+                setConfig({
+                  ...config,
+                  preferences: { ...config.preferences, npc_overlay_tag_style: tagStyle },
+                })
+              }
+            />
+
+            {/* ── NPC Overlay layout (section + tag order) ───────────────────── */}
+            <NPCOverlayLayoutCard
+              sectionOrder={config.preferences.npc_overlay_section_order ?? []}
+              tagOrder={config.preferences.npc_overlay_tag_order ?? []}
+              tagStyle={config.preferences.npc_overlay_tag_style ?? {}}
+              onChange={(sectionOrder, tagOrder) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_section_order: sectionOrder,
+                    npc_overlay_tag_order: tagOrder,
+                  },
+                })
+              }
+            />
+
+            {/* ── NPC Overlay outline rules ──────────────────────────────────── */}
+            <NPCOverlayOutlineRulesCard
+              onScopeChange={setNpcPreviewCharacter}
+              rules={config.preferences.npc_overlay_outline_rules ?? []}
+              sets={config.preferences.npc_overlay_outline_rule_sets ?? []}
+              onChange={(rules, sets) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_outline_rules: rules,
+                    npc_overlay_outline_rule_sets: sets,
+                  },
+                })
+              }
+            />
+          </div>
+          <div className="lg:sticky lg:top-0">
+            <NPCOverlayPreview
+              prefs={config.preferences}
+              character={npcPreviewCharacter}
+              onCharacterChange={setNpcPreviewCharacter}
+            />
+          </div>
+        </div>
+        )}
+
         {tab === 'spelltimers' && (
         <section
           className="rounded-lg p-4"

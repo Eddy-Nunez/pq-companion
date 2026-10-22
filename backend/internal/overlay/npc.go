@@ -4,6 +4,7 @@
 package overlay
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -737,6 +738,29 @@ func (t *NPCTracker) GetState() TargetState {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.st
+}
+
+// PreviewState builds a TargetState for an arbitrary NPC id, shaped like a
+// live single-variant target, so Settings can preview the overlay against any
+// NPC. It never touches the tracker's live state.
+func (t *NPCTracker) PreviewState(npcID int) (TargetState, error) {
+	if t.db == nil {
+		return TargetState{}, fmt.Errorf("preview npc %d: no database", npcID)
+	}
+	npc, err := t.db.GetNPC(npcID)
+	if err != nil {
+		return TargetState{}, fmt.Errorf("preview npc %d: %w", npcID, err)
+	}
+	abilities := mergeInvisFlags(db.ParseSpecialAbilities(npc.SpecialAbilities), npc)
+	return TargetState{
+		HasTarget:        true,
+		TargetName:       strings.ReplaceAll(strings.Trim(npc.Name, "#_"), "_", " "),
+		NPCData:          npc,
+		SpecialAbilities: abilities,
+		CasterSummary:    t.casterSummary(npc.ID),
+		HPPercent:        -1,
+		LastUpdated:      time.Now(),
+	}, nil
 }
 
 // ── internal helpers ──────────────────────────────────────────────────────────

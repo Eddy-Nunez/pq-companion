@@ -163,7 +163,7 @@ function Stat({ label, value, color }: { label: string; value: string | number; 
   )
 }
 
-function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }): React.ReactElement {
+export function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }): React.ReactElement {
   const cls = (active: boolean) =>
     `cursor-pointer rounded px-2 py-0.5 text-[11px] font-semibold transition-colors ${
       active ? 'text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
@@ -689,7 +689,8 @@ function NPCDetails({
   )
 }
 
-function NPCCard({
+// Exported for the Settings live preview.
+export function NPCCard({
   state,
   view,
   sections,

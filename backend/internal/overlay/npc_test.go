@@ -1011,3 +1011,31 @@ func TestNPCTracker_AppearanceResolvesValiantSpirit(t *testing.T) {
 		})
 	}
 }
+
+// PreviewState builds a live-shaped target for any NPC id (Settings preview)
+// without disturbing the tracker's own target.
+func TestPreviewState(t *testing.T) {
+	tr := newRealDBTracker(t)
+	st, err := tr.PreviewState(32040) // Lord Nagafen
+	if err != nil {
+		t.Fatalf("PreviewState: %v", err)
+	}
+	if !st.HasTarget || st.NPCData == nil || st.NPCData.ID != 32040 {
+		t.Fatalf("state = %+v, want Nagafen target", st)
+	}
+	if st.TargetName != "Lord Nagafen" {
+		t.Errorf("target name = %q", st.TargetName)
+	}
+	if st.HPPercent != -1 {
+		t.Errorf("hp percent = %d, want -1", st.HPPercent)
+	}
+	if len(st.SpecialAbilities) == 0 {
+		t.Error("want parsed special abilities")
+	}
+	if tr.GetState().HasTarget {
+		t.Error("preview changed the live target")
+	}
+	if _, err := tr.PreviewState(-1); err == nil {
+		t.Error("want error for unknown id")
+	}
+}

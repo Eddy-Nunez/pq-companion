@@ -111,7 +111,7 @@ function Chip({ label, value, color }: { label?: string; value: string | number;
 
 type View = NPCOverlayView
 
-function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }): React.ReactElement {
+export function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }): React.ReactElement {
   const btn = (active: boolean): React.CSSProperties => ({
     background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
     color: active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)',
@@ -550,7 +550,8 @@ function StatsBody({
   )
 }
 
-function NPCContent({
+// Exported for the Settings live preview.
+export function NPCContent({
   state,
   view,
   sections,

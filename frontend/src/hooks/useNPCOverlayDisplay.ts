@@ -3,6 +3,7 @@ import { getConfig } from '../services/api'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
 import { resolveSectionOrder, type NPCSectionId } from '../lib/npcOverlayLayout'
+import { useNPCOverlayPreview } from '../lib/npcOverlayPreview'
 import type { NPCOverlayTagStyle } from '../types/config'
 
 export interface NPCOverlayDisplay {
@@ -18,9 +19,11 @@ export interface NPCOverlayDisplay {
  * Returns the user's NPC overlay display customisations — tag colours and
  * section/tag order — shared by both overlay surfaces. Re-reads on
  * `config:updated`, like useNPCOverlayHiddenItems. Built-in defaults until
- * config loads and on any error.
+ * config loads and on any error. Inside the Settings preview it reads the
+ * unsaved preferences instead.
  */
 export function useNPCOverlayDisplay(): NPCOverlayDisplay {
+  const preview = useNPCOverlayPreview()
   const [tagStyle, setTagStyle] = useState<NPCOverlayTagStyle | undefined>()
   const [savedSectionOrder, setSavedSectionOrder] = useState<string[] | undefined>()
   const [tagOrder, setTagOrder] = useState<number[] | undefined>()
@@ -48,9 +51,11 @@ export function useNPCOverlayDisplay(): NPCOverlayDisplay {
   )
   useWebSocket(handle)
 
-  const sectionOrder = useMemo(
-    () => resolveSectionOrder(savedSectionOrder),
-    [savedSectionOrder],
-  )
+  const p = preview?.prefs
+  const order = p ? p.npc_overlay_section_order : savedSectionOrder
+  const sectionOrder = useMemo(() => resolveSectionOrder(order), [order])
+  if (p) {
+    return { tagStyle: p.npc_overlay_tag_style, sectionOrder, tagOrder: p.npc_overlay_tag_order }
+  }
   return { tagStyle, sectionOrder, tagOrder }
 }

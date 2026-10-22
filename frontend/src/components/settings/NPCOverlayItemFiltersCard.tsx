@@ -11,6 +11,8 @@ interface Props {
   /** Per-character overrides, keyed by lowercased name. */
   byCharacter: Record<string, string[]>
   onChange: (hidden: string[], byCharacter: Record<string, string[]>) => void
+  /** Called when the "Editing" character changes, so a preview can follow. */
+  onScopeChange?: (character: string) => void
 }
 
 interface FilterGroup {
@@ -45,6 +47,7 @@ export default function NPCOverlayItemFiltersCard({
   hidden,
   byCharacter,
   onChange,
+  onScopeChange,
 }: Props): React.ReactElement {
   const [catalog, setCatalog] = useState<EnumsCatalog | null>(null)
   const [characters, setCharacters] = useState<string[]>([])
@@ -129,7 +132,10 @@ export default function NPCOverlayItemFiltersCard({
           Editing
           <select
             value={scope}
-            onChange={(e) => setScope(e.target.value)}
+            onChange={(e) => {
+              setScope(e.target.value)
+              onScopeChange?.(e.target.value)
+            }}
             className="rounded px-2 py-1 text-sm"
             style={{
               backgroundColor: 'var(--color-surface-2)',

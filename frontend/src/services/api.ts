@@ -1855,6 +1855,11 @@ export function getOverlayNPCTarget(): Promise<TargetState> {
   return get<TargetState>('/api/overlay/npc/target')
 }
 
+/** A live-shaped target for any NPC id, for the Settings overlay preview. */
+export function getOverlayNPCPreview(id: number): Promise<TargetState> {
+  return get<TargetState>(`/api/overlay/npc/preview/${id}`)
+}
+
 export function getOverlayNPCDistance(): Promise<TargetDistance> {
   return get<TargetDistance>('/api/overlay/npc/distance')
 }

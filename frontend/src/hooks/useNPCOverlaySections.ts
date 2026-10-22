@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getConfig } from '../services/api'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
+import { useNPCOverlayPreview } from '../lib/npcOverlayPreview'
 import {
   DEFAULT_NPC_OVERLAY_SECTIONS,
   type NPCOverlaySections,
@@ -17,11 +18,12 @@ export type NPCOverlaySurface = 'dashboard' | 'popout'
  *
  * Falls back to the all-visible default on initial load and on any error
  * so the overlay keeps working if the config endpoint is briefly
- * unavailable.
+ * unavailable. Inside the Settings preview it reads the unsaved preferences.
  */
 export function useNPCOverlaySections(
   surface: NPCOverlaySurface,
 ): NPCOverlaySections {
+  const preview = useNPCOverlayPreview()
   const [sections, setSections] = useState<NPCOverlaySections>(
     DEFAULT_NPC_OVERLAY_SECTIONS,
   )
@@ -54,5 +56,11 @@ export function useNPCOverlaySections(
   )
   useWebSocket(handle)
 
+  if (preview) {
+    const p = preview.prefs
+    const value =
+      surface === 'dashboard' ? p.npc_overlay_dashboard_sections : p.npc_overlay_popout_sections
+    return { ...DEFAULT_NPC_OVERLAY_SECTIONS, ...value }
+  }
   return sections
 }

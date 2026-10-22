@@ -19,6 +19,8 @@ interface Props {
   /** Per-character replacement lists. */
   sets: NPCOutlineRuleSet[]
   onChange: (rules: NPCOutlineRule[], sets: NPCOutlineRuleSet[]) => void
+  /** Called when the "Editing" character changes, so a preview can follow. */
+  onScopeChange?: (character: string) => void
 }
 
 const inputStyle: React.CSSProperties = {
@@ -219,7 +221,12 @@ function RuleEditor({
   )
 }
 
-export default function NPCOverlayOutlineRulesCard({ rules, sets, onChange }: Props): React.ReactElement {
+export default function NPCOverlayOutlineRulesCard({
+  rules,
+  sets,
+  onChange,
+  onScopeChange,
+}: Props): React.ReactElement {
   const [catalog, setCatalog] = useState<EnumsCatalog | null>(null)
   const [characters, setCharacters] = useState<string[]>([])
   const [scope, setScope] = useState('') // '' = all characters (global list)
@@ -275,7 +282,10 @@ export default function NPCOverlayOutlineRulesCard({ rules, sets, onChange }: Pr
           Editing
           <select
             value={scope}
-            onChange={(e) => setScope(e.target.value)}
+            onChange={(e) => {
+              setScope(e.target.value)
+              onScopeChange?.(e.target.value)
+            }}
             className="rounded px-2 py-1 text-sm"
             style={{ ...inputStyle, backgroundColor: 'var(--color-surface-2)' }}
           >
