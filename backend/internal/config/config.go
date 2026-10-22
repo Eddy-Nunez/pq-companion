@@ -718,6 +718,17 @@ type Preferences struct {
 	// built-in order. Frontend-only.
 	NPCOverlayTagOrder []int `yaml:"npc_overlay_tag_order,omitempty" json:"npc_overlay_tag_order"`
 
+	// NPCOverlayOutlineRules colour the NPC overlay's border (both surfaces)
+	// when the target matches, first enabled match wins. Empty = no outline.
+	// Frontend-only.
+	NPCOverlayOutlineRules []NPCOutlineRule `yaml:"npc_overlay_outline_rules,omitempty" json:"npc_overlay_outline_rules"`
+
+	// NPCOverlayOutlineRuleSets are per-character replacements for
+	// NPCOverlayOutlineRules. A slice rather than a map so removing a
+	// character's override survives the config PUT (which decodes over the
+	// existing config and can't delete map keys). Frontend-only.
+	NPCOverlayOutlineRuleSets []NPCOutlineRuleSet `yaml:"npc_overlay_outline_rule_sets,omitempty" json:"npc_overlay_outline_rule_sets"`
+
 	// OverlayLockedModes maps each popout overlay (by its canonical name:
 	// "dps", "hps", "buffTimer", "detrimTimer", "npc", "rollTracker",
 	// "respawnTimer") to how it behaves while locked:
@@ -983,6 +994,32 @@ const (
 type OverlayPosition struct {
 	X int `yaml:"x" json:"x"`
 	Y int `yaml:"y" json:"y"`
+}
+
+// NPCOutlineRule outlines the NPC overlay when the target matches. Tag and
+// class conditions are each optional (empty = ignored) but at least one must
+// be set; when both are set, both must pass. JSON tags deliberately skip
+// omitempty: the config PUT decodes slices over their old elements, so every
+// field must be sent to avoid inheriting a stale value.
+type NPCOutlineRule struct {
+	ID      string `yaml:"id" json:"id"`
+	Name    string `yaml:"name" json:"name"`
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	// Match is how Tags apply: "any", "all", or "none" (target has none).
+	Match string `yaml:"match" json:"match"`
+	// Tags are special-ability codes.
+	Tags []int `yaml:"tags" json:"tags"`
+	// Classes are NPC class ids; the target's class must be one of them.
+	Classes []int  `yaml:"classes" json:"classes"`
+	Color   string `yaml:"color" json:"color"`
+	Flash   bool   `yaml:"flash" json:"flash"`
+}
+
+// NPCOutlineRuleSet is one character's own outline rule list.
+type NPCOutlineRuleSet struct {
+	// Character is the lowercased character name.
+	Character string           `yaml:"character" json:"character"`
+	Rules     []NPCOutlineRule `yaml:"rules" json:"rules"`
 }
 
 // NPCOverlayTagStyle holds user overrides for NPC overlay special-ability

@@ -13,6 +13,7 @@ import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
 import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFiltersCard'
 import NPCOverlayTagStyleCard from '../components/settings/NPCOverlayTagStyleCard'
 import NPCOverlayLayoutCard from '../components/settings/NPCOverlayLayoutCard'
+import NPCOverlayOutlineRulesCard from '../components/settings/NPCOverlayOutlineRulesCard'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, saveConfigChanges, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
@@ -2543,6 +2544,24 @@ export default function SettingsPage(): React.ReactElement {
                 ...config.preferences,
                 npc_overlay_section_order: sectionOrder,
                 npc_overlay_tag_order: tagOrder,
+              },
+            })
+          }
+        />
+        )}
+
+        {/* ── NPC Overlay outline rules ──────────────────────────────────── */}
+        {tab === 'overlays' && (
+        <NPCOverlayOutlineRulesCard
+          rules={config.preferences.npc_overlay_outline_rules ?? []}
+          sets={config.preferences.npc_overlay_outline_rule_sets ?? []}
+          onChange={(rules, sets) =>
+            setConfig({
+              ...config,
+              preferences: {
+                ...config.preferences,
+                npc_overlay_outline_rules: rules,
+                npc_overlay_outline_rule_sets: sets,
               },
             })
           }

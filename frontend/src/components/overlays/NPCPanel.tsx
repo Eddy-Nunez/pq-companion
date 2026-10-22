@@ -7,6 +7,7 @@ import { useNPCOverlayView, type NPCOverlayView } from '../../hooks/useNPCOverla
 import { useNPCOverlayHiddenItems } from '../../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../../lib/npcItemFilters'
 import { emphasisStyle, resolveTagStyle } from '../../lib/npcTagStyle'
+import { useNPCOutlineMatches } from '../../hooks/useNPCOutlineMatches'
 import { useNPCOverlayDisplay } from '../../hooks/useNPCOverlayDisplay'
 import { sortByTagOrder, type NPCSectionId } from '../../lib/npcOverlayLayout'
 import { useWishlistItemIds } from '../../hooks/useWishlistItemIds'
@@ -33,6 +34,7 @@ import { ItemIcon } from '../Icon'
 import { ResistChip } from '../ResistChip'
 import NPCCasterSummarySection from './NPCCasterSummarySection'
 import NPCDistanceChip from './NPCDistanceChip'
+import { NPCOutlineFrame, NPCOutlineLabels } from './NPCOutline'
 import TargetTimerList from './TargetTimerList'
 import TargetPlayerCard from './TargetPlayerCard'
 import type { TargetState, SpecialAbility, TargetVariant, NPCCasterSummary } from '../../types/overlay'
@@ -835,6 +837,7 @@ export default function NPCPanel({
   const [pinned, setPinned] = useState(false)
   const pinnedRef = useRef(false)
   const sections = useNPCOverlaySections('dashboard')
+  const outlineMatches = useNPCOutlineMatches(target)
   const wishlistItemIds = useWishlistItemIds()
   const charLevel = useActiveCharacterLevel()
   const dist = useNPCTargetDistance()
@@ -911,7 +914,10 @@ export default function NPCPanel({
             <ConnPill state={wsState} status={status} />
           </div>
         }
-        outlineColor={pinned ? '#c9a84c' : undefined}
+        // A matched outline rule draws its own frame (with the pin ring
+        // inside it); otherwise the pin keeps the plain gold outline.
+        outlineColor={pinned && outlineMatches.length === 0 ? '#c9a84c' : undefined}
+        frame={<NPCOutlineFrame rule={outlineMatches[0]} pinned={pinned} />}
         defaultWidth={defaultWidth}
         defaultHeight={defaultHeight}
         defaultX={defaultX}
@@ -922,6 +928,7 @@ export default function NPCPanel({
         onLayoutChange={onLayoutChange}
       >
         <StatusBar status={status} />
+        {target?.has_target && <NPCOutlineLabels rules={outlineMatches} />}
         {target === null ? (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Loading…</p>

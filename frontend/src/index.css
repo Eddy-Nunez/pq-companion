@@ -161,6 +161,16 @@ input[type="range"] {
   50% { opacity: 0.55; }
 }
 
+/* NPC overlay outline rule with Flash on. Fixed ~1.2s period so it stays
+   readable while tab-targeting through a pull. */
+.npc-outline-flash {
+  animation: npc-outline-flash 1.2s ease-in-out infinite;
+}
+@keyframes npc-outline-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);

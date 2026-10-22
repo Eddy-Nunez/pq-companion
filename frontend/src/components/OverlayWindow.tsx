@@ -16,6 +16,9 @@ interface OverlayWindowProps {
   onLayoutChange?: (bounds: { x: number; y: number; width: number; height: number }) => void
   /** When set, draws a thick accent outline around the window (e.g. pinned state). */
   outlineColor?: string
+  /** Extra absolutely-positioned decoration drawn over the window (e.g. an
+   *  NPC outline-rule frame). Should be pointer-events: none. */
+  frame?: React.ReactNode
   children: React.ReactNode
 }
 
@@ -93,6 +96,7 @@ export default function OverlayWindow({
   snapGridSize,
   onLayoutChange,
   outlineColor,
+  frame,
   children,
 }: OverlayWindowProps): React.ReactElement {
   const [pos, setPos] = useState({ x: defaultX, y: defaultY })
@@ -325,6 +329,8 @@ export default function OverlayWindow({
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>
+
+      {frame}
 
       {/* ── Edge resize handles ──────────────────────────────────────────── */}
       {/* Top */}

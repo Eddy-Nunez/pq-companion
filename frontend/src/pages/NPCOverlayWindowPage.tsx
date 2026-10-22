@@ -11,6 +11,7 @@ import { useNPCOverlayView, type NPCOverlayView } from '../hooks/useNPCOverlayVi
 import { useNPCOverlayHiddenItems } from '../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../lib/npcItemFilters'
 import { emphasisStyle, resolveTagStyle } from '../lib/npcTagStyle'
+import { useNPCOutlineMatches } from '../hooks/useNPCOutlineMatches'
 import { useNPCOverlayDisplay } from '../hooks/useNPCOverlayDisplay'
 import { sortByTagOrder, type NPCSectionId } from '../lib/npcOverlayLayout'
 import { useNPCTargetDistance, type NPCTargetDistance } from '../hooks/useNPCTargetDistance'
@@ -27,6 +28,7 @@ import { ItemIcon } from '../components/Icon'
 import { ResistChip } from '../components/ResistChip'
 import NPCCasterSummarySection from '../components/overlays/NPCCasterSummarySection'
 import NPCDistanceChip from '../components/overlays/NPCDistanceChip'
+import { NPCOutlineFrame, NPCOutlineLabels } from '../components/overlays/NPCOutline'
 import TargetTimerList from '../components/overlays/TargetTimerList'
 import TargetPlayerCard from '../components/overlays/TargetPlayerCard'
 import { getOverlayNPCTarget, getNPCLoot, getNPCFaction } from '../services/api'
@@ -734,6 +736,7 @@ export default function NPCOverlayWindowPage(): React.ReactElement {
   const [pinned, setPinned] = useState(false)
   const pinnedRef = useRef(false)
   const sections = useNPCOverlaySections('popout')
+  const outlineMatches = useNPCOutlineMatches(target)
   const wishlistItemIds = useWishlistItemIds()
   const charLevel = useActiveCharacterLevel()
   const dist = useNPCTargetDistance()
@@ -777,8 +780,10 @@ export default function NPCOverlayWindowPage(): React.ReactElement {
         overflow: 'hidden',
         borderRadius: 8,
         border: `1px solid rgba(255,255,255,${chrome ? 0.1 : 0})`,
-        // Pin indicator stays visible even when the chrome fades.
-        outline: pinned ? '2px solid #c9a84c' : undefined,
+        position: 'relative',
+        // Pin indicator stays visible even when the chrome fades. A matched
+        // outline rule draws its own frame with the pin ring inside it.
+        outline: pinned && outlineMatches.length === 0 ? '2px solid #c9a84c' : undefined,
         outlineOffset: pinned ? -2 : undefined,
         transition: 'background-color 0.4s ease, border-color 0.4s ease',
       }}
@@ -856,6 +861,9 @@ export default function NPCOverlayWindowPage(): React.ReactElement {
           </button>
         </div>
       </div>
+
+      <NPCOutlineFrame rule={outlineMatches[0]} pinned={pinned} />
+      {target?.has_target && <NPCOutlineLabels rules={outlineMatches} />}
 
       {/* Content */}
       {target === null ? (

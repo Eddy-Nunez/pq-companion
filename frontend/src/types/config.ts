@@ -13,6 +13,30 @@ export interface NPCOverlayTagStyle {
   emphasized?: number[]
 }
 
+// Outlines the NPC overlay when the target matches (lib/npcOutlineRules).
+// Tag and class conditions are each optional; when both are set both must
+// pass. Always send every field — the config PUT decodes slices over their
+// old elements, so an omitted field would inherit a stale value.
+export interface NPCOutlineRule {
+  id: string
+  name: string
+  enabled: boolean
+  // How tags apply: the target has any / all / none of them.
+  match: 'any' | 'all' | 'none'
+  // Special-ability codes.
+  tags: number[]
+  // NPC class ids; the target's class must be one of them.
+  classes: number[]
+  color: string
+  flash: boolean
+}
+
+// One character's own outline rules (character is lowercased).
+export interface NPCOutlineRuleSet {
+  character: string
+  rules: NPCOutlineRule[]
+}
+
 export interface NPCOverlaySections {
   identity: boolean
   combat: boolean
@@ -261,6 +285,10 @@ export interface Preferences {
   // codes to show first, shared by both surfaces. Empty/absent = built-in order.
   npc_overlay_section_order?: string[]
   npc_overlay_tag_order?: number[]
+  // Outline the NPC overlay when the target matches a rule (first enabled
+  // match wins), plus per-character replacement lists.
+  npc_overlay_outline_rules?: NPCOutlineRule[]
+  npc_overlay_outline_rule_sets?: NPCOutlineRuleSet[]
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing
   // keys default to "interactive". See lib/overlays.ts.
   overlay_locked_modes?: Partial<Record<OverlayName, LockedMode>>
