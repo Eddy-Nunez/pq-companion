@@ -7,6 +7,7 @@ import { useOverlayChromeFade } from '../hooks/useOverlayChromeFade'
 import { useOverlayLock } from '../hooks/useOverlayLock'
 import { useWindowDrag } from '../hooks/useWindowDrag'
 import { useNPCOverlaySections } from '../hooks/useNPCOverlaySections'
+import { useNPCOverlayView, type NPCOverlayView } from '../hooks/useNPCOverlayView'
 import { useNPCOverlayHiddenItems } from '../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../lib/npcItemFilters'
 import { useNPCTargetDistance, type NPCTargetDistance } from '../hooks/useNPCTargetDistance'
@@ -118,7 +119,7 @@ function Chip({ label, value, color }: { label?: string; value: string | number;
 
 // ── View toggle (Stats ↔ Loot) ────────────────────────────────────────────────
 
-type View = 'stats' | 'loot' | 'timers'
+type View = NPCOverlayView
 
 function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }): React.ReactElement {
   const btn = (active: boolean): React.CSSProperties => ({
@@ -736,7 +737,7 @@ export default function NPCOverlayWindowPage(): React.ReactElement {
   const chrome = useOverlayChromeFade('npc', mode === 'display-only')
   const onDragMouseDown = useWindowDrag()
   const [target, setTarget] = useState<TargetState | null>(null)
-  const [view, setView] = useState<View>('stats')
+  const [view, setView] = useNPCOverlayView('popout')
   // Pin holds the displayed target and ignores incoming swaps until unpinned.
   // Ref mirrors state so the WS handler stays stable (no re-subscribe).
   const [pinned, setPinned] = useState(false)

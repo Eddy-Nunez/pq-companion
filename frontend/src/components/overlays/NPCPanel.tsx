@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Crosshair, AlertTriangle, CheckCircle2, Circle, Database, ExternalLink } from 'lucide-react'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { useNPCOverlaySections } from '../../hooks/useNPCOverlaySections'
+import { useNPCOverlayView, type NPCOverlayView } from '../../hooks/useNPCOverlayView'
 import { useNPCOverlayHiddenItems } from '../../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../../lib/npcItemFilters'
 import { useWishlistItemIds } from '../../hooks/useWishlistItemIds'
@@ -38,7 +39,7 @@ import type { NPC, NPCLootTable, LootDrop, NPCFaction } from '../../types/npc'
 import type { Item } from '../../types/item'
 import type { NPCOverlaySections } from '../../types/config'
 
-type View = 'stats' | 'loot' | 'timers'
+type View = NPCOverlayView
 
 interface NPCPanelProps {
   defaultX?: number
@@ -826,7 +827,7 @@ export default function NPCPanel({
 }: NPCPanelProps): React.ReactElement {
   const [target, setTarget] = useState<TargetState | null>(null)
   const [status, setStatus] = useState<LogTailerStatus | null>(null)
-  const [view, setView] = useState<View>('stats')
+  const [view, setView] = useNPCOverlayView('dashboard')
   const [modalItem, setModalItem] = useState<Item | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   // Pin holds the displayed target and ignores incoming swaps until unpinned.
