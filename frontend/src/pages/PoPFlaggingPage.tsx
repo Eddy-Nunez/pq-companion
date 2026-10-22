@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Flag, RefreshCw, AlertCircle,
-  ChevronDown, ChevronRight, ScrollText, ListChecks, Waypoints,
+  ChevronDown, ChevronRight, ScrollText, ListChecks, Waypoints, Download,
 } from 'lucide-react'
 import { getPopFlagDataset, getPopFlags, setPopFlag } from '../services/api'
 import type { PoPFlagStatus, PoPResolved } from '../types/popflag'
@@ -15,6 +15,7 @@ import CharacterSubTabs from '../components/CharacterSubTabs'
 import ImportSeerModal from '../components/ImportSeerModal'
 import { PopFlagRow } from '../components/PopFlagRow'
 import PopFlagOverviewGrid from '../components/PopFlagOverviewGrid'
+import { downloadPopFlagsExport } from '../lib/popFlagExport'
 
 // Flow view is lazy — it's only needed once a user switches off the checklist.
 const PoPFlagFlowPanel = lazy(() => import('./PoPFlagFlowPanel'))
@@ -413,6 +414,24 @@ export default function PoPFlaggingPage(): React.ReactElement {
               Sync from game
             </button>
           )}
+          {canToggle && (
+            <button
+              onClick={() => {
+                downloadPopFlagsExport(viewedCharacter)
+                  .catch((err: Error) => setError(err.message))
+              }}
+              className="flex items-center gap-1.5 text-xs px-2 py-1 rounded"
+              style={{
+                backgroundColor: 'var(--color-surface-2)',
+                color: 'var(--color-muted-foreground)',
+                border: '1px solid var(--color-border)',
+              }}
+              title={`Download ${viewedCharacter}'s progress as a JSON file`}
+            >
+              <Download size={11} />
+              Export JSON
+            </button>
+          )}
           <button
             onClick={load}
             className="flex items-center gap-1.5 text-xs px-2 py-1 rounded"
@@ -430,6 +449,10 @@ export default function PoPFlaggingPage(): React.ReactElement {
 
       {/* Per-character switcher */}
       <CharacterSubTabs value={viewedCharacter} onChange={onSelectTab} allowAll />
+
+      {error && (
+        <p className="px-4 py-2 text-[11px] shrink-0" style={{ color: '#f87171' }}>{error}</p>
+      )}
 
       {!canToggle && (
         <p className="px-4 py-2 text-[11px] shrink-0" style={{ color: 'var(--color-muted)' }}>

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ClipboardCopy, Download, RefreshCw } from 'lucide-react'
-import { exportPopFlags, getPopFlagDataset, getPopFlagSummary } from '../services/api'
+import { getPopFlagDataset, getPopFlagSummary } from '../services/api'
 import type { PoPFlag, PoPSummaryCharacter, PoPSummaryResponse } from '../types/popflag'
 import { zoneColor } from '../lib/popFlagKind'
+import { downloadPopFlagsExport } from '../lib/popFlagExport'
 import { useWebSocket } from '../hooks/useWebSocket'
 
 interface Props {
@@ -36,16 +37,6 @@ function summaryText(
       return `${c.name} — ${c.done}/${c.total} · ${parts.join(' · ')}`
     })
     .join('\n')
-}
-
-function downloadJson(data: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 const btnStyle: React.CSSProperties = {
@@ -99,12 +90,7 @@ export default function PopFlagOverviewGrid({ onSelectCharacter }: Props): React
   }, [dataset])
 
   const onExport = useCallback(() => {
-    exportPopFlags()
-      .then((data) => {
-        const day = new Date().toISOString().slice(0, 10)
-        downloadJson(data, `pq-companion-popflags-${day}.json`)
-      })
-      .catch((err: Error) => setError(err.message))
+    downloadPopFlagsExport().catch((err: Error) => setError(err.message))
   }, [])
 
   const onCopy = useCallback(() => {
