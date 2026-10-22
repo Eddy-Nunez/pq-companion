@@ -208,20 +208,24 @@ func meleeSharedDisciplines(packName string) []Trigger {
 // Tree, Spirit of Ash/Oak) are deliberately absent — their fade is not a
 // loose mob. Greater Fetter (61) and Word of Terris (65) are PoP spells
 // included ahead of the expansion launch; Dominating Gaze is the level-254
-// spell the Dire Charm AA casts. Undead Pact / Entrancing Lights /
+// spell the Dire Charm AA casts. 2026-10-22: extended with the rest of the
+// PoP (61–65) charm / root / snare spells — Beckon, Command of Druzzil,
+// Command of Tunare, Call of the Banshee, Call of the Arch Mage; Greater
+// Immobilize, Petrifying Earth, Earthen Roots, Savage Roots, Shackles of
+// Tunare; Festering / Embracing Darkness. Undead Pact / Entrancing Lights /
 // Elnerick's Entombment of Ice / Insidious Retrogression are Quarm-custom
 // spells.
 const (
-	charmBreakPattern = "^Your (?:charm|Charm|Beguile|Cajoling Whispers|Allure|Boltran[`']s Agacerie|Dictate|Befriend Animal|Charm Animals|Beguile Plants|Beguile Animals|Allure of the Wild|Call of Karana|Tunare[`']s Request|Dominate Undead|Beguile Undead|Cajole Undead|Thrall of Bones|Enslave Death|Word of Terris|Undead Pact|Dominating Gaze|Solon[`']s Bewitching Bravura|Solon[`']s Song of the Sirens) spell has worn off\\.$"
-	rootBreakPattern  = "^Your (?:Root|Instill|Fetter|Greater Fetter|Paralyzing Earth|Immobilize|Grasping Roots|Ensnaring Roots|Enveloping Roots|Engulfing Roots|Engorging Roots|Entrapping Roots|Hungry Earth|Elnerick[`']s Entombment of Ice) spell has worn off\\.$"
-	snareBreakPattern = "^Your (?:Snare|Ensnare|Tangling Weeds|Atol[`']s Spectral Shackles|Engulfing Darkness|Dooming Darkness|Cascading Darkness|Clinging Darkness|Devouring Darkness|Bonds of Force|Bonds of Tunare|Insidious Retrogression|Largo[`']s Absonant Binding|Selo[`']s Consonant Chain|Selo[`']s Assonant Strane|Song of Midnight) spell has worn off\\.$"
+	charmBreakPattern = "^Your (?:charm|Charm|Beguile|Cajoling Whispers|Allure|Boltran[`']s Agacerie|Dictate|Befriend Animal|Charm Animals|Beguile Plants|Beguile Animals|Allure of the Wild|Call of Karana|Tunare[`']s Request|Dominate Undead|Beguile Undead|Cajole Undead|Thrall of Bones|Enslave Death|Word of Terris|Beckon|Command of Druzzil|Command of Tunare|Call of the Banshee|Call of the Arch Mage|Undead Pact|Dominating Gaze|Solon[`']s Bewitching Bravura|Solon[`']s Song of the Sirens) spell has worn off\\.$"
+	rootBreakPattern  = "^Your (?:Root|Instill|Fetter|Greater Fetter|Paralyzing Earth|Immobilize|Grasping Roots|Ensnaring Roots|Enveloping Roots|Engulfing Roots|Engorging Roots|Entrapping Roots|Hungry Earth|Greater Immobilize|Petrifying Earth|Earthen Roots|Savage Roots|Shackles of Tunare|Elnerick[`']s Entombment of Ice) spell has worn off\\.$"
+	snareBreakPattern = "^Your (?:Snare|Ensnare|Tangling Weeds|Atol[`']s Spectral Shackles|Engulfing Darkness|Festering Darkness|Embracing Darkness|Dooming Darkness|Cascading Darkness|Clinging Darkness|Devouring Darkness|Bonds of Force|Bonds of Tunare|Insidious Retrogression|Largo[`']s Absonant Binding|Selo[`']s Consonant Chain|Selo[`']s Assonant Strane|Song of Midnight) spell has worn off\\.$"
 	// mezWornOffPattern is only used as an ExcludePattern on the Spell Breaks
 	// catch-all — mez break alerts stay class-specific (Enchanter, Bard,
 	// Necromancer). Kept in sync with the union of those packs' Mez Broke
 	// patterns so a line is suppressed here exactly when a class alert
 	// covers it; lull-type spells (Wake of Tranquility, Lugubrious Lament)
 	// are not mezzes and fall through to the generic worn-off overlay.
-	mezWornOffPattern = "^Your (?:Mesmerize|Mesmerization|Enthrall|Entrance|Dazzle|Fascination|Entrancing Lights|Glamour of Kintaz|Rapture|Ancient: Eternal Rapture|Screaming Terror|Kelin[`']s Lucid Lullaby|Crission[`']s Pixie Strike|Sionachie[`']s Dreams|Song of Twilight|Dreams of Ayonae|Ancient: Lullaby of Shadow) spell has worn off\\.$"
+	mezWornOffPattern = "^Your (?:Mesmerize|Mesmerization|Enthrall|Entrance|Dazzle|Fascination|Entrancing Lights|Glamour of Kintaz|Rapture|Ancient: Eternal Rapture|Apathy|Sleep|Bliss|Word of Morell|Screaming Terror|Death[`']s Silence|Kelin[`']s Lucid Lullaby|Crission[`']s Pixie Strike|Sionachie[`']s Dreams|Song of Twilight|Dreams of Ayonae|Ancient: Lullaby of Shadow|Dreams of Thule|Dreams of Terris|Lullaby of Morell) spell has worn off\\.$"
 	// petWornOffPattern matches a pet buff wearing off ("Your pet's <Spell>
 	// spell has worn off."). It's both its own "Pet Spell Worn Off" trigger and
 	// an ExcludePattern on the generic "Spell Worn Off" catch-all, so a pet line
@@ -293,7 +297,7 @@ func EnchanterPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Enchanter",
 		Class:       ClassPtr(ClassEnchanter),
-		Description: "CC break + cast-failure alerts plus spell timers for the enchanter buff (VoG, KEI, Gift of Brilliance, IS, GRM, Speed of the Shissar/Brood), debuff (Tashanian, Cripple, Asphyxiate), root (Root, Fetter, Greater Fetter), mez (Mesmerize, Mesmerization, Dazzle, Enthrall, Entrance, Glamour of Kintaz, Rapture / Ancient: Eternal Rapture), charm (Charm, Beguile, Cajoling Whispers, Allure, Dictate, Boltran's Agacerie), and pacify (Lull, Calm, Soothe, Pacify, Wake of Tranquility) lines.",
+		Description: "CC break + cast-failure alerts plus spell timers for the enchanter buff (VoG, Vallon's Quickening, KEI, Voice of Quellious, Tranquility, Gift of Brilliance, IS, GRM, Guard of Druzzil, Speed of the Shissar/Brood, Speed of Vallon), debuff (Tashanian, Howl of Tashan, Cripple, Asphyxiate, Strangle), root (Root, Fetter, Greater Fetter), mez (Mesmerize, Mesmerization, Dazzle, Enthrall, Entrance, Glamour of Kintaz, Rapture / Ancient: Eternal Rapture, Apathy, Sleep, Bliss), charm (Charm, Beguile, Cajoling Whispers, Allure, Dictate, Boltran's Agacerie, Beckon, Command of Druzzil), and pacify (Lull, Calm, Soothe, Pacify, Wake of Tranquility, Pacification) lines.",
 		Triggers: []Trigger{
 			// ── Crowd-control breaks ─────────────────────────────────────
 			{
@@ -301,10 +305,11 @@ func EnchanterPack() TriggerPack {
 				// listing it here double-fired MEZ BROKE on top of ROOT
 				// BROKE) and Wake of Tranquility is a lull, not a mez.
 				// Fascination and Entrancing Lights (Quarm-custom) are the
-				// enchanter AE mezzes.
+				// enchanter AE mezzes. Apathy / Sleep / Bliss / Word of Morell
+				// are the PoP mezzes (61–64).
 				Name:     "Mez Broke",
 				Enabled:  true,
-				Pattern:  `Your (?:Mesmerize|Mesmerization|Enthrall|Entrance|Dazzle|Fascination|Entrancing Lights|Glamour of Kintaz|Rapture|Ancient: Eternal Rapture) spell has worn off\.`,
+				Pattern:  `Your (?:Mesmerize|Mesmerization|Enthrall|Entrance|Dazzle|Fascination|Entrancing Lights|Glamour of Kintaz|Rapture|Ancient: Eternal Rapture|Apathy|Sleep|Bliss|Word of Morell) spell has worn off\.`,
 				PackName: "Enchanter",
 				Actions: []Action{
 					{Type: ActionOverlayText, Text: "MEZ BROKE!", DurationSecs: 5, Color: "#ff4444"},
@@ -410,6 +415,70 @@ func EnchanterPack() TriggerPack {
 				Actions:           []Action{},
 			},
 
+			// ── PoP buffs (timers) ───────────────────────────────────────
+			// Voice of Quellious shares KEI's land text and Guard of Druzzil
+			// shares Group Resist Magic's, so both key on "You begin casting
+			// <SpellName>." instead. The older land-text trigger still fires
+			// on the shared line; the spell-landed pipeline absorbs that twin
+			// into the correctly named timer (see spelltimer.sameLandOrphan).
+			{
+				Name:              "Voice of Quellious",
+				Enabled:           true,
+				Pattern:           `^You begin casting Voice of Quellious\.$`,
+				WornOffPattern:    `^Your mind returns to normal\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 4800,
+				SpellID:           3360,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Tranquility",
+				Enabled:           true,
+				Pattern:           `^(?:Tranquility soothes your mind\.|[A-Z][a-zA-Z']{2,14} sighs in contentment\.)$`,
+				WornOffPattern:    `^The tranquil breeze fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 4800,
+				SpellID:           3350,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Guard of Druzzil",
+				Enabled:           true,
+				Pattern:           `^You begin casting Guard of Druzzil\.$`,
+				WornOffPattern:    `^Your protection fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 3000,
+				SpellID:           3242,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				// quarm.db's cast_on_other has no trailing period; accept
+				// either form in case the client adds one.
+				Name:              "Speed of Vallon",
+				Enabled:           true,
+				Pattern:           `^(?:You move with the speed of Vallon\.|[A-Z][a-zA-Z']{2,14} moves with the speed of Vallon\.?)$`,
+				WornOffPattern:    `^Your restless nature fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 2520,
+				SpellID:           3240,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Vallon's Quickening",
+				Enabled:           true,
+				Pattern:           `^(?:You feel drawn to battle\.|[A-Z][a-zA-Z']{2,14} is drawn toward the glory of battle\.)$`,
+				WornOffPattern:    `^Your restless nature fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 2520,
+				SpellID:           3178,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+
 			// ── Debuffs (timers) ─────────────────────────────────────────
 			{
 				Name:           "Tashanian",
@@ -448,6 +517,30 @@ func EnchanterPack() TriggerPack {
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 120,
 				SpellID:           1703,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				// Shares Tashanian's land text, so it keys on the cast line;
+				// the Tashanian twin is absorbed by the spell-landed pipeline.
+				Name:              "Howl of Tashan",
+				Enabled:           true,
+				Pattern:           `^You begin casting Howl of Tashan\.$`,
+				WornOffPattern:    `^(?:The barking fades\.|Your target resisted the Howl of Tashan spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 780,
+				SpellID:           3342,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Strangle",
+				Enabled:           true,
+				Pattern:           `^(?:Your lungs contract\.|` + npcNameClass + ` claws at their throat\.)$`,
+				WornOffPattern:    `^You can breathe again\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 120,
+				SpellID:           3345,
 				PackName:          "Enchanter",
 				Actions:           []Action{},
 			},
@@ -558,6 +651,41 @@ func EnchanterPack() TriggerPack {
 				PackName:          "Enchanter",
 				Actions:           []Action{},
 			},
+			// PoP mezzes — each has unique land text, so like Enthrall they
+			// match the land line directly.
+			{
+				Name:              "Apathy",
+				Enabled:           true,
+				Pattern:           `^(?:Your existence suddenly seems pointless\.|` + npcNameClass + ` stares off into the distance\.)$`,
+				WornOffPattern:    `^(?:The apathy fades\.|Your Apathy spell has worn off\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 54,
+				SpellID:           3341,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Sleep",
+				Enabled:           true,
+				Pattern:           `^(?:You fall asleep\.|` + npcNameClass + ` falls asleep\.)$`,
+				WornOffPattern:    `^(?:You wake up, very disoriented\.|Your Sleep spell has worn off\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 54,
+				SpellID:           3354,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Bliss",
+				Enabled:           true,
+				Pattern:           `^(?:You swoon, overcome by bliss\.|` + npcNameClass + `'s jaw falls as they begin to drool\.)$`,
+				WornOffPattern:    `^(?:The bliss fades\.|Your Bliss spell has worn off\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 54,
+				SpellID:           3358,
+				PackName:          "Enchanter",
+				Actions:           []Action{},
+			},
 
 			// ── Charm (merged timer) ─────────────────────────────────────
 			// Every enchanter charm has an empty cast_on_other (the caster
@@ -589,8 +717,12 @@ func EnchanterPack() TriggerPack {
 					// 1706 ASCII); accept either so the captured key always matches
 					// what the log emits. Double-quoted for the backtick.
 					{Pattern: "^You begin casting (Boltran[`']s Agacerie)\\.$", Enabled: true, TimerDurationSecs: 1140, SpellID: 1706},
+					// PoP charms: formula 8 (min(level+10, base 75)) — 70 ticks
+					// at 60, the full 75 at 65.
+					{Pattern: `^You begin casting (Beckon)\.$`, Enabled: true, TimerDurationSecs: 420, SpellID: 3347},
+					{Pattern: `^You begin casting (Command of Druzzil)\.$`, Enabled: true, TimerDurationSecs: 420, SpellID: 3355},
 				},
-				WornOffPattern:    "^Your (?:target resisted the )?(Cajoling Whispers|Boltran[`']s Agacerie|Beguile|Allure|Charm) spell(?: has worn off)?\\.$",
+				WornOffPattern:    "^Your (?:target resisted the )?(Cajoling Whispers|Boltran[`']s Agacerie|Beguile|Allure|Charm|Beckon|Command of Druzzil) spell(?: has worn off)?\\.$",
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 1140,
 				SpellID:           300,
@@ -632,8 +764,9 @@ func EnchanterPack() TriggerPack {
 					{Pattern: `^You begin casting (Soothe)\.$`, Enabled: true, TimerDurationSecs: 150, SpellID: 501},
 					{Pattern: `^You begin casting (Pacify)\.$`, Enabled: true, TimerDurationSecs: 360, SpellID: 45},
 					{Pattern: `^You begin casting (Wake of Tranquility)\.$`, Enabled: true, TimerDurationSecs: 42, SpellID: 1541},
+					{Pattern: `^You begin casting (Pacification)\.$`, Enabled: true, TimerDurationSecs: 42, SpellID: 3197},
 				},
-				WornOffPattern:    `^Your (?:target resisted the )?(Wake of Tranquility|Soothe|Pacify|Lull|Calm) spell(?: has worn off)?\.$`,
+				WornOffPattern:    `^Your (?:target resisted the )?(Wake of Tranquility|Pacification|Soothe|Pacify|Lull|Calm) spell(?: has worn off)?\.$`,
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 120,
 				SpellID:           208,
@@ -655,7 +788,7 @@ func ClericPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Cleric",
 		Class:       ClassPtr(ClassCleric),
-		Description: "Spell timers for Aegolism / Blessing of Aegolism / Ancient: Gift of Aegolism, Naltron's Mark, Divine Intervention, Mark of Karn, and Divine Aura.",
+		Description: "Spell timers for Aegolism / Blessing of Aegolism / Ancient: Gift of Aegolism, Virtue / Hand of Virtue, Naltron's Mark, Symbol of Kazad / Kazad's Mark, Divine Intervention, Mark of Karn, Mark of Kings, Mark of the Righteous, and Divine Aura.",
 		Triggers: []Trigger{
 			// ── Raid buffs (timers) ──────────────────────────────────────
 			// Aegolism, Blessing of Aegolism, and Ancient: Gift of Aegolism
@@ -710,6 +843,57 @@ func ClericPack() TriggerPack {
 				Actions:           []Action{},
 			},
 
+			// ── PoP raid buffs (timers) ──────────────────────────────────
+			// Virtue and Hand of Virtue share land and fade text, and both
+			// Kazad symbols share Naltron's Mark's, so each keys on "You
+			// begin casting <SpellName>." like the Aegolism line. The
+			// Naltron's Mark land-text twin is absorbed by the spell-landed
+			// pipeline (see spelltimer.sameLandOrphan).
+			{
+				Name:              "Virtue",
+				Enabled:           true,
+				Pattern:           `^You begin casting Virtue\.$`,
+				WornOffPattern:    `^Your virtue fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 9000,
+				SpellID:           3467,
+				PackName:          "Cleric",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Hand of Virtue",
+				Enabled:           true,
+				Pattern:           `^You begin casting Hand of Virtue\.$`,
+				WornOffPattern:    `^Your virtue fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 9000,
+				SpellID:           3479,
+				PackName:          "Cleric",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Symbol of Kazad",
+				Enabled:           true,
+				Pattern:           `^You begin casting Symbol of Kazad\.$`,
+				WornOffPattern:    `^The mystic symbol fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 3780,
+				SpellID:           3466,
+				PackName:          "Cleric",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Kazad's Mark",
+				Enabled:           true,
+				Pattern:           "^You begin casting Kazad[`']s Mark\\.$",
+				WornOffPattern:    `^The mystic symbol fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 3780,
+				SpellID:           3047,
+				PackName:          "Cleric",
+				Actions:           []Action{},
+			},
+
 			// ── Emergency self-buff (timer) ──────────────────────────────
 			{
 				Name:              "Divine Intervention",
@@ -752,6 +936,28 @@ func ClericPack() TriggerPack {
 				PackName:          "Cleric",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Mark of Kings",
+				Enabled:           true,
+				Pattern:           `^(?:Your skin gleams with the mark of kings\.|` + npcNameClass + `'s skin gleams with the mark of kings\.)$`,
+				WornOffPattern:    `^The mark fades\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 240,
+				SpellID:           3469,
+				PackName:          "Cleric",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Mark of the Righteous",
+				Enabled:           true,
+				Pattern:           `^(?:Your skin gleams with bright red runes\.|` + npcNameClass + `'s skin gleams with bright red runes\.)$`,
+				WornOffPattern:    `^The bright red runes fade\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 210,
+				SpellID:           3477,
+				PackName:          "Cleric",
+				Actions:           []Action{},
+			},
 		},
 	}
 }
@@ -766,7 +972,7 @@ func DruidPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Druid",
 		Class:       ClassPtr(ClassDruid),
-		Description: "Crowd-control break alerts (root, snare) plus spell timers for Protection of the Glades, Blessing of Replenishment, Legacy of Thorn, Hand of Ro, Winged Death, Ensnare, and Entrapping Roots.",
+		Description: "Crowd-control break alerts (root, snare, charm) plus spell timers for Protection of the Glades, Protection / Blessing of the Nine, Blessing of Replenishment, Legacy of Thorn, Legacy of Bracken, Hand of Ro, Winged Death, Swarming Death, Ensnare, Entrapping Roots, Savage Roots, and Command of Tunare.",
 		Triggers: []Trigger{
 			// ── Crowd-control breaks ─────────────────────────────────────
 			// Caster's "Your <SpellName> spell has worn off." line fires both
@@ -774,6 +980,7 @@ func DruidPack() TriggerPack {
 			// druid needs to know the mob is loose.
 			sharedRootBreak("Druid"),
 			sharedSnareBreak("Druid"),
+			sharedCharmBreak("Druid"),
 
 			// ── Self / group buffs (timers) ──────────────────────────────
 			{
@@ -784,6 +991,32 @@ func DruidPack() TriggerPack {
 				TimerType:         TimerTypeBuff,
 				TimerDurationSecs: 6000,
 				SpellID:           1442,
+				PackName:          "Druid",
+				Actions:           []Action{},
+			},
+			// PoP upgrades that share an older spell's land text key on
+			// "You begin casting <SpellName>." instead; the older land-text
+			// trigger's twin is absorbed by the spell-landed pipeline (see
+			// spelltimer.sameLandOrphan).
+			{
+				Name:              "Protection of the Nine",
+				Enabled:           true,
+				Pattern:           `^You begin casting Protection of the Nine\.$`,
+				WornOffPattern:    `^Your skin returns to normal\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 6000,
+				SpellID:           3234,
+				PackName:          "Druid",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Blessing of the Nine",
+				Enabled:           true,
+				Pattern:           `^You begin casting Blessing of the Nine\.$`,
+				WornOffPattern:    `^Your skin returns to normal\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 6000,
+				SpellID:           3451,
 				PackName:          "Druid",
 				Actions:           []Action{},
 			},
@@ -806,6 +1039,17 @@ func DruidPack() TriggerPack {
 				TimerType:         TimerTypeBuff,
 				TimerDurationSecs: 390,
 				SpellID:           1561,
+				PackName:          "Druid",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Legacy of Bracken",
+				Enabled:           true,
+				Pattern:           `^You begin casting Legacy of Bracken\.$`,
+				WornOffPattern:    `^The bracken falls away\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 360,
+				SpellID:           3295,
 				PackName:          "Druid",
 				Actions:           []Action{},
 			},
@@ -833,6 +1077,17 @@ func DruidPack() TriggerPack {
 				PackName:          "Druid",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Swarming Death",
+				Enabled:           true,
+				Pattern:           `^You begin casting Swarming Death\.$`,
+				WornOffPattern:    `^(?:The swarm departs\.|Your target resisted the Swarming Death spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 36,
+				SpellID:           3446,
+				PackName:          "Druid",
+				Actions:           []Action{},
+			},
 
 			// ── Snare / root (timers) ────────────────────────────────────
 			{
@@ -857,6 +1112,34 @@ func DruidPack() TriggerPack {
 				PackName:          "Druid",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Savage Roots",
+				Enabled:           true,
+				Pattern:           `^You begin casting Savage Roots\.$`,
+				WornOffPattern:    `^(?:The roots fall from your feet\.|Your Savage Roots spell has worn off\.|Your target resisted the Savage Roots spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 270,
+				SpellID:           3447,
+				PackName:          "Druid",
+				Actions:           []Action{},
+			},
+
+			// ── Charm (timer) ────────────────────────────────────────────
+			// Command of Tunare has no cast_on_you and a generic "<mob>
+			// blinks." cast_on_other, so it keys on the cast line like the
+			// enchanter charms. Charm can break on any of the pet's ticks
+			// before this runs out — the timer is the best case.
+			{
+				Name:              "Command of Tunare",
+				Enabled:           true,
+				Pattern:           `^You begin casting Command of Tunare\.$`,
+				WornOffPattern:    `^Your (?:target resisted the Command of Tunare spell|charm spell has worn off|Command of Tunare spell has worn off)\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 1140,
+				SpellID:           3445,
+				PackName:          "Druid",
+				Actions:           []Action{},
+			},
 		},
 	}
 }
@@ -872,7 +1155,7 @@ func ShamanPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Shaman",
 		Class:       ClassPtr(ClassShaman),
-		Description: "Spell timers for Turgur's Insects, Plague of Insects, Malo, Malosini, Torpor, Avatar, Focus of Spirit, and Regrowth of Dar Khura.",
+		Description: "Spell timers for Turgur's Insects, Plague of Insects, Cloud of Grummus, Malo, Malosini, Malosinia, Malos, Torpor, Quiescence, Avatar, Ferine Avatar, Focus of Spirit, Focus of Soul, Focus of the Seventh, and Regrowth of Dar Khura.",
 		Triggers: []Trigger{
 			// ── Slows (timers) ──────────────────────────────────────────
 			{
@@ -894,6 +1177,17 @@ func ShamanPack() TriggerPack {
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 192,
 				SpellID:           2527,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Cloud of Grummus",
+				Enabled:           true,
+				Pattern:           `^(?:A cloud of plague numbs your body\.|` + npcNameClass + `'s body is covered in a brown mist\.)$`,
+				WornOffPattern:    `^The cloud disperses\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 192,
+				SpellID:           3380,
 				PackName:          "Shaman",
 				Actions:           []Action{},
 			},
@@ -925,6 +1219,29 @@ func ShamanPack() TriggerPack {
 				PackName:          "Shaman",
 				Actions:           []Action{},
 			},
+			// PoP Malosinia / Malos share the same anchors and fade text.
+			{
+				Name:              "Malosinia",
+				Enabled:           true,
+				Pattern:           `^You begin casting Malosinia\.$`,
+				WornOffPattern:    `^(?:Your vulnerability fades\.|Your target resisted the Malosinia spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 1140,
+				SpellID:           3387,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Malos",
+				Enabled:           true,
+				Pattern:           `^You begin casting Malos\.$`,
+				WornOffPattern:    `^(?:Your vulnerability fades\.|Your target resisted the Malos spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 780,
+				SpellID:           3395,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
 
 			// ── Tank-heal buff (timer) ──────────────────────────────────
 			{
@@ -935,6 +1252,17 @@ func ShamanPack() TriggerPack {
 				TimerType:         TimerTypeBuff,
 				TimerDurationSecs: 24,
 				SpellID:           1576,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Quiescence",
+				Enabled:           true,
+				Pattern:           `^(?:You fall into a state of quiescence\.|[A-Z][a-zA-Z']{2,14} falls into a state of quiescence\.)$`,
+				WornOffPattern:    `^Your state of quiescence ends\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 24,
+				SpellID:           3398,
 				PackName:          "Shaman",
 				Actions:           []Action{},
 			},
@@ -956,6 +1284,18 @@ func ShamanPack() TriggerPack {
 				PackName:          "Shaman",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Ferine Avatar",
+				Enabled:           true,
+				Pattern:           `^(?:Your body screams with the power of a ferine Avatar\.|[A-Z][a-zA-Z']{2,14} has been infused with the power of a ferine Avatar\.)$`,
+				WornOffPattern:    `^The ferine Avatar departs\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 360,
+				SpellID:           3399,
+				CooldownSecs:      60,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
 
 			// ── Self / group buffs (timers) ─────────────────────────────
 			{
@@ -966,6 +1306,31 @@ func ShamanPack() TriggerPack {
 				TimerType:         TimerTypeBuff,
 				TimerDurationSecs: 6000,
 				SpellID:           1432,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
+			// Focus of Soul / Focus of the Seventh share Focus of Spirit's
+			// land and fade text, so they key on the cast line; the Focus of
+			// Spirit twin is absorbed by the spell-landed pipeline.
+			{
+				Name:              "Focus of Soul",
+				Enabled:           true,
+				Pattern:           `^You begin casting Focus of Soul\.$`,
+				WornOffPattern:    `^Your focus fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 4800,
+				SpellID:           3235,
+				PackName:          "Shaman",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Focus of the Seventh",
+				Enabled:           true,
+				Pattern:           `^You begin casting Focus of the Seventh\.$`,
+				WornOffPattern:    `^Your focus fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 4800,
+				SpellID:           3397,
 				PackName:          "Shaman",
 				Actions:           []Action{},
 			},
@@ -1000,7 +1365,7 @@ func PaladinPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Paladin",
 		Class:       ClassPtr(ClassPaladin),
-		Description: "Lay on Hands alert, root break alert, and spell timers for Immobilize, Holyforge Discipline, Sanctification Discipline, plus the shared melee disciplines Resistant and Fearless.",
+		Description: "Lay on Hands alert, root break alert, and spell timers for Immobilize, Greater Immobilize, Holyforge Discipline, Sanctification Discipline, plus the shared melee disciplines Resistant and Fearless.",
 		Triggers: append([]Trigger{
 			// ── Emergency burst (overlay alert) ──────────────────────────
 			// Lay on Hands is instant with a 72-minute recast; the cast
@@ -1030,6 +1395,19 @@ func PaladinPack() TriggerPack {
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 60,
 				SpellID:           132,
+				PackName:          "Paladin",
+				Actions:           []Action{},
+			},
+			{
+				// Shares Immobilize's land text, so it keys on the cast line; the
+				// Immobilize twin is absorbed by the spell-landed pipeline.
+				Name:              "Greater Immobilize",
+				Enabled:           true,
+				Pattern:           `^You begin casting Greater Immobilize\.$`,
+				WornOffPattern:    `^(?:Your feet come free\.|Your Greater Immobilize spell has worn off\.|Your target resisted the Greater Immobilize spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 60,
+				SpellID:           3195,
 				PackName:          "Paladin",
 				Actions:           []Action{},
 			},
@@ -1073,7 +1451,7 @@ func ShadowknightPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Shadowknight",
 		Class:       ClassPtr(ClassShadowknight),
-		Description: "Harm Touch and Feign Death alerts plus spell timers for Engulfing Darkness, Disease Cloud, Voice of Terris, Asystole, and Unholy Aura Discipline.",
+		Description: "Harm Touch and Feign Death alerts plus spell timers for Engulfing Darkness, Festering Darkness, Disease Cloud, Voice of Terris, Voice of Thule, Asystole, and Unholy Aura Discipline.",
 		Triggers: []Trigger{
 			// ── Emergency burst (overlay alert) ──────────────────────────
 			{
@@ -1114,6 +1492,17 @@ func ShadowknightPack() TriggerPack {
 				PackName:          "Shadowknight",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Festering Darkness",
+				Enabled:           true,
+				Pattern:           `^(?:You are engulfed by a festering darkness\.|` + npcNameClass + ` is engulfed by a festering darkness\.)$`,
+				WornOffPattern:    `^(?:The festering darkness fades\.|Your Festering Darkness spell has worn off\.|Your target resisted the Festering Darkness spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 120,
+				SpellID:           3400,
+				PackName:          "Shadowknight",
+				Actions:           []Action{},
+			},
 
 			// ── Aggro debuff (timer) ─────────────────────────────────────
 			{
@@ -1137,6 +1526,21 @@ func ShadowknightPack() TriggerPack {
 				TimerType:         TimerTypeBuff,
 				TimerDurationSecs: 600,
 				SpellID:           1228,
+				CooldownSecs:      540,
+				PackName:          "Shadowknight",
+				Actions:           []Action{},
+			},
+			{
+				// Shares Voice of Terris's land and fade text, so it keys on the
+				// cast line; the Voice of Terris twin is absorbed by the spell-landed
+				// pipeline.
+				Name:              "Voice of Thule",
+				Enabled:           true,
+				Pattern:           `^You begin casting Voice of Thule\.$`,
+				WornOffPattern:    `^The voice of nightmares fades\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 600,
+				SpellID:           3410,
 				CooldownSecs:      540,
 				PackName:          "Shadowknight",
 				Actions:           []Action{},
@@ -1582,7 +1986,7 @@ func RangerPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Ranger",
 		Class:       ClassPtr(ClassRanger),
-		Description: "Snare break alert plus spell timers for Trueshot Discipline, Weapon Shield Discipline, Call of Sky, Call of Fire, Flame Lick, plus the shared melee disciplines Resistant and Fearless.",
+		Description: "Snare break alert plus spell timers for Trueshot Discipline, Weapon Shield Discipline, Call of Sky, Call of Fire, Nature's Rebuke, Cry of Thunder, Flame Lick, plus the shared melee disciplines Resistant and Fearless.",
 		Triggers: append([]Trigger{
 			// ── Crowd-control break ──────────────────────────────────────
 			// Covers the ranger snare line (Snare, Ensnare, Tangling
@@ -1641,6 +2045,28 @@ func RangerPack() TriggerPack {
 				PackName:          "Ranger",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Nature's Rebuke",
+				Enabled:           true,
+				Pattern:           `^Nature's order fills your blade\.$`,
+				WornOffPattern:    `^Nature's order leaves your weapons\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 3600,
+				SpellID:           3415,
+				PackName:          "Ranger",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Cry of Thunder",
+				Enabled:           true,
+				Pattern:           `^The cry of thunder fills your weapons with power\.$`,
+				WornOffPattern:    `^The cry of thunder leaves\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 3600,
+				SpellID:           3420,
+				PackName:          "Ranger",
+				Actions:           []Action{},
+			},
 
 			// ── Aggro tool (timer) ───────────────────────────────────────
 			{
@@ -1679,7 +2105,7 @@ func BardPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Bard",
 		Class:       ClassPtr(ClassBard),
-		Description: "Crowd-control break alerts (mez, charm, snare) plus spell timers for Cantata of Replenishment, Warsong of Zek, Niv's Melody of Preservation, Psalm of Veeshan, Elemental Rhythms, Guardian Rhythms, Kelin's Lucid Lullaby / Lugubrious Lament, Solon's Bewitching Bravura, Largo's Absonant Binding, and the Tiny Cloak of Darkest Night clicky (Shroud of Stealth).",
+		Description: "Crowd-control break alerts (mez, charm, snare) plus spell timers for Cantata of Replenishment, Warsong of Zek, Niv's Melody of Preservation, Psalm of Veeshan, Elemental Rhythms, Guardian Rhythms, Kelin's Lucid Lullaby / Lugubrious Lament, Dreams of Thule, Dreams of Terris, Lullaby of Morell, Solon's Bewitching Bravura, Call of the Banshee, Largo's Absonant Binding, and the Tiny Cloak of Darkest Night clicky (Shroud of Stealth).",
 		Triggers: []Trigger{
 			// ── Crowd-control breaks ─────────────────────────────────────
 			// Bard songs pulse every tick, so the worn-off line only fires
@@ -1691,7 +2117,7 @@ func BardPack() TriggerPack {
 				// here never matches. Double-quoted for the backtick.
 				Name:     "Mez Broke",
 				Enabled:  true,
-				Pattern:  "Your (?:Kelin[`']s Lucid Lullaby|Crission[`']s Pixie Strike|Sionachie[`']s Dreams|Song of Twilight|Dreams of Ayonae|Ancient: Lullaby of Shadow) spell has worn off\\.",
+				Pattern:  "Your (?:Kelin[`']s Lucid Lullaby|Crission[`']s Pixie Strike|Sionachie[`']s Dreams|Song of Twilight|Dreams of Ayonae|Ancient: Lullaby of Shadow|Dreams of Thule|Dreams of Terris|Lullaby of Morell) spell has worn off\\.",
 				PackName: "Bard",
 				Actions: []Action{
 					{Type: ActionOverlayText, Text: "MEZ BROKE!", DurationSecs: 5, Color: "#ff4444"},
@@ -1809,6 +2235,42 @@ func BardPack() TriggerPack {
 				Actions:           []Action{},
 			},
 			{
+				// Dreams of Thule / Dreams of Terris share the same cast_on_other
+				// ("<mob>'s head nods, as he begins to twitch."), so both key on the
+				// song's "You begin singing <SpellName>." line.
+				Name:              "Dreams of Thule",
+				Enabled:           true,
+				Pattern:           `^You begin singing Dreams of Thule\.$`,
+				WornOffPattern:    `^(?:You wake up sweating\.|Your Dreams of Thule spell has worn off\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 18,
+				SpellID:           3030,
+				PackName:          "Bard",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Dreams of Terris",
+				Enabled:           true,
+				Pattern:           `^You begin singing Dreams of Terris\.$`,
+				WornOffPattern:    `^(?:You wake up sweating\.|Your Dreams of Terris spell has worn off\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 18,
+				SpellID:           3369,
+				PackName:          "Bard",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Lullaby of Morell",
+				Enabled:           true,
+				Pattern:           `^(?:The Shadows of Morell force you to sleep\.|` + npcNameClass + ` blinks and falls to the ground\.)$`,
+				WornOffPattern:    `^(?:You wake up in a blissful state\.|Your Lullaby of Morell spell has worn off\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 18,
+				SpellID:           3376,
+				PackName:          "Bard",
+				Actions:           []Action{},
+			},
+			{
 				Name:              "Solon's Bewitching Bravura",
 				Enabled:           true,
 				Pattern:           `^(?:You are captivated by the bewitching tune\.|` + npcNameClass + `'s eyes glaze over\.)$`,
@@ -1816,6 +2278,20 @@ func BardPack() TriggerPack {
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 60,
 				SpellID:           750,
+				PackName:          "Bard",
+				Actions:           []Action{},
+			},
+			{
+				// Shares Solon's Bewitching Bravura's "<mob>'s eyes glaze over."
+				// cast_on_other, so it keys on the song's start line. Charm can break
+				// on any of the pet's ticks before this runs out — it's the best case.
+				Name:              "Call of the Banshee",
+				Enabled:           true,
+				Pattern:           `^You begin singing Call of the Banshee\.$`,
+				WornOffPattern:    `^(?:The wailing voice fades\.|Your (?:charm|Call of the Banshee) spell has worn off\.|Your target resisted the Call of the Banshee spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 60,
+				SpellID:           3371,
 				PackName:          "Bard",
 				Actions:           []Action{},
 			},
@@ -1867,7 +2343,7 @@ func MagicianPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Magician",
 		Class:       ClassPtr(ClassMagician),
-		Description: "Spell timers for Burnout IV (pet haste) and Shield of Lava (damage shield).",
+		Description: "Charm break alert plus spell timers for Burnout IV / Burnout V (pet haste), Shield of Lava / Flameshield of Ro / Maelstrom of Ro (damage shields), and Call of the Arch Mage (elemental charm).",
 		Triggers: []Trigger{
 			// ── Pet haste (timer) ───────────────────────────────────────
 			// Burnout IV has empty cast_on_you and "<name> goes berserk."
@@ -1885,6 +2361,16 @@ func MagicianPack() TriggerPack {
 				PackName:          "Magician",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Burnout V",
+				Enabled:           true,
+				Pattern:           `^You begin casting Burnout V\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 1500,
+				SpellID:           3237,
+				PackName:          "Magician",
+				Actions:           []Action{},
+			},
 
 			// ── Damage shield (timer) ───────────────────────────────────
 			{
@@ -1898,6 +2384,45 @@ func MagicianPack() TriggerPack {
 				PackName:          "Magician",
 				Actions:           []Action{},
 			},
+			{
+				Name:              "Flameshield of Ro",
+				Enabled:           true,
+				Pattern:           `^(?:You are enveloped by the flameshield of Ro\.|[A-Z][a-zA-Z']{2,14} is enveloped by the flameshield of Ro\.)$`,
+				WornOffPattern:    `^The flameshield dies down\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 420,
+				SpellID:           3198,
+				PackName:          "Magician",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Maelstrom of Ro",
+				Enabled:           true,
+				Pattern:           `^(?:You are enveloped by the maelstrom of Ro\.|[A-Z][a-zA-Z']{2,14} is enveloped by the maelstrom of Ro\.)$`,
+				WornOffPattern:    `^The maelstrom dies down\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 420,
+				SpellID:           3486,
+				PackName:          "Magician",
+				Actions:           []Action{},
+			},
+
+			// ── Charm (timer) ────────────────────────────────────────────
+			{
+				// Elemental charm. Keys on the cast line like the other class
+				// charms; charm can break on any of the pet's ticks before this runs
+				// out, so the timer is the best case.
+				Name:              "Call of the Arch Mage",
+				Enabled:           true,
+				Pattern:           `^You begin casting Call of the Arch Mage\.$`,
+				WornOffPattern:    `^Your (?:target resisted the Call of the Arch Mage spell|charm spell has worn off|Call of the Arch Mage spell has worn off)\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 1140,
+				SpellID:           3484,
+				PackName:          "Magician",
+				Actions:           []Action{},
+			},
+			sharedCharmBreak("Magician"),
 		},
 	}
 }
@@ -1914,7 +2439,7 @@ func NecromancerPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Necromancer",
 		Class:       ClassPtr(ClassNecromancer),
-		Description: "Mez/charm/snare break alerts plus spell timers for Arch Lich, Splurt, Ignite Blood, Pyrocruor, Bond of Death, and Harmshield.",
+		Description: "Mez/charm/snare break alerts plus spell timers for Arch Lich, Seduction of Saryrn, Splurt, Ignite Blood, Pyrocruor, Blood of Thule, Dark Plague, Embracing Darkness, Bond of Death, Saryrn's Kiss, Harmshield, and undead charm (Thrall of Bones, Word of Terris).",
 		Triggers: []Trigger{
 			// ── Crowd-control breaks ─────────────────────────────────────
 			// Charm covers the undead-charm line (Dominate/Beguile/Cajole
@@ -1928,7 +2453,7 @@ func NecromancerPack() TriggerPack {
 			{
 				Name:     "Mez Broke",
 				Enabled:  true,
-				Pattern:  `Your Screaming Terror spell has worn off\.`,
+				Pattern:  "Your (?:Screaming Terror|Death[`']s Silence) spell has worn off\\.",
 				PackName: "Necromancer",
 				Actions: []Action{
 					{Type: ActionOverlayText, Text: "MEZ BROKE!", DurationSecs: 5, Color: "#ff4444"},
@@ -1947,6 +2472,17 @@ func NecromancerPack() TriggerPack {
 				TimerType:         TimerTypeBuff,
 				TimerDurationSecs: 360,
 				SpellID:           1416,
+				PackName:          "Necromancer",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Seduction of Saryrn",
+				Enabled:           true,
+				Pattern:           `^(?:Your soul is claimed in a cold caress\.|[A-Z][a-zA-Z']{2,14} radiates an aura of cold\.)$`,
+				WornOffPattern:    `^The cold hands release your soul, for now\.$`,
+				TimerType:         TimerTypeBuff,
+				TimerDurationSecs: 3600,
+				SpellID:           3311,
 				PackName:          "Necromancer",
 				Actions:           []Action{},
 			},
@@ -1990,6 +2526,39 @@ func NecromancerPack() TriggerPack {
 				Actions:           []Action{},
 			},
 			{
+				Name:              "Blood of Thule",
+				Enabled:           true,
+				Pattern:           `^(?:The blood of Thule pumps through your veins\.|` + npcNameClass + `'s veins turn a vile shade of green\.)$`,
+				WornOffPattern:    `^Your veins return to normal\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 42,
+				SpellID:           3303,
+				PackName:          "Necromancer",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Dark Plague",
+				Enabled:           true,
+				Pattern:           `^(?:Black spots form on your skin\.|` + npcNameClass + `'s skin is covered in black spots\.)$`,
+				WornOffPattern:    `^The plague has ended\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 120,
+				SpellID:           3315,
+				PackName:          "Necromancer",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Embracing Darkness",
+				Enabled:           true,
+				Pattern:           `^(?:You are engulfed by an embracing darkness\.|` + npcNameClass + ` is engulfed in an embracing darkness\.)$`,
+				WornOffPattern:    `^(?:The darkness fades\.|Your Embracing Darkness spell has worn off\.|Your target resisted the Embracing Darkness spell\.)$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 120,
+				SpellID:           3309,
+				PackName:          "Necromancer",
+				Actions:           []Action{},
+			},
+			{
 				Name:              "Bond of Death",
 				Enabled:           true,
 				Pattern:           `^(?:You feel your life force drain away\.|` + npcNameClass + ` staggers\.)$`,
@@ -1997,6 +2566,37 @@ func NecromancerPack() TriggerPack {
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 54,
 				SpellID:           456,
+				PackName:          "Necromancer",
+				Actions:           []Action{},
+			},
+			{
+				Name:              "Saryrn's Kiss",
+				Enabled:           true,
+				Pattern:           `^(?:You feel unseen lips touch your face\.|` + npcNameClass + ` screams in torment\.)$`,
+				WornOffPattern:    `^Your torment ends, for now\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 60,
+				SpellID:           3306,
+				PackName:          "Necromancer",
+				Actions:           []Action{},
+			},
+
+			// ── Undead charm (merged timer) ──────────────────────────────
+			// Keys on the cast line like the enchanter charms; charm can break
+			// on any of the pet's ticks before this runs out — it's the best
+			// case. Both ranks are formula 10 (190 ticks at 60).
+			{
+				Name:    "Undead Charm",
+				Enabled: true,
+				Pattern: `^You begin casting (Word of Terris)\.$`,
+				ExtraPatterns: []ExtraPattern{
+					{Pattern: `^You begin casting (Thrall of Bones)\.$`, Enabled: true, TimerDurationSecs: 1140, SpellID: 1624},
+				},
+				WornOffPattern:    `^Your (?:target resisted the )?(Word of Terris|Thrall of Bones) spell(?: has worn off)?\.$`,
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 1140,
+				SpellID:           3316,
+				TimerKeyCapture:   "1",
 				PackName:          "Necromancer",
 				Actions:           []Action{},
 			},
@@ -2104,7 +2704,7 @@ func BeastlordPack() TriggerPack {
 	return TriggerPack{
 		PackName:    "Beastlord",
 		Class:       ClassPtr(ClassBeastlord),
-		Description: "Spell timers for Spiritual Purity, Spiritual Dominion, Paragon of Spirit, Ferocity, Sha's Advantage, both beastlord disciplines (Protective Spirit, Bestial Rage), plus the shared melee disciplines Resistant and Fearless.",
+		Description: "Spell timers for Spiritual Purity, Spiritual Dominion, Paragon of Spirit, Ferocity, Sha's Advantage, Sha's Revenge, both beastlord disciplines (Protective Spirit, Bestial Rage), plus the shared melee disciplines Resistant and Fearless.",
 		Triggers: append([]Trigger{
 			// ── Group mana/HP buffs (timers) ────────────────────────────
 			{
@@ -2173,6 +2773,20 @@ func BeastlordPack() TriggerPack {
 				TimerType:         TimerTypeDetrimental,
 				TimerDurationSecs: 192,
 				SpellID:           2942,
+				PackName:          "Beastlord",
+				Actions:           []Action{},
+			},
+			{
+				// Shares Sha's Advantage's land and fade text, so it keys on the
+				// cast line; the Sha's Advantage twin is absorbed by the spell-landed
+				// pipeline.
+				Name:              "Sha's Revenge",
+				Enabled:           true,
+				Pattern:           "^You begin casting Sha[`']s Revenge\\.$",
+				WornOffPattern:    "^(?:You regain your fighting edge\\.|Your target resisted the Sha[`']s Revenge spell\\.)$",
+				TimerType:         TimerTypeDetrimental,
+				TimerDurationSecs: 192,
+				SpellID:           3462,
 				PackName:          "Beastlord",
 				Actions:           []Action{},
 			},
@@ -2816,6 +3430,8 @@ func SlowsPack() TriggerPack {
 			// the original export.
 			slow("BRD slow (40%)", ``, ` has been deafened\.`,
 				``, 1748, 60),
+			slow("BRD slow (55%)", ``, `'s rhythm slows\.`,
+				``, 3066, 60),
 			// Necromancer's slow line comes in at least two named ranks
 			// (Shackle of Bone, Shackle of Spirit) that share the same
 			// "is hindered by a shackle of ___" phrasing and both fold to
