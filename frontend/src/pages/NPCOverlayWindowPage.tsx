@@ -388,7 +388,7 @@ function StatsBody({
   // distance: live player→target distance, for the caster in-reach markers.
   distance?: number | null
 }): React.ReactElement {
-  const hidden = useNPCOverlayHiddenItems()
+  const hidden = useNPCOverlayHiddenItems('popout')
   const { tagStyle, sectionOrder, tagOrder } = useNPCOverlayDisplay()
   const vis = (k: string): boolean => !hidden.has(k)
   const anyVis = (...ks: string[]): boolean => ks.some(vis)

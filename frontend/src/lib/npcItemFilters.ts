@@ -1,7 +1,49 @@
-// Item-level filters for the NPC overlay. Section toggles (Settings → NPC
-// Overlay Sections) hide whole sections; these keys hide individual chips and
-// special-ability badges inside them. Keys are shared by both overlay surfaces
-// and the Settings editor.
+// Visibility filters for the NPC overlay. One list of hidden keys covers both
+// whole sections ("section.faction") and individual chips and special-ability
+// badges inside them ("combat.atk", "ability.10"). A plain key is hidden on
+// both overlay surfaces; a "dashboard:" or "popout:" prefix hides it on that
+// surface only. A character can keep their own list, which replaces the
+// global one. Both overlay surfaces and the Settings editor share this.
+
+export type NPCSurface = 'dashboard' | 'popout'
+
+const SURFACES: NPCSurface[] = ['dashboard', 'popout']
+
+export const sectionKey = (id: string): string => `section.${id}`
+
+// The keys hidden on one surface, with surface prefixes stripped.
+export function hiddenKeysFor(list: string[], surface: NPCSurface): Set<string> {
+  const out = new Set<string>()
+  for (const k of list) {
+    const i = k.indexOf(':')
+    if (i < 0) out.add(k)
+    else if (k.slice(0, i) === surface) out.add(k.slice(i + 1))
+  }
+  return out
+}
+
+export function isHiddenOn(list: string[], key: string, surface: NPCSurface): boolean {
+  return list.includes(key) || list.includes(`${surface}:${key}`)
+}
+
+// Returns the list with key shown or hidden on the given surfaces, stored in
+// its shortest form (a plain key when hidden on both).
+export function setKeyVisibility(
+  list: string[],
+  key: string,
+  surfaces: NPCSurface[],
+  show: boolean,
+): string[] {
+  const hidden = new Map(SURFACES.map((s) => [s, isHiddenOn(list, key, s)]))
+  for (const s of surfaces) hidden.set(s, !show)
+  const rest = list.filter((k) => k !== key && !SURFACES.some((s) => k === `${s}:${key}`))
+  const dash = hidden.get('dashboard')
+  const pop = hidden.get('popout')
+  if (dash && pop) rest.push(key)
+  else if (dash) rest.push(`dashboard:${key}`)
+  else if (pop) rest.push(`popout:${key}`)
+  return rest
+}
 
 export type NPCItemSection =
   | 'identity'

@@ -526,7 +526,7 @@ function NPCDetails({
         ? npc.max_level
         : npc.level
   const pbaoe = charLevel != null ? pbaoeReduction(charLevel, mobLevel) : null
-  const hidden = useNPCOverlayHiddenItems()
+  const hidden = useNPCOverlayHiddenItems('dashboard')
   const { tagStyle, sectionOrder, tagOrder } = useNPCOverlayDisplay()
   const vis = (k: string): boolean => !hidden.has(k)
   const anyVis = (...ks: string[]): boolean => ks.some(vis)

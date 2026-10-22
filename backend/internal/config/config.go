@@ -690,6 +690,14 @@ type Preferences struct {
 	// run. Same rationale as the markers above.
 	NPCDistanceSectionMigrationDone bool `yaml:"npc_distance_section_migration_done,omitempty" json:"npc_distance_section_migration_done"`
 
+	// NPCSectionsHiddenMigrationDone marks that section visibility has moved
+	// from the two NPCOverlaySections structs into the hidden-items lists as
+	// "section.<id>" keys (prefixed "dashboard:" / "popout:" when hidden on
+	// one surface only), so sections can be per character like items. After
+	// it runs both structs are all-true and the lists are the source of
+	// truth. See migrateNPCSectionsToHidden.
+	NPCSectionsHiddenMigrationDone bool `yaml:"npc_sections_hidden_migration_done,omitempty" json:"npc_sections_hidden_migration_done"`
+
 	// NPCOverlayCastRange is the spell range (game units) the NPC overlay's
 	// distance readout is coloured against: green within it, yellow in its
 	// last 10%, red beyond. The player enters their effective range — focus
@@ -1250,6 +1258,54 @@ func DefaultCHChainSettings() CHChainSettings {
 // DefaultNPCOverlaySections returns the all-visible default — matches the
 // behaviour before this preference existed (Faction was added later and is
 // also on by default; see the migration in applyDefaults for existing configs).
+// npcSectionFlags pairs each NPCOverlaySections field with its section key id
+// (the field's JSON name), for migrateNPCSectionsToHidden.
+func npcSectionFlags(s *NPCOverlaySections) []struct {
+	id string
+	on bool
+} {
+	return []struct {
+		id string
+		on bool
+	}{
+		{"identity", s.Identity}, {"combat", s.Combat}, {"resists", s.Resists},
+		{"attributes", s.Attributes}, {"special_abilities", s.SpecialAbilities},
+		{"faction", s.Faction}, {"behavior", s.Behavior}, {"spells", s.Spells},
+		{"spells_procs", s.SpellsProcs}, {"spells_signature", s.SpellsSignature},
+		{"spells_class", s.SpellsClass}, {"distance", s.Distance},
+	}
+}
+
+// migrateNPCSectionsToHidden moves sections switched off in the per-surface
+// structs into the hidden-items lists, then turns every struct flag on. The
+// keys go into the global list and every per-character list, since a
+// character's list replaces the global one rather than adding to it.
+func migrateNPCSectionsToHidden(p *Preferences) {
+	dash := npcSectionFlags(&p.NPCOverlayDashboardSections)
+	pop := npcSectionFlags(&p.NPCOverlayPopoutSections)
+	var keys []string
+	for i := range dash {
+		key := "section." + dash[i].id
+		switch {
+		case !dash[i].on && !pop[i].on:
+			keys = append(keys, key)
+		case !dash[i].on:
+			keys = append(keys, "dashboard:"+key)
+		case !pop[i].on:
+			keys = append(keys, "popout:"+key)
+		}
+	}
+	p.NPCOverlayDashboardSections = DefaultNPCOverlaySections()
+	p.NPCOverlayPopoutSections = DefaultNPCOverlaySections()
+	if len(keys) == 0 {
+		return
+	}
+	p.NPCOverlayHiddenItems = append(p.NPCOverlayHiddenItems, keys...)
+	for name, list := range p.NPCOverlayHiddenItemsByCharacter {
+		p.NPCOverlayHiddenItemsByCharacter[name] = append(append([]string(nil), list...), keys...)
+	}
+}
+
 func DefaultNPCOverlaySections() NPCOverlaySections {
 	return NPCOverlaySections{
 		Identity:         true,
@@ -1571,6 +1627,12 @@ func applyDefaults(cfg *Config) bool {
 		cfg.Preferences.NPCOverlayDashboardSections.Distance = true
 		cfg.Preferences.NPCOverlayPopoutSections.Distance = true
 		cfg.Preferences.NPCDistanceSectionMigrationDone = true
+		changed = true
+	}
+	// Runs after the per-section migrations above so their defaults carry over.
+	if !cfg.Preferences.NPCSectionsHiddenMigrationDone {
+		migrateNPCSectionsToHidden(&cfg.Preferences)
+		cfg.Preferences.NPCSectionsHiddenMigrationDone = true
 		changed = true
 	}
 	if cfg.Preferences.NPCOverlayCastRange <= 0 {

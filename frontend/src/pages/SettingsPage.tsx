@@ -10,17 +10,16 @@ import KokoroTtsSettings from '../components/settings/KokoroTtsSettings'
 import DiscordVoiceOverlaySettings from '../components/settings/DiscordVoiceOverlaySettings'
 import DiscordWebhookSettings from '../components/settings/DiscordWebhookSettings'
 import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
-import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFiltersCard'
+import NPCOverlayDisplayCard from '../components/settings/NPCOverlayDisplayCard'
 import NPCOverlayTagStyleCard from '../components/settings/NPCOverlayTagStyleCard'
 import NPCOverlayLayoutCard from '../components/settings/NPCOverlayLayoutCard'
 import NPCOverlayOutlineRulesCard from '../components/settings/NPCOverlayOutlineRulesCard'
 import NPCOverlayPreview from '../components/settings/NPCOverlayPreview'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
-import DecimalInput from '../components/DecimalInput'
 import { getConfig, saveConfigChanges, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
 import { renderChangelogBody } from '../components/WhatsNewModal'
-import type { Config, DPSClassColors, LogTrimSettings, NPCOverlaySections, TimerAlertPref } from '../types/config'
-import { DEFAULT_DPS_CLASS_COLORS, DEFAULT_LOG_TRIM, DEFAULT_NPC_OVERLAY_SECTIONS } from '../types/config'
+import type { Config, DPSClassColors, LogTrimSettings, TimerAlertPref } from '../types/config'
+import { DEFAULT_DPS_CLASS_COLORS, DEFAULT_LOG_TRIM } from '../types/config'
 import { withTimerAlertDefaults } from '../lib/timerAlerts'
 import { mergeConfigEdits } from '../lib/configMerge'
 import { OVERLAY_DEFS, resolveLockedMode } from '../lib/overlays'
@@ -2564,50 +2563,8 @@ export default function SettingsPage(): React.ReactElement {
         {tab === 'npcoverlay' && (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="flex min-w-0 flex-col gap-6">
-            {/* ── NPC Overlay sections ───────────────────────────────────────── */}
-            <NPCOverlaySectionsCard
-              dashboard={
-                config.preferences.npc_overlay_dashboard_sections ??
-                DEFAULT_NPC_OVERLAY_SECTIONS
-              }
-              popout={
-                config.preferences.npc_overlay_popout_sections ??
-                DEFAULT_NPC_OVERLAY_SECTIONS
-              }
-              onChangeDashboard={(next) =>
-                setConfig({
-                  ...config,
-                  preferences: {
-                    ...config.preferences,
-                    npc_overlay_dashboard_sections: next,
-                  },
-                })
-              }
-              onChangePopout={(next) =>
-                setConfig({
-                  ...config,
-                  preferences: {
-                    ...config.preferences,
-                    npc_overlay_popout_sections: next,
-                  },
-                })
-              }
-              castRange={config.preferences.npc_overlay_cast_range || 200}
-              rangedRange={config.preferences.npc_overlay_ranged_range || 0}
-              onChangeRanges={(cast, ranged) =>
-                setConfig({
-                  ...config,
-                  preferences: {
-                    ...config.preferences,
-                    npc_overlay_cast_range: cast,
-                    npc_overlay_ranged_range: ranged,
-                  },
-                })
-              }
-            />
-
-            {/* ── NPC Overlay item filters ───────────────────────────────────── */}
-            <NPCOverlayItemFiltersCard
+            {/* ── NPC Overlay display (sections + items, per surface) ─────── */}
+            <NPCOverlayDisplayCard
               onScopeChange={setNpcPreviewCharacter}
               hidden={config.preferences.npc_overlay_hidden_items ?? []}
               byCharacter={config.preferences.npc_overlay_hidden_items_by_character ?? {}}
@@ -2618,6 +2575,19 @@ export default function SettingsPage(): React.ReactElement {
                     ...config.preferences,
                     npc_overlay_hidden_items: hidden,
                     npc_overlay_hidden_items_by_character: byCharacter,
+                  },
+                })
+              }
+              sectionOrder={config.preferences.npc_overlay_section_order ?? []}
+              castRange={config.preferences.npc_overlay_cast_range || 200}
+              rangedRange={config.preferences.npc_overlay_ranged_range || 0}
+              onChangeRanges={(cast, ranged) =>
+                setConfig({
+                  ...config,
+                  preferences: {
+                    ...config.preferences,
+                    npc_overlay_cast_range: cast,
+                    npc_overlay_ranged_range: ranged,
                   },
                 })
               }
@@ -4773,206 +4743,6 @@ function LockModeSelect({
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
     </select>
-  )
-}
-
-// NPCOverlaySectionsCard renders two parallel checklists controlling which
-// information sections appear on each NPC overlay surface (the embedded
-// dashboard panel and the floating popout window). Name, zone, pet owner,
-// raid/rare badges, and the HP bar are always shown — they're the
-// minimum-viable readout that justifies the overlay existing.
-const NPC_SECTION_ROWS: ReadonlyArray<{
-  key: keyof NPCOverlaySections
-  label: string
-  hint: string
-}> = [
-  { key: 'identity', label: 'Identity', hint: 'Level, class, race, body type' },
-  { key: 'combat', label: 'Combat', hint: 'HP, mana, AC, damage, attacks/round, PBAoE XP penalty' },
-  { key: 'behavior', label: 'Behavior', hint: 'Aggro radius, assist radius, attack delay' },
-  { key: 'resists', label: 'Resists', hint: 'MR, CR, FR, DR, PR chips' },
-  { key: 'attributes', label: 'Attributes', hint: 'STR / STA / DEX / AGI / INT / WIS / CHA' },
-  { key: 'special_abilities', label: 'Special Abilities', hint: 'Summon, rampage, immunities, etc.' },
-  { key: 'faction', label: 'Faction', hint: 'Primary faction and the hits taken on a kill' },
-  {
-    key: 'distance',
-    label: 'Distance',
-    hint: 'Distance to target, colored against your range, and which of its spells can reach you (needs a Zeal build that reports target info)',
-  },
-]
-
-// NPC_SPELL_SUBROWS are the per-group sub-toggles nested under the "Spells &
-// Abilities" master switch. Highlights have no sub-toggle — they're the headline
-// callouts and always show when the master is on.
-const NPC_SPELL_SUBROWS: ReadonlyArray<{
-  key: keyof NPCOverlaySections
-  label: string
-}> = [
-  { key: 'spells_procs', label: 'Procs' },
-  { key: 'spells_signature', label: 'Signature spells' },
-  { key: 'spells_class', label: 'Class spell summary' },
-]
-
-function NPCOverlaySectionsCard({
-  dashboard,
-  popout,
-  onChangeDashboard,
-  onChangePopout,
-  castRange,
-  rangedRange,
-  onChangeRanges,
-}: {
-  dashboard: NPCOverlaySections
-  popout: NPCOverlaySections
-  onChangeDashboard: (next: NPCOverlaySections) => void
-  onChangePopout: (next: NPCOverlaySections) => void
-  castRange: number
-  rangedRange: number
-  onChangeRanges: (cast: number, ranged: number) => void
-}): React.ReactElement {
-  return (
-    <section
-      className="mt-4 rounded-lg p-4"
-      style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-    >
-      <h2
-        className="mb-1 text-sm font-semibold uppercase tracking-wide"
-        style={{ color: 'var(--color-muted)' }}
-      >
-        NPC Overlay Sections
-      </h2>
-      <p className="mb-4 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-        Choose which sections appear on each NPC overlay surface. The target name and HP bar are always shown.
-      </p>
-
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <NPCSectionList
-          title="Dashboard panel"
-          value={dashboard}
-          onChange={onChangeDashboard}
-        />
-        <NPCSectionList
-          title="Popout overlay"
-          value={popout}
-          onChange={onChangePopout}
-        />
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
-            Cast range
-          </span>
-          <DecimalInput
-            value={castRange}
-            onValue={(v) => onChangeRanges(Math.round(v), rangedRange)}
-            min={1}
-            max={2000}
-            fallback={200}
-            className="w-20 rounded px-2 py-1 text-sm"
-            style={{
-              backgroundColor: 'var(--color-surface-2)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-foreground)',
-            }}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
-            Ranged attack range (0 = off)
-          </span>
-          <DecimalInput
-            value={rangedRange}
-            onValue={(v) => onChangeRanges(castRange, Math.round(v))}
-            min={0}
-            max={2000}
-            fallback={0}
-            className="w-20 rounded px-2 py-1 text-sm"
-            style={{
-              backgroundColor: 'var(--color-surface-2)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-foreground)',
-            }}
-          />
-        </label>
-        <p className="min-w-[16rem] flex-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-          The distance readout is green within your cast range, yellow in its
-          last 10%, and red beyond it. Most nukes and debuffs reach 200. Enter
-          your effective range yourself: range-extending focus effects (up to
-          +25%) and AAs aren&rsquo;t applied automatically. Zeal only reports a
-          target&rsquo;s position within 250 units, so past that it reads n/a.
-        </p>
-      </div>
-    </section>
-  )
-}
-
-function NPCSectionList({
-  title,
-  value,
-  onChange,
-}: {
-  title: string
-  value: NPCOverlaySections
-  onChange: (next: NPCOverlaySections) => void
-}): React.ReactElement {
-  return (
-    <div
-      className="rounded p-3"
-      style={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}
-    >
-      <p
-        className="mb-2 text-xs font-semibold uppercase tracking-wide"
-        style={{ color: 'var(--color-muted-foreground)' }}
-      >
-        {title}
-      </p>
-      <div className="flex flex-col gap-2">
-        {NPC_SECTION_ROWS.map((row) => (
-          <label key={row.key} className="flex cursor-pointer items-start gap-2">
-            <input
-              type="checkbox"
-              checked={value[row.key]}
-              onChange={(e) => onChange({ ...value, [row.key]: e.target.checked })}
-              style={{ marginTop: 3 }}
-            />
-            <span>
-              <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>{row.label}</span>
-              <span className="block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{row.hint}</span>
-            </span>
-          </label>
-        ))}
-
-        {/* Spells & Abilities: master toggle + per-group sub-toggles. Highlights
-            (Complete Heal / Gate / AE / mez etc.) always show when the master is
-            on; the children gate procs, signature spells, and class-list counts. */}
-        <label className="flex cursor-pointer items-start gap-2">
-          <input
-            type="checkbox"
-            checked={value.spells}
-            onChange={(e) => onChange({ ...value, spells: e.target.checked })}
-            style={{ marginTop: 3 }}
-          />
-          <span>
-            <span className="text-sm" style={{ color: 'var(--color-foreground)' }}>Spells &amp; Abilities</span>
-            <span className="block text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Caster highlights, procs, signature spells, class lists</span>
-          </span>
-        </label>
-        {value.spells && (
-          <div className="ml-6 flex flex-col gap-1.5">
-            {NPC_SPELL_SUBROWS.map((row) => (
-              <label key={row.key} className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={value[row.key]}
-                  onChange={(e) => onChange({ ...value, [row.key]: e.target.checked })}
-                />
-                <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>{row.label}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 

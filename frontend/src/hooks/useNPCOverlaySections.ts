@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getConfig } from '../services/api'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
 import { useNPCOverlayPreview } from '../lib/npcOverlayPreview'
+import { sectionKey } from '../lib/npcItemFilters'
+import { useNPCOverlayHiddenItems } from './useNPCOverlayHiddenItems'
 import {
   DEFAULT_NPC_OVERLAY_SECTIONS,
   type NPCOverlaySections,
@@ -19,11 +21,15 @@ export type NPCOverlaySurface = 'dashboard' | 'popout'
  * Falls back to the all-visible default on initial load and on any error
  * so the overlay keeps working if the config endpoint is briefly
  * unavailable. Inside the Settings preview it reads the unsaved preferences.
+ *
+ * A section is shown when its legacy per-surface flag is on and no
+ * "section.<id>" key hides it for the active character (see npcItemFilters).
  */
 export function useNPCOverlaySections(
   surface: NPCOverlaySurface,
 ): NPCOverlaySections {
   const preview = useNPCOverlayPreview()
+  const hidden = useNPCOverlayHiddenItems(surface)
   const [sections, setSections] = useState<NPCOverlaySections>(
     DEFAULT_NPC_OVERLAY_SECTIONS,
   )
@@ -56,11 +62,18 @@ export function useNPCOverlaySections(
   )
   useWebSocket(handle)
 
+  let base = sections
   if (preview) {
     const p = preview.prefs
     const value =
       surface === 'dashboard' ? p.npc_overlay_dashboard_sections : p.npc_overlay_popout_sections
-    return { ...DEFAULT_NPC_OVERLAY_SECTIONS, ...value }
+    base = { ...DEFAULT_NPC_OVERLAY_SECTIONS, ...value }
   }
-  return sections
+  return useMemo(() => {
+    const out = { ...base }
+    for (const id of Object.keys(out) as Array<keyof NPCOverlaySections>) {
+      if (hidden.has(sectionKey(id))) out[id] = false
+    }
+    return out
+  }, [base, hidden])
 }

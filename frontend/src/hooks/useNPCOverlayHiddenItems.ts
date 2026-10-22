@@ -3,17 +3,18 @@ import { getConfig } from '../services/api'
 import { useWebSocket, type WsMessage } from './useWebSocket'
 import { useActivePlayerName } from './useActivePlayerName'
 import { WSEvent } from '../lib/wsEvents'
-import { resolveHiddenItems } from '../lib/npcItemFilters'
+import { hiddenKeysFor, resolveHiddenItems, type NPCSurface } from '../lib/npcItemFilters'
 import { useNPCOverlayPreview } from '../lib/npcOverlayPreview'
 
 /**
- * Returns the set of NPC overlay item keys hidden for the active character
- * (their per-character override if set, otherwise the global list). Re-reads on
+ * Returns the set of NPC overlay keys (sections and items) hidden on one
+ * surface for the active character (their per-character override if set,
+ * otherwise the global list). Re-reads on
  * `config:updated`, like useNPCOverlaySections. Empty until config loads, so
  * the overlay shows everything on first paint and on any error. Inside the
  * Settings preview it reads the unsaved preferences and preview character.
  */
-export function useNPCOverlayHiddenItems(): Set<string> {
+export function useNPCOverlayHiddenItems(surface: NPCSurface): Set<string> {
   const preview = useNPCOverlayPreview()
   const activeCharacter = useActivePlayerName()
   const [global, setGlobal] = useState<string[]>([])
@@ -45,7 +46,7 @@ export function useNPCOverlayHiddenItems(): Set<string> {
   const bc = preview ? preview.prefs.npc_overlay_hidden_items_by_character : byChar
   const character = preview ? preview.character : activeCharacter
   return useMemo(
-    () => new Set(resolveHiddenItems(g, bc, character)),
-    [g, bc, character],
+    () => hiddenKeysFor(resolveHiddenItems(g, bc, character), surface),
+    [g, bc, character, surface],
   )
 }

@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -265,9 +267,10 @@ preferences:
 	if !cfg.Preferences.NPCFactionSectionMigrationDone {
 		t.Error("NPCFactionSectionMigrationDone should be true after migration")
 	}
-	// The non-faction toggles must be left untouched by the migration.
-	if cfg.Preferences.NPCOverlayPopoutSections.Combat {
-		t.Error("migration must not change unrelated toggles (popout combat)")
+	// Unrelated toggles must be preserved; the later sections-to-hidden
+	// migration carries popout Combat=false over as a hidden key.
+	if !slices.Contains(cfg.Preferences.NPCOverlayHiddenItems, "popout:section.combat") {
+		t.Errorf("popout combat not carried over: hidden = %v", cfg.Preferences.NPCOverlayHiddenItems)
 	}
 
 	// User disables faction on the popout, then we reload.
@@ -328,9 +331,10 @@ preferences:
 	if !cfg.Preferences.NPCBehaviorSectionMigrationDone {
 		t.Error("NPCBehaviorSectionMigrationDone should be true after migration")
 	}
-	// Unrelated toggles must be left untouched.
-	if cfg.Preferences.NPCOverlayPopoutSections.Combat {
-		t.Error("migration must not change unrelated toggles (popout combat)")
+	// Unrelated toggles must be preserved; the later sections-to-hidden
+	// migration carries popout Combat=false over as a hidden key.
+	if !slices.Contains(cfg.Preferences.NPCOverlayHiddenItems, "popout:section.combat") {
+		t.Errorf("popout combat not carried over: hidden = %v", cfg.Preferences.NPCOverlayHiddenItems)
 	}
 
 	// User disables Behavior on the popout, then we reload.
@@ -586,5 +590,33 @@ func TestLoadFrom_NPCOverlayHiddenItemsRoundTrip(t *testing.T) {
 	}
 	if _, ok := got.NPCOverlayHiddenItemsByCharacter["empty"]; !ok {
 		t.Error("empty override key was dropped on round trip")
+	}
+}
+
+// Section toggles move into the hidden-items lists as section keys, prefixed
+// by surface when hidden on only one, and the structs end up all-true.
+func TestMigrateNPCSectionsToHidden(t *testing.T) {
+	var p Preferences
+	p.NPCOverlayDashboardSections = DefaultNPCOverlaySections()
+	p.NPCOverlayPopoutSections = DefaultNPCOverlaySections()
+	p.NPCOverlayDashboardSections.Faction = false
+	p.NPCOverlayPopoutSections.Faction = false
+	p.NPCOverlayPopoutSections.Attributes = false
+	p.NPCOverlayDashboardSections.SpellsClass = false
+	p.NPCOverlayHiddenItems = []string{"ability.10"}
+	p.NPCOverlayHiddenItemsByCharacter = map[string][]string{"osui": {}}
+
+	migrateNPCSectionsToHidden(&p)
+
+	want := []string{"ability.10", "popout:section.attributes", "section.faction", "dashboard:section.spells_class"}
+	if !reflect.DeepEqual(p.NPCOverlayHiddenItems, want) {
+		t.Errorf("global = %v, want %v", p.NPCOverlayHiddenItems, want)
+	}
+	if got := p.NPCOverlayHiddenItemsByCharacter["osui"]; !reflect.DeepEqual(got, want[1:]) {
+		t.Errorf("osui = %v, want %v", got, want[1:])
+	}
+	if p.NPCOverlayDashboardSections != DefaultNPCOverlaySections() ||
+		p.NPCOverlayPopoutSections != DefaultNPCOverlaySections() {
+		t.Error("section structs not reset to all-true")
 	}
 }
