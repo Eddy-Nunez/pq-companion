@@ -112,8 +112,12 @@ export function useTimerAlerts(): void {
             } else if (threshold.type === 'text_to_speech' && threshold.tts_template) {
               const text = threshold.tts_template.replace('{spell}', spellName)
               speakText(text, threshold.voice, threshold.tts_volume / 100)
-            } else if (threshold.type === 'overlay_text' && threshold.text) {
-              const text = threshold.text.replace('{spell}', spellName)
+            } else if (threshold.type === 'overlay_text') {
+              // An empty message falls back to the editor's placeholder —
+              // users read the grey placeholder as the configured text, so
+              // skipping silently looked like a broken overlay.
+              const template = threshold.text?.trim() || '{spell} expiring soon'
+              const text = template.replace('{spell}', spellName)
               fireTimerAlertOverlay({
                 timer_id: timer.id,
                 text,

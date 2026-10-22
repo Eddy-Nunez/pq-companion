@@ -254,7 +254,18 @@ function TimerAlertRow({ alert, voices, onChange, onRemove }: TimerAlertRowProps
           <span>Type</span>
           <NotificationTypeSelect
             value={alert.type}
-            onChange={(t) => onChange({ ...alert, type: t as TimerAlertType })}
+            onChange={(t) =>
+              onChange({
+                ...alert,
+                type: t as TimerAlertType,
+                // Seed the overlay message so a switched-from-TTS alert
+                // isn't saved with an empty (silently skipped) text.
+                text:
+                  t === 'overlay_text' && !alert.text?.trim()
+                    ? alert.tts_template || '{spell} expiring soon'
+                    : alert.text,
+              })
+            }
             allowedTypes={['overlay_text', 'text_to_speech', 'play_sound']}
             className="rounded px-2 py-0.5 text-xs outline-none"
           />
