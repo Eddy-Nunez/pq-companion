@@ -2509,6 +2509,61 @@ export function getCharacterUpgradesOverview(
   return get<UpgradesOverviewResponse>(`/api/characters/${id}/upgrades/overview${qs ? `?${qs}` : ''}`)
 }
 
+// ZoneItemSource is an NPC that drops an item in the searched zone. npc_id is
+// 0 for a zone-wide loot pool (npc_name is then the pool's label).
+export interface ZoneItemSource {
+  npc_id: number
+  npc_name: string
+  chance: number
+}
+
+export interface ZoneUpgradeCandidate extends UpgradeCandidate {
+  sources: ZoneItemSource[]
+}
+
+export interface ZoneUpgradeSlot {
+  slot: string
+  slot_label: string
+  current_items: UpgradeCurrentItem[]
+  candidates: ZoneUpgradeCandidate[]
+  considered: number
+}
+
+export interface ZoneUpgradesResponse {
+  zone: string
+  zone_name: string
+  class: number
+  level: number
+  weights: UpgradeWeights
+  slots: ZoneUpgradeSlot[]
+  zone_items: number
+  has_current_gear: boolean
+}
+
+// getCharacterZoneUpgrades returns every upgrade per slot that drops in one
+// zone, ranked by score, with the NPCs that drop each.
+export function getCharacterZoneUpgrades(
+  id: number,
+  zone: string,
+  opts: {
+    weights?: UpgradeWeights
+    showPoP?: boolean
+    hideCrafted?: boolean
+    hideNoDrop?: boolean
+    weaponStyle?: UpgradeWeaponStyle
+    limit?: number
+  },
+): Promise<ZoneUpgradesResponse> {
+  const p = new URLSearchParams({ zone })
+  if (opts.weights) p.set('weights', JSON.stringify(opts.weights))
+  if (opts.showPoP) p.set('show_pop', '1')
+  if (opts.hideCrafted === false) p.set('hide_crafted', '0')
+  if (opts.hideNoDrop) p.set('hide_nodrop', '1')
+  if (opts.weaponStyle) p.set('weapon_style', opts.weaponStyle)
+  if (opts.limit) p.set('limit', String(opts.limit))
+  return get<ZoneUpgradesResponse>(`/api/characters/${id}/upgrades/zone?${p.toString()}`)
+}
+
 export interface FocusOption {
   spell_id: number
   name: string

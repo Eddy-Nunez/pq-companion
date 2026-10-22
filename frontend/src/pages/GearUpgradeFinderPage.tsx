@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wand2, ChevronDown, ChevronUp, ChevronRight, Star, Loader2, AlertTriangle, Sliders, RotateCcw, Save, Check, LayoutGrid, List, Target, Search, Info } from 'lucide-react'
+import { Wand2, ChevronDown, ChevronUp, ChevronRight, Star, Loader2, AlertTriangle, Sliders, RotateCcw, Save, Check, LayoutGrid, List, Target, Search, Info, MapPin } from 'lucide-react'
 import CharacterSubTabs from '../components/CharacterSubTabs'
 import { ItemIcon } from '../components/Icon'
 import { SourceNPCLink, formatNPCName } from '../components/SourceNPCLink'
 import ItemDetailModal from '../components/ItemDetailModal'
 import SpellHoverCard from '../components/SpellHoverCard'
 import { usePersistentState } from '../hooks/usePersistentState'
+import { useWebSocket } from '../hooks/useWebSocket'
+import { WSEvent } from '../lib/wsEvents'
 import {
   listCharacters,
   getItem,
@@ -14,6 +16,9 @@ import {
   getItemQuests,
   getCharacterUpgrades,
   getCharacterUpgradesOverview,
+  getCharacterZoneUpgrades,
+  getRespawnState,
+  searchZones,
   getCharacterUpgradeWeights,
   setCharacterUpgradeWeights,
   resetCharacterUpgradeWeights,
@@ -29,11 +34,16 @@ import {
   type UpgradesResponse,
   type UpgradesOverviewResponse,
   type UpgradeOverviewSlot,
+  type ZoneUpgradesResponse,
+  type ZoneUpgradeCandidate,
+  type ZoneItemSource,
   type UpgradeWeaponStyle,
   type FocusOption,
 } from '../services/api'
 import type { Item, ItemSources, ItemQuests } from '../types/item'
 import type { WishlistEntry } from '../types/wishlist'
+import type { Zone } from '../types/zone'
+import type { RespawnState } from '../types/respawn'
 
 // Logical worn slots, keyed to the backend slot keys. `bucket` is the wishlist
 // slot-bucket name (singular Shoulder/Finger) that an item from this slot is
@@ -191,8 +201,8 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
 
   const [modalItem, setModalItem] = useState<Item | null>(null)
 
-  const [mode, setMode] = usePersistentState<'slot' | 'overview'>(
-    'pq-tab:gear-upgrades', 'slot', ['slot', 'overview'],
+  const [mode, setMode] = usePersistentState<'slot' | 'overview' | 'zone'>(
+    'pq-tab:gear-upgrades', 'slot', ['slot', 'overview', 'zone'],
   )
   const [overview, setOverview] = useState<UpgradesOverviewResponse | null>(null)
   const [overviewLoading, setOverviewLoading] = useState(false)
@@ -202,6 +212,22 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
   const [overviewSortCol, setOverviewSortCol] =
     useState<'slot' | 'best' | 'score' | null>('score')
   const [overviewSortDir, setOverviewSortDir] = useState<'asc' | 'desc'>('desc')
+
+  // By-zone view. "follow" tracks the zone the player is in (from the log /
+  // Zeal pipe, via the respawn engine's current_zone); "pick" uses the zone
+  // chosen in the dropdown.
+  const [zoneSource, setZoneSource] = usePersistentState<'follow' | 'pick'>(
+    'pq-gear-upgrades:zone-source', 'follow', ['follow', 'pick'],
+  )
+  const [zoneLayout, setZoneLayout] = usePersistentState<'slots' | 'flat'>(
+    'pq-gear-upgrades:zone-layout', 'slots', ['slots', 'flat'],
+  )
+  const [liveZone, setLiveZone] = useState('')
+  const [pickedZone, setPickedZone] = useState('')
+  const [zoneData, setZoneData] = useState<ZoneUpgradesResponse | null>(null)
+  const [zoneLoading, setZoneLoading] = useState(false)
+  const [zoneError, setZoneError] = useState<string | null>(null)
+  const activeZone = zoneSource === 'follow' ? liveZone : pickedZone
 
   // The viewed character's wishlist (all buckets), for the star toggles.
   const [wishlist, setWishlist] = useState<WishlistEntry[]>([])
@@ -286,6 +312,44 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
       clearTimeout(id)
     }
   }, [mode, selected, weights, showPoP, hideCrafted, hideNoDrop, weaponStyle, reload])
+
+  // Track the player's current zone for the by-zone view's follow mode.
+  useEffect(() => {
+    getRespawnState()
+      .then((st) => { if (st.current_zone) setLiveZone(st.current_zone) })
+      .catch(() => {})
+  }, [])
+  useWebSocket((msg) => {
+    if (msg.type !== WSEvent.OverlayRespawns) return
+    const zone = (msg.data as RespawnState)?.current_zone
+    if (zone) setLiveZone(zone)
+  })
+
+  // Fetch the by-zone upgrades when in that view and a zone is known.
+  useEffect(() => {
+    if (mode !== 'zone' || !selected || !weights || !activeZone) return
+    let cancelled = false
+    const id = setTimeout(() => {
+      setZoneLoading(true)
+      setZoneError(null)
+      getCharacterZoneUpgrades(selected.id, activeZone, {
+        weights, showPoP, hideCrafted, hideNoDrop, weaponStyle,
+      })
+        .then((r) => {
+          if (!cancelled) setZoneData(r)
+        })
+        .catch((e: Error) => {
+          if (!cancelled) setZoneError(e.message)
+        })
+        .finally(() => {
+          if (!cancelled) setZoneLoading(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
+  }, [mode, selected, activeZone, weights, showPoP, hideCrafted, hideNoDrop, weaponStyle, reload])
 
   // Load the viewed character's wishlist for the star toggles.
   const refreshWishlist = useCallback((charID: number) => {
@@ -406,6 +470,12 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
                   color: mode === 'overview' ? 'var(--color-background)' : 'var(--color-muted)' }}>
                 <LayoutGrid size={12} /> Overview
               </button>
+              <button onClick={() => setMode('zone')}
+                className="flex items-center gap-1 px-2 py-1"
+                style={{ backgroundColor: mode === 'zone' ? 'var(--color-primary)' : 'transparent',
+                  color: mode === 'zone' ? 'var(--color-background)' : 'var(--color-muted)' }}>
+                <MapPin size={12} /> By zone
+              </button>
             </div>
           )}
         </div>
@@ -524,10 +594,19 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
           </div>
           )}
 
-          {/* Weights/focus toggles when in overview mode (no per-slot bar) */}
-          {mode === 'overview' && (
-            <div className="shrink-0 flex items-center justify-end gap-2 border-b px-6 py-2 text-xs"
+          {/* Filters + weights/focus toggles for the all-slots views (no per-slot bar) */}
+          {mode !== 'slot' && (
+            <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-b px-6 py-2 text-xs"
               style={{ borderColor: 'var(--color-border)' }}>
+              {mode === 'zone' && (
+                <ZonePicker
+                  source={zoneSource}
+                  setSource={setZoneSource}
+                  liveZone={liveZone}
+                  pickedZone={pickedZone}
+                  onPick={(short) => { setPickedZone(short); setZoneSource('pick') }}
+                />
+              )}
               <label className="flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}
                 title="Hide NO DROP items (can't be traded for — must farm yourself)">
                 <input type="checkbox" checked={hideNoDrop} onChange={(e) => setHideNoDrop(e.target.checked)} />
@@ -544,7 +623,7 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
                 Show PoP gear
               </label>
               <label className="flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}
-                title="Restrict the Primary row's best pick to a hand style, regardless of stats">
+                title="Restrict Primary suggestions to a hand style, regardless of stats">
                 Weapon style:
                 <select
                   value={weaponStyle}
@@ -589,7 +668,20 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
             />
           )}
 
-          {mode === 'overview' ? (
+          {mode === 'zone' ? (
+            <ZoneView
+              data={zoneData}
+              loading={zoneLoading}
+              error={zoneError}
+              activeZone={activeZone}
+              following={zoneSource === 'follow'}
+              layout={zoneLayout}
+              setLayout={setZoneLayout}
+              onOpen={openItem}
+              isWishlisted={(id, bucket) => wishEntry(id, bucket) !== undefined}
+              onToggleWish={toggleWish}
+            />
+          ) : mode === 'overview' ? (
             <OverviewView
               overview={overview}
               loading={overviewLoading}
@@ -1412,5 +1504,349 @@ function OverviewRow({
         </tr>
       )}
     </>
+  )
+}
+
+// ── By-zone view ───────────────────────────────────────────────────────────────
+
+// ZonePicker chooses the by-zone view's zone: follow the player's current zone,
+// or search/pick any zone from the full list (picking switches off follow).
+function ZonePicker({
+  source, setSource, liveZone, pickedZone, onPick,
+}: {
+  source: 'follow' | 'pick'
+  setSource: (s: 'follow' | 'pick') => void
+  liveZone: string
+  pickedZone: string
+  onPick: (short: string) => void
+}): React.ReactElement {
+  const [allZones, setAllZones] = useState<Zone[]>([])
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    searchZones('', {}, 1000).then((r) => setAllZones(r.items)).catch(() => {})
+  }, [])
+
+  // Close the dropdown on outside click.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const longName = useCallback(
+    (short: string): string => allZones.find((z) => z.short_name === short)?.long_name ?? short,
+    [allZones],
+  )
+  const active = source === 'follow' ? liveZone : pickedZone
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return allZones
+    return allZones.filter(
+      (z) => z.long_name.toLowerCase().includes(q) || z.short_name.toLowerCase().includes(q),
+    )
+  }, [allZones, query])
+
+  return (
+    <div className="mr-auto flex items-center gap-2">
+      <div ref={boxRef} className="relative">
+        <Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2"
+          style={{ color: 'var(--color-muted)' }} />
+        <input
+          type="text"
+          value={open ? query : (active ? longName(active) : '')}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => { setQuery(''); setOpen(true) }}
+          placeholder={source === 'follow' ? 'Waiting for your zone…' : 'Search or pick a zone…'}
+          className="w-56 rounded py-1 pl-6 pr-2 text-xs"
+          style={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+            color: 'var(--color-foreground)' }}
+        />
+        {open && filtered.length > 0 && (
+          <ul className="absolute left-0 top-full z-20 mt-1 max-h-64 w-72 overflow-y-auto rounded shadow-lg"
+            style={{ backgroundColor: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+            {filtered.map((z) => (
+              <li key={z.id}>
+                <button
+                  type="button"
+                  onClick={() => { onPick(z.short_name); setOpen(false) }}
+                  className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-xs transition-colors hover:bg-(--color-surface-3)"
+                  style={z.short_name === active ? { backgroundColor: 'var(--color-surface-3)' } : undefined}
+                >
+                  <span className="truncate">{z.long_name}</span>
+                  <span className="shrink-0" style={{ color: 'var(--color-muted)' }}>{z.short_name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <label className="flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}
+        title="Follow the zone you're in (from your log / Zeal)">
+        <input type="checkbox" checked={source === 'follow'}
+          onChange={(e) => setSource(e.target.checked ? 'follow' : 'pick')} />
+        Follow my zone
+      </label>
+    </div>
+  )
+}
+
+// A zone upgrade in the flat (all slots, by score) layout: one row per item,
+// listing every slot it upgrades and scored by its best one.
+interface FlatZoneRow {
+  cand: ZoneUpgradeCandidate
+  slotKey: string
+  slotLabels: string[]
+}
+
+function ZoneView({
+  data, loading, error, activeZone, following, layout, setLayout,
+  onOpen, isWishlisted, onToggleWish,
+}: {
+  data: ZoneUpgradesResponse | null
+  loading: boolean
+  error: string | null
+  activeZone: string
+  following: boolean
+  layout: 'slots' | 'flat'
+  setLayout: (l: 'slots' | 'flat') => void
+  onOpen: (id: number) => void
+  isWishlisted: (id: number, bucket: string) => boolean
+  onToggleWish: (id: number, bucket: string) => void
+}): React.ReactElement {
+  // Ammo grants no stats in game, so its scores are meaningless here.
+  const slots = useMemo(
+    () => (data?.slots ?? []).filter((s) => s.slot !== 'ammo'),
+    [data],
+  )
+  // Slots with upgrades, biggest best-upgrade first.
+  const withUpgrades = useMemo(
+    () => slots
+      .filter((s) => s.candidates.length > 0)
+      .sort((a, b) => b.candidates[0].score - a.candidates[0].score),
+    [slots],
+  )
+  const flat = useMemo(() => {
+    const byID = new Map<number, FlatZoneRow>()
+    for (const s of slots) {
+      for (const c of s.candidates) {
+        const cur = byID.get(c.id)
+        if (!cur) {
+          byID.set(c.id, { cand: c, slotKey: s.slot, slotLabels: [s.slot_label] })
+          continue
+        }
+        cur.slotLabels.push(s.slot_label)
+        if (c.score > cur.cand.score) {
+          cur.cand = c
+          cur.slotKey = s.slot
+        }
+      }
+    }
+    return [...byID.values()].sort((a, b) => b.cand.score - a.cand.score)
+  }, [slots])
+
+  const message = (icon: React.ReactNode, text: React.ReactNode): React.ReactElement => (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-sm"
+      style={{ color: 'var(--color-muted)' }}>
+      {icon}
+      {text}
+    </div>
+  )
+
+  if (!activeZone) {
+    return message(<MapPin size={24} />, following
+      ? 'Waiting for your current zone — zone in, or pick a zone above.'
+      : 'Pick a zone to see the upgrades that drop there.')
+  }
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 px-6 py-10 text-sm" style={{ color: 'var(--color-danger)' }}>
+        <AlertTriangle size={16} /> {error}
+      </div>
+    )
+  }
+  if (!data) {
+    return message(<Loader2 size={16} className="animate-spin" />, 'Scanning zone drops…')
+  }
+
+  const emptySlots = slots.filter((s) => s.candidates.length === 0)
+  const stale = loading || data.zone !== activeZone
+
+  return (
+    <div className="flex-1 overflow-y-auto px-6 py-2" style={{ opacity: stale ? 0.6 : 1 }}>
+      {!data.has_current_gear && (
+        <div className="mb-2 flex items-center gap-2 rounded px-3 py-1.5 text-xs"
+          style={{ backgroundColor: 'var(--color-surface-2)', color: '#f59e0b' }}>
+          <AlertTriangle size={12} />
+          No Quarmy export found — ranking by stats only. Export via Zeal to compare against your gear.
+        </div>
+      )}
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <MapPin size={13} style={{ color: 'var(--color-primary)' }} />
+        <span className="font-semibold" style={{ color: 'var(--color-foreground)' }}>{data.zone_name}</span>
+        <span style={{ color: 'var(--color-muted)' }}>
+          {flat.length} upgrade{flat.length === 1 ? '' : 's'} across {withUpgrades.length} slot
+          {withUpgrades.length === 1 ? '' : 's'} · {data.zone_items} usable item
+          {data.zone_items === 1 ? '' : 's'} drop here
+        </span>
+        {stale && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--color-muted)' }} />}
+        <div className="ml-auto flex items-center rounded"
+          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+          {(['slots', 'flat'] as const).map((l) => (
+            <button key={l} onClick={() => setLayout(l)} className="px-2 py-0.5"
+              style={{ backgroundColor: layout === l ? 'var(--color-surface-3)' : 'transparent',
+                color: layout === l ? 'var(--color-foreground)' : 'var(--color-muted)' }}>
+              {l === 'slots' ? 'Group by slot' : 'All by score'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {flat.length === 0 ? (
+        message(<Star size={24} />, 'No upgrades for this character drop in this zone.')
+      ) : (
+        <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr className="text-left text-xs" style={{ color: 'var(--color-muted)' }}>
+              {layout === 'flat' && <th className="w-24 px-2 py-1">Slot</th>}
+              <th className="px-2 py-1">Item</th>
+              <th className="w-16 px-2 py-1 text-right">Score</th>
+              <th className="px-2 py-1">Changes</th>
+              <th className="px-2 py-1">Drops from</th>
+            </tr>
+          </thead>
+          <tbody>
+            {layout === 'flat'
+              ? flat.map((r) => (
+                <ZoneResultRow key={r.cand.id} cand={r.cand} onOpen={onOpen}
+                  slotCell={r.slotLabels.join(', ')}
+                  wishlisted={isWishlisted(r.cand.id, BUCKET_FOR_SLOT[r.slotKey])}
+                  onStar={() => onToggleWish(r.cand.id, BUCKET_FOR_SLOT[r.slotKey])} />
+              ))
+              : withUpgrades.map((s) => (
+                <React.Fragment key={s.slot}>
+                  <tr>
+                    <td colSpan={4} className="px-2 pb-1 pt-3 text-xs">
+                      <span className="font-semibold" style={{ color: 'var(--color-foreground)' }}>
+                        {s.slot_label}
+                      </span>
+                      <span style={{ color: 'var(--color-muted)' }}>
+                        {' · current: '}
+                        {(s.current_items ?? []).length === 0
+                          ? (data.has_current_gear ? '(empty)' : 'unknown')
+                          : s.current_items.map((ci) => ci.name).join(', ')}
+                      </span>
+                    </td>
+                  </tr>
+                  {s.candidates.map((c) => (
+                    <ZoneResultRow key={c.id} cand={c} onOpen={onOpen}
+                      wishlisted={isWishlisted(c.id, BUCKET_FOR_SLOT[s.slot])}
+                      onStar={() => onToggleWish(c.id, BUCKET_FOR_SLOT[s.slot])} />
+                  ))}
+                </React.Fragment>
+              ))}
+          </tbody>
+        </table>
+      )}
+
+      {flat.length > 0 && emptySlots.length > 0 && (
+        <div className="py-3 text-center text-[11px]" style={{ color: 'var(--color-muted)' }}>
+          No upgrades from this zone for: {emptySlots.map((s) => s.slot_label).join(', ')}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ZoneResultRow is one zone upgrade: the item, its score and stat changes, and
+// the NPCs in the zone that drop it (top two inline, the rest on expand).
+function ZoneResultRow({
+  cand, slotCell, onOpen, wishlisted, onStar,
+}: {
+  cand: ZoneUpgradeCandidate
+  slotCell?: string
+  onOpen: (id: number) => void
+  wishlisted: boolean
+  onStar: () => void
+}): React.ReactElement {
+  const [showAllSources, setShowAllSources] = useState(false)
+  const sources = cand.sources ?? []
+  const shown = showAllSources ? sources : sources.slice(0, 2)
+
+  return (
+    <tr className="border-b align-top" style={{ borderColor: 'var(--color-border)' }}>
+      {slotCell !== undefined && (
+        <td className="px-2 py-1.5 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+          {slotCell}
+        </td>
+      )}
+      <td className="px-2 py-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <WishStar on={wishlisted} onClick={onStar} />
+          <button onClick={() => onOpen(cand.id)}
+            className="flex shrink-0 items-center gap-1.5 text-left underline decoration-dotted"
+            style={{ color: 'var(--color-primary)' }}>
+            <ItemIcon id={cand.icon} name={cand.name} size={18} />
+            {cand.name}
+          </button>
+          <EffectPills cand={cand} />
+          {cand.replaces_secondary && (
+            <span className="rounded px-1 text-[10px]"
+              title={cand.secondary_item_name
+                ? `2H weapon — also replaces your offhand (${cand.secondary_item_name}); its stats are already netted into this score`
+                : '2H weapon — also replaces your offhand; its stats are already netted into this score'}
+              style={{ backgroundColor: 'rgba(248,113,113,0.16)', color: '#f87171' }}>
+              2H: also replaces offhand
+            </span>
+          )}
+          {cand.nodrop === 0 && (
+            <span className="rounded px-1 text-[10px]"
+              style={{ backgroundColor: 'var(--color-surface-2)', color: 'var(--color-muted)' }}>
+              NO DROP
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-2 py-1.5 text-right font-mono text-xs" style={{ color: '#22c55e' }}>
+        +{cand.score.toFixed(0)}
+      </td>
+      <td className="px-2 py-1.5">
+        <DeltaChips cand={cand} />
+      </td>
+      <td className="px-2 py-1.5 text-xs">
+        <div className="flex flex-col gap-0.5">
+          {shown.map((src, i) => <ZoneSourceLine key={`${src.npc_id}-${i}`} src={src} />)}
+          {sources.length > 2 && (
+            <button onClick={() => setShowAllSources((v) => !v)} className="self-start"
+              style={{ color: 'var(--color-muted)' }}>
+              {showAllSources ? 'show less' : `+${sources.length - 2} more`}
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function ZoneSourceLine({ src }: { src: ZoneItemSource }): React.ReactElement {
+  const navigate = useNavigate()
+  return (
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
+      {src.npc_id > 0 ? (
+        <button onClick={() => navigate(`/npcs?select=${src.npc_id}`)}
+          className="underline decoration-dotted" style={{ color: 'var(--color-foreground)' }}>
+          {src.npc_name}
+        </button>
+      ) : (
+        <span style={{ color: 'var(--color-foreground)' }}>{src.npc_name}</span>
+      )}
+      <span style={{ color: 'var(--color-muted)' }}>{src.chance.toFixed(src.chance < 10 ? 2 : 1)}%</span>
+    </span>
   )
 }

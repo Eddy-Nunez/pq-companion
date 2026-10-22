@@ -335,29 +335,48 @@ type overviewResponse struct {
 	HasCurrentGear bool            `json:"has_current_gear"`
 }
 
-// upgradesOverview handles GET /api/characters/{id}/upgrades/overview — the
-// single best upgrade per slot. It parses the Quarmy export and computes the
-// character's totals once, then scores every slot, so the whole sweep is one
-// request instead of ~19 round trips.
-func (h *charactersHandler) upgradesOverview(w http.ResponseWriter, r *http.Request) {
+// upgradeSweep is the per-request state shared by the all-slots views
+// (overview, by-zone): the character, scoring context, and the parsed loadout,
+// computed once and reused across every slot.
+type upgradeSweep struct {
+	char           character.Character
+	ctx            upgrade.Context
+	weights        upgrade.Weights
+	byLoc          map[string][]zeal.InventoryEntry
+	worn           map[int]*db.Item
+	hasGear        bool
+	prioritySet    map[int]bool
+	equippedFocus  map[int]bool
+	wornLore       map[int]bool
+	wc             *wornCache
+	hasteByLoc     map[string]int
+	excludePoP     bool
+	excludeCrafted bool
+	excludeNoDrop  bool
+	weaponStyle    string
+}
+
+// loadUpgradeSweep resolves the character and shared scoring state for an
+// all-slots request. On failure it writes the error response and returns false.
+func (h *charactersHandler) loadUpgradeSweep(w http.ResponseWriter, r *http.Request) (*upgradeSweep, bool) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid id")
-		return
+		return nil, false
 	}
 	char, ok, err := h.store.Get(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil, false
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "character not found")
-		return
+		return nil, false
 	}
 	cfg := h.mgr.Get()
 	if cfg.EQPath == "" {
 		writeError(w, http.StatusBadRequest, "eq_path not configured")
-		return
+		return nil, false
 	}
 
 	weights := h.resolveWeights(char)
@@ -367,39 +386,71 @@ func (h *charactersHandler) upgradesOverview(w http.ResponseWriter, r *http.Requ
 			weights = override
 		}
 	}
-	ctx := upgrade.Context{
-		Level: char.Level, Current: statLineFromBlock(h.currentTotals(char)),
-		StatCapMod: h.statCapMods(char),
+	q := r.URL.Query()
+	sw := &upgradeSweep{
+		char:    char,
+		weights: weights,
+		ctx: upgrade.Context{
+			Level: char.Level, Current: statLineFromBlock(h.currentTotals(char)),
+			StatCapMod: h.statCapMods(char),
+		},
+		excludePoP:     !(q.Get("show_pop") == "1" || q.Get("show_pop") == "true"),
+		excludeCrafted: q.Get("hide_crafted") != "0" && q.Get("hide_crafted") != "false",
+		excludeNoDrop:  q.Get("hide_nodrop") == "1" || q.Get("hide_nodrop") == "true",
+		weaponStyle:    q.Get("weapon_style"),
 	}
-	byLoc, hasGear := h.loadEquipped(cfg.EQPath, char.Name)
-	worn := h.resolveWornItems(byLoc)
-	prioritySet := h.priorityFocusSet(id)
-	equippedFocus := h.equippedFocusSet(worn)
-	wornLore := h.equippedLoreSet(worn)
-	wc := h.newWornCache()
-	hasteByLoc := h.hasteByLocation(byLoc, worn, wc)
-	excludePoP := !(r.URL.Query().Get("show_pop") == "1" || r.URL.Query().Get("show_pop") == "true")
-	excludeCrafted := r.URL.Query().Get("hide_crafted") != "0" && r.URL.Query().Get("hide_crafted") != "false"
-	excludeNoDrop := r.URL.Query().Get("hide_nodrop") == "1" || r.URL.Query().Get("hide_nodrop") == "true"
-	weaponStyle := r.URL.Query().Get("weapon_style")
+	sw.byLoc, sw.hasGear = h.loadEquipped(cfg.EQPath, char.Name)
+	sw.worn = h.resolveWornItems(sw.byLoc)
+	sw.prioritySet = h.priorityFocusSet(id)
+	sw.equippedFocus = h.equippedFocusSet(sw.worn)
+	sw.wornLore = h.equippedLoreSet(sw.worn)
+	sw.wc = h.newWornCache()
+	sw.hasteByLoc = h.hasteByLocation(sw.byLoc, sw.worn, sw.wc)
+	return sw, true
+}
 
-	// One candidate scan for the whole sweep: the class/race/level/hidden/variant
-	// filter is identical across all 19 slots — only the slot mask differs — so
-	// query the union of every slot mask once and partition in Go by slot. This
-	// replaces 19 full-table item scans with a single one.
+// sweepCandidates runs one candidate scan for the whole sweep: the class/race/level/
+// hidden/variant filter is identical across all slots — only the slot mask
+// differs — so query the union of every slot mask once and let the caller
+// partition in Go by slot, instead of one full-table item scan per slot.
+func (h *charactersHandler) sweepCandidates(sw *upgradeSweep) ([]db.UpgradeCandidate, error) {
 	combinedMask := 0
 	for _, s := range upgradeSlots {
 		combinedMask |= s.Mask
 	}
-	allCands, err := h.db.UpgradeCandidates(db.CandidateFilter{
+	return h.db.UpgradeCandidates(db.CandidateFilter{
 		SlotMask:       combinedMask,
-		ClassBit:       charClassBit(char),
-		RaceBit:        enums.RaceBitForCharRace(char.Race),
-		MaxLevel:       upgradeMaxLevel(char.Level, excludePoP),
-		ExcludePoP:     excludePoP,
-		ExcludeCrafted: excludeCrafted,
-		ExcludeNoDrop:  excludeNoDrop,
+		ClassBit:       charClassBit(sw.char),
+		RaceBit:        enums.RaceBitForCharRace(sw.char.Race),
+		MaxLevel:       upgradeMaxLevel(sw.char.Level, sw.excludePoP),
+		ExcludePoP:     sw.excludePoP,
+		ExcludeCrafted: sw.excludeCrafted,
+		ExcludeNoDrop:  sw.excludeNoDrop,
 	})
+}
+
+// scoreSweepSlot scores the sweep's candidates that fit one slot.
+func (h *charactersHandler) scoreSweepSlot(sw *upgradeSweep, s upgradeSlot, cands []db.UpgradeCandidate, limit int) (current []upgradeCurrentItem, results []upgradeResult, considered int) {
+	var slotCands []db.UpgradeCandidate
+	for _, c := range cands {
+		if c.Slots&s.Mask != 0 {
+			slotCands = append(slotCands, c)
+		}
+	}
+	current, _, results, considered = h.scoreSlotCands(sw.char, sw.ctx, sw.weights, s, sw.byLoc, sw.worn, false, sw.weaponStyle, limit, sw.prioritySet, sw.equippedFocus, sw.wornLore, sw.wc, sw.hasteByLoc, slotCands)
+	return current, results, considered
+}
+
+// upgradesOverview handles GET /api/characters/{id}/upgrades/overview — the
+// single best upgrade per slot. It parses the Quarmy export and computes the
+// character's totals once, then scores every slot, so the whole sweep is one
+// request instead of ~19 round trips.
+func (h *charactersHandler) upgradesOverview(w http.ResponseWriter, r *http.Request) {
+	sw, ok := h.loadUpgradeSweep(w, r)
+	if !ok {
+		return
+	}
+	allCands, err := h.sweepCandidates(sw)
 	if err != nil {
 		// A locked/corrupt quarm.db must surface as an error, not an empty
 		// overview that reads as "everything is best-in-slot".
@@ -409,13 +460,7 @@ func (h *charactersHandler) upgradesOverview(w http.ResponseWriter, r *http.Requ
 
 	slots := make([]overviewSlot, 0, len(upgradeSlots))
 	for _, s := range upgradeSlots {
-		var slotCands []db.UpgradeCandidate
-		for _, c := range allCands {
-			if c.Slots&s.Mask != 0 {
-				slotCands = append(slotCands, c)
-			}
-		}
-		current, _, results, considered := h.scoreSlotCands(char, ctx, weights, s, byLoc, worn, false, weaponStyle, 1, prioritySet, equippedFocus, wornLore, wc, hasteByLoc, slotCands)
+		current, results, considered := h.scoreSweepSlot(sw, s, allCands, 1)
 		var best *upgradeResult
 		if len(results) > 0 {
 			best = &results[0]
@@ -430,11 +475,112 @@ func (h *charactersHandler) upgradesOverview(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, overviewResponse{
-		Class:          char.Class,
-		Level:          char.Level,
-		Weights:        weights,
+		Class:          sw.char.Class,
+		Level:          sw.char.Level,
+		Weights:        sw.weights,
 		Slots:          slots,
-		HasCurrentGear: hasGear,
+		HasCurrentGear: sw.hasGear,
+	})
+}
+
+// zoneUpgradeResult is a scored candidate plus where it drops in the zone.
+type zoneUpgradeResult struct {
+	upgradeResult
+	Sources []db.ZoneItemSource `json:"sources"`
+}
+
+// zoneUpgradeSlot is one slot's upgrades available from a zone.
+type zoneUpgradeSlot struct {
+	Slot         string               `json:"slot"`
+	SlotLabel    string               `json:"slot_label"`
+	CurrentItems []upgradeCurrentItem `json:"current_items"`
+	Candidates   []zoneUpgradeResult  `json:"candidates"`
+	Considered   int                  `json:"considered"`
+}
+
+type zoneUpgradesResponse struct {
+	Zone           string            `json:"zone"`
+	ZoneName       string            `json:"zone_name"`
+	Class          int               `json:"class"`
+	Level          int               `json:"level"`
+	Weights        upgrade.Weights   `json:"weights"`
+	Slots          []zoneUpgradeSlot `json:"slots"`
+	ZoneItems      int               `json:"zone_items"`
+	HasCurrentGear bool              `json:"has_current_gear"`
+}
+
+// upgradesZone handles GET /api/characters/{id}/upgrades/zone?zone=<short>&limit=
+// — every upgrade per slot that drops in one zone, ranked by score, each with
+// the NPCs that drop it. Built for walking into a raid or hunting zone and
+// seeing what's worth killing, bidding, or rolling on. Takes the same filter
+// params as the overview; limit caps results per slot (default 25).
+func (h *charactersHandler) upgradesZone(w http.ResponseWriter, r *http.Request) {
+	zoneShort := strings.TrimSpace(r.URL.Query().Get("zone"))
+	if zoneShort == "" {
+		writeError(w, http.StatusBadRequest, "missing zone")
+		return
+	}
+	zone, err := h.db.GetZoneByShortName(zoneShort)
+	if err != nil || zone == nil {
+		writeError(w, http.StatusNotFound, "zone not found")
+		return
+	}
+	sw, ok := h.loadUpgradeSweep(w, r)
+	if !ok {
+		return
+	}
+	// Picking a Planes of Power zone is an explicit ask for its gear, so don't
+	// let the PoP-gear toggle blank the whole view.
+	if db.IsPoPZone(zone.ShortName) {
+		sw.excludePoP = false
+	}
+	limit := 25
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
+		limit = v
+	}
+
+	sources, err := h.db.ZoneItemSources(zone.ShortName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load zone drops")
+		return
+	}
+	allCands, err := h.sweepCandidates(sw)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load upgrade candidates")
+		return
+	}
+	zoneCands := make([]db.UpgradeCandidate, 0)
+	for _, c := range allCands {
+		if len(sources[c.ID]) > 0 {
+			zoneCands = append(zoneCands, c)
+		}
+	}
+
+	slots := make([]zoneUpgradeSlot, 0, len(upgradeSlots))
+	for _, s := range upgradeSlots {
+		current, results, considered := h.scoreSweepSlot(sw, s, zoneCands, limit)
+		cands := make([]zoneUpgradeResult, 0, len(results))
+		for _, res := range results {
+			cands = append(cands, zoneUpgradeResult{upgradeResult: res, Sources: sources[res.ID]})
+		}
+		slots = append(slots, zoneUpgradeSlot{
+			Slot:         s.Key,
+			SlotLabel:    s.Label,
+			CurrentItems: current,
+			Candidates:   cands,
+			Considered:   considered,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, zoneUpgradesResponse{
+		Zone:           zone.ShortName,
+		ZoneName:       zone.LongName,
+		Class:          sw.char.Class,
+		Level:          sw.char.Level,
+		Weights:        sw.weights,
+		Slots:          slots,
+		ZoneItems:      len(zoneCands),
+		HasCurrentGear: sw.hasGear,
 	})
 }
 
