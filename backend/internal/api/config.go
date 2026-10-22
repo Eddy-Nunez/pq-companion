@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -137,8 +138,14 @@ func (h *configHandler) update(w http.ResponseWriter, r *http.Request) {
 	// Decode over the current config, not a zero Config: a field the frontend
 	// omits (older/partial client) then keeps its existing value instead of
 	// decoding to the zero value and silently wiping that setting.
+	// Maps the body sends replace the current ones (see config.DecodeOver).
 	c := h.mgr.Get()
-	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read body")
+		return
+	}
+	if err := config.DecodeOver(&c, body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
