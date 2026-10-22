@@ -66,6 +66,7 @@ if (loggerInit.error) {
 } else if (loggerInit.logPath) {
   console.log(`[main] electron log: ${loggerInit.logPath}`)
 }
+console.log(`[main] hardware acceleration: ${loadHardwareAccelDisabled() ? 'disabled' : 'enabled'}`)
 // Close the logger on 'will-quit', not 'before-quit'. The quit sequence
 // preventDefault()s the first before-quit pass and runs up to 5s of async
 // teardown (taskkill, overlay snapshots) — closing the fd that early would
@@ -625,9 +626,47 @@ function trackOverlayBounds(name: WindowKey, win: BrowserWindow): void {
   win.on('move', () => persistBounds(name, win))
   win.on('resize', () => persistBounds(name, win))
   win.on('close', () => {
+    // Users recover a vanished overlay by toggling it off/on, so the window's
+    // state right before that close is the best evidence of how it vanished.
+    console.log(`[main] overlay ${name} closing: ${describeOverlayState(win)}`)
     writeBoundsNow(name, win) // synchronous: window is about to be destroyed
     // Don't leave a closed overlay armed to re-enter placing mode next open.
     placingOverlays.delete(name)
+  })
+  watchOverlayVisibility(name, win)
+}
+
+// One-line snapshot of the window properties that decide whether an overlay
+// is actually visible on screen.
+function describeOverlayState(win: BrowserWindow): string {
+  if (win.isDestroyed()) return 'destroyed'
+  const b = win.getBounds()
+  return [
+    `visible=${win.isVisible()}`,
+    `minimized=${win.isMinimized()}`,
+    `topmost=${win.isAlwaysOnTop()}`,
+    `onScreen=${isOnScreen(b)}`,
+    `opacity=${win.getOpacity()}`,
+    `bounds=${b.x},${b.y} ${b.width}x${b.height}`,
+  ].join(' ')
+}
+
+// Overlays have skipTaskbar set, so once Windows minimizes or hides one
+// (Win+D / Win+M, a game's display-mode switch) there's no taskbar entry to
+// bring it back — it just vanishes while its dashboard toggle stays on. An
+// overlay should never be minimized, so drop the minimize box (Win+D/Win+M
+// skip such windows), restore immediately if it happens anyway, and log every
+// visibility edge so the next "overlays disappeared" report shows which one.
+function watchOverlayVisibility(name: WindowKey, win: BrowserWindow): void {
+  win.setMinimizable(false)
+  win.on('minimize', () => {
+    console.warn(`[main] overlay ${name} minimized; restoring`)
+    win.restore()
+  })
+  win.on('restore', () => console.log(`[main] overlay ${name} restored`))
+  win.on('hide', () => console.warn(`[main] overlay ${name} hidden: ${describeOverlayState(win)}`))
+  win.on('always-on-top-changed', (_e, isOnTop) => {
+    console.log(`[main] overlay ${name} always-on-top-changed: ${isOnTop}`)
   })
 }
 
@@ -4096,6 +4135,7 @@ app.whenReady().then(async () => {
   // and Discord Voice windows reassert on an interval; every other overlay
   // set topmost once at creation, so reassert all of them here.
   const onDisplayChanged = (): void => {
+    console.log('[main] display layout changed; reasserting overlays')
     resizeTriggerOverlay()
     reassertOverlaysOnTop()
   }
