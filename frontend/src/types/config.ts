@@ -257,6 +257,10 @@ export interface Preferences {
   npc_overlay_ranged_range: number
   // Special-ability badge colour overrides for both NPC overlay surfaces.
   npc_overlay_tag_style?: NPCOverlayTagStyle
+  // Stats-view section order (lib/npcOverlayLayout ids) and special-ability
+  // codes to show first, shared by both surfaces. Empty/absent = built-in order.
+  npc_overlay_section_order?: string[]
+  npc_overlay_tag_order?: number[]
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing
   // keys default to "interactive". See lib/overlays.ts.
   overlay_locked_modes?: Partial<Record<OverlayName, LockedMode>>

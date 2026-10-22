@@ -12,6 +12,7 @@ import DiscordWebhookSettings from '../components/settings/DiscordWebhookSetting
 import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
 import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFiltersCard'
 import NPCOverlayTagStyleCard from '../components/settings/NPCOverlayTagStyleCard'
+import NPCOverlayLayoutCard from '../components/settings/NPCOverlayLayoutCard'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, saveConfigChanges, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
@@ -2524,6 +2525,25 @@ export default function SettingsPage(): React.ReactElement {
             setConfig({
               ...config,
               preferences: { ...config.preferences, npc_overlay_tag_style: tagStyle },
+            })
+          }
+        />
+        )}
+
+        {/* ── NPC Overlay layout (section + tag order) ───────────────────── */}
+        {tab === 'overlays' && (
+        <NPCOverlayLayoutCard
+          sectionOrder={config.preferences.npc_overlay_section_order ?? []}
+          tagOrder={config.preferences.npc_overlay_tag_order ?? []}
+          tagStyle={config.preferences.npc_overlay_tag_style ?? {}}
+          onChange={(sectionOrder, tagOrder) =>
+            setConfig({
+              ...config,
+              preferences: {
+                ...config.preferences,
+                npc_overlay_section_order: sectionOrder,
+                npc_overlay_tag_order: tagOrder,
+              },
             })
           }
         />

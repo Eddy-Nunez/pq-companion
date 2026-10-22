@@ -706,6 +706,18 @@ type Preferences struct {
 	// Frontend-only; the engine never reads it.
 	NPCOverlayTagStyle NPCOverlayTagStyle `yaml:"npc_overlay_tag_style,omitempty" json:"npc_overlay_tag_style"`
 
+	// NPCOverlaySectionOrder is the Stats-view section order on both NPC
+	// overlay surfaces, by section id ("identity", "combat", "behavior",
+	// "resists", "attributes", "special_abilities", "spells", "faction").
+	// Missing ids keep their default slot after the listed ones; empty =
+	// built-in order. Frontend-only.
+	NPCOverlaySectionOrder []string `yaml:"npc_overlay_section_order,omitempty" json:"npc_overlay_section_order"`
+
+	// NPCOverlayTagOrder lists special-ability codes to show first, in order,
+	// on both surfaces; unlisted codes follow in their default order. Empty =
+	// built-in order. Frontend-only.
+	NPCOverlayTagOrder []int `yaml:"npc_overlay_tag_order,omitempty" json:"npc_overlay_tag_order"`
+
 	// OverlayLockedModes maps each popout overlay (by its canonical name:
 	// "dps", "hps", "buffTimer", "detrimTimer", "npc", "rollTracker",
 	// "respawnTimer") to how it behaves while locked:

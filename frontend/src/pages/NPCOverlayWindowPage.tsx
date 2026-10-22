@@ -11,7 +11,8 @@ import { useNPCOverlayView, type NPCOverlayView } from '../hooks/useNPCOverlayVi
 import { useNPCOverlayHiddenItems } from '../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../lib/npcItemFilters'
 import { emphasisStyle, resolveTagStyle } from '../lib/npcTagStyle'
-import { useNPCOverlayTagStyle } from '../hooks/useNPCOverlayTagStyle'
+import { useNPCOverlayDisplay } from '../hooks/useNPCOverlayDisplay'
+import { sortByTagOrder, type NPCSectionId } from '../lib/npcOverlayLayout'
 import { useNPCTargetDistance, type NPCTargetDistance } from '../hooks/useNPCTargetDistance'
 import { useWishlistItemIds } from '../hooks/useWishlistItemIds'
 import { useActiveCharacterLevel } from '../hooks/useActiveCharacterLevel'
@@ -386,10 +387,13 @@ function StatsBody({
   distance?: number | null
 }): React.ReactElement {
   const hidden = useNPCOverlayHiddenItems()
-  const tagStyle = useNPCOverlayTagStyle()
+  const { tagStyle, sectionOrder, tagOrder } = useNPCOverlayDisplay()
   const vis = (k: string): boolean => !hidden.has(k)
   const anyVis = (...ks: string[]): boolean => ks.some(vis)
-  const shown = abilities.filter((a) => a.value !== 0 && vis(abilityKey(a.code)))
+  const shown = sortByTagOrder(
+    abilities.filter((a) => a.value !== 0 && vis(abilityKey(a.code))),
+    tagOrder,
+  )
   // The live level when Zeal reports it and it fits this row; otherwise the
   // worst case for a range-spawn NPC, mirroring the resist calculator's
   // convention of using the top end of the level range.
@@ -401,6 +405,127 @@ function StatsBody({
         ? npc.max_level
         : npc.level
   const pbaoe = charLevel != null ? pbaoeReduction(charLevel, mobLevel) : null
+  // Stats-view sections, rendered in the user's saved order.
+  const blocks: Record<NPCSectionId, React.ReactNode> = {
+    identity: sections.identity &&
+      anyVis('identity.level', 'identity.class', 'identity.race', 'identity.body') && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {vis('identity.level') && (
+          <span
+            title={
+              levelLabel !== npcLevelLabel(npc)
+                ? `Live level from Zeal (DB range ${npcLevelLabel(npc)})`
+                : undefined
+            }
+          >
+            <Chip label="Lv" value={levelLabel} color="#c9a84c" />
+          </span>
+        )}
+        {vis('identity.class') && <Chip value={className(npc.class)} />}
+        {vis('identity.race') && <Chip value={npc.race_name} />}
+        {vis('identity.body') && <Chip value={bodyTypeName(npc.body_type)} />}
+      </div>
+    ),
+    combat: sections.combat &&
+      anyVis('combat.hp', 'combat.mana', 'combat.ac', 'combat.dmg', 'combat.atk', 'combat.speed', 'combat.pbaoe') && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {vis('combat.hp') && (
+          <Chip label="HP" value={npc.hp.toLocaleString()} color="#22c55e" />
+        )}
+        {vis('combat.mana') && npc.mana > 0 && (
+          <Chip label="Mana" value={npc.mana.toLocaleString()} color="#3b82f6" />
+        )}
+        {vis('combat.ac') && <Chip label="AC" value={npc.ac} />}
+        {vis('combat.dmg') && (
+          <Chip label="DMG" value={`${npc.min_dmg}-${npc.max_dmg}`} color="#ef4444" />
+        )}
+        {vis('combat.atk') && (
+          <Chip label="Atk/Rd" value={npc.attack_count < 0 ? 'default' : npc.attack_count} />
+        )}
+        {vis('combat.speed') && (
+          <Chip label="Speed" value={`${npcRunSpeedPct(npc.run_speed)}%`} />
+        )}
+        {vis('combat.pbaoe') && pbaoe?.applies && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'baseline',
+              gap: 4,
+              backgroundColor: 'rgba(249,115,22,0.15)',
+              borderRadius: 3,
+              padding: '3px 7px',
+              fontSize: 12,
+              lineHeight: 1.4,
+            }}
+            title={`Project Quarm reduces XP on this kill if more than 50% of the damage was PBAoE (you're level ${charLevel}, mob is ${mobLevel}). Expect ~${Math.round(pbaoe.xpMultiplier * 100)}% of normal XP if you PBAoE it.`}
+          >
+            <span style={{ color: '#f97316', opacity: 0.85, fontWeight: 600, fontSize: 10, textTransform: 'uppercase' }}>PBAoE</span>
+            <span style={{ color: '#f97316', fontWeight: 700 }}>{Math.round(pbaoe.xpMultiplier * 100)}%</span>
+          </span>
+        )}
+      </div>
+    ),
+    behavior: sections.behavior &&
+      ((vis('behavior.delay') && npc.attack_delay > 0) ||
+        (vis('behavior.aggro') && npc.aggro_radius > 0) ||
+        (vis('behavior.assist') && npc.assist_radius > 0)) && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {vis('behavior.delay') && npc.attack_delay > 0 && (
+          <Chip label="Delay" value={`${(npc.attack_delay / 10).toFixed(1)}s`} />
+        )}
+        {vis('behavior.aggro') && npc.aggro_radius > 0 && (
+          <Chip label="Aggro" value={npc.aggro_radius} />
+        )}
+        {vis('behavior.assist') && npc.assist_radius > 0 && (
+          <Chip label="Assist" value={npc.assist_radius} />
+        )}
+      </div>
+    ),
+    resists: sections.resists &&
+      anyVis('resists.mr', 'resists.cr', 'resists.fr', 'resists.dr', 'resists.pr') && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {vis('resists.mr') && <ResistChip type="magic"   value={npc.mr} />}
+        {vis('resists.cr') && <ResistChip type="cold"    value={npc.cr} />}
+        {vis('resists.fr') && <ResistChip type="fire"    value={npc.fr} />}
+        {vis('resists.dr') && <ResistChip type="disease" value={npc.dr} />}
+        {vis('resists.pr') && <ResistChip type="poison"  value={npc.pr} />}
+      </div>
+    ),
+    attributes: sections.attributes &&
+      anyVis('attributes.str', 'attributes.sta', 'attributes.dex', 'attributes.agi', 'attributes.int', 'attributes.wis', 'attributes.cha') && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {vis('attributes.str') && <Chip label="STR" value={npc.str} />}
+        {vis('attributes.sta') && <Chip label="STA" value={npc.sta} />}
+        {vis('attributes.dex') && <Chip label="DEX" value={npc.dex} />}
+        {vis('attributes.agi') && <Chip label="AGI" value={npc.agi} />}
+        {vis('attributes.int') && <Chip label="INT" value={npc.int} />}
+        {vis('attributes.wis') && <Chip label="WIS" value={npc.wis} />}
+        {vis('attributes.cha') && <Chip label="CHA" value={npc.cha} />}
+      </div>
+    ),
+    special_abilities: sections.special_abilities && shown.length > 0 && (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {shown.map((a) => (
+          <AbilityBadge key={a.code} ability={a} tagStyle={tagStyle} />
+        ))}
+      </div>
+    ),
+    spells: casterSummary && (
+      <NPCCasterSummarySection
+        summary={casterSummary}
+        sections={sections}
+        distance={distance}
+        theme={{
+          heading: 'rgba(255,255,255,0.4)',
+          muted: 'rgba(255,255,255,0.45)',
+          chipBg: 'rgba(255,255,255,0.08)',
+          chipText: 'rgba(255,255,255,0.85)',
+        }}
+        onSpellClick={onSpellClick}
+      />
+    ),
+    faction: sections.faction && <FactionSection npcId={npc.id} />,
+  }
   return (
     <>
       {variantLabel && (
@@ -414,131 +539,9 @@ function StatsBody({
         <LootContent npcId={npc.id} wishlistItemIds={wishlistItemIds} onItemClick={onItemClick} />
       ) : (
         <>
-          {sections.identity &&
-            anyVis('identity.level', 'identity.class', 'identity.race', 'identity.body') && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {vis('identity.level') && (
-                <span
-                  title={
-                    levelLabel !== npcLevelLabel(npc)
-                      ? `Live level from Zeal (DB range ${npcLevelLabel(npc)})`
-                      : undefined
-                  }
-                >
-                  <Chip label="Lv" value={levelLabel} color="#c9a84c" />
-                </span>
-              )}
-              {vis('identity.class') && <Chip value={className(npc.class)} />}
-              {vis('identity.race') && <Chip value={npc.race_name} />}
-              {vis('identity.body') && <Chip value={bodyTypeName(npc.body_type)} />}
-            </div>
-          )}
-
-          {sections.combat &&
-            anyVis('combat.hp', 'combat.mana', 'combat.ac', 'combat.dmg', 'combat.atk', 'combat.speed', 'combat.pbaoe') && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {vis('combat.hp') && (
-                <Chip label="HP" value={npc.hp.toLocaleString()} color="#22c55e" />
-              )}
-              {vis('combat.mana') && npc.mana > 0 && (
-                <Chip label="Mana" value={npc.mana.toLocaleString()} color="#3b82f6" />
-              )}
-              {vis('combat.ac') && <Chip label="AC" value={npc.ac} />}
-              {vis('combat.dmg') && (
-                <Chip label="DMG" value={`${npc.min_dmg}-${npc.max_dmg}`} color="#ef4444" />
-              )}
-              {vis('combat.atk') && (
-                <Chip label="Atk/Rd" value={npc.attack_count < 0 ? 'default' : npc.attack_count} />
-              )}
-              {vis('combat.speed') && (
-                <Chip label="Speed" value={`${npcRunSpeedPct(npc.run_speed)}%`} />
-              )}
-              {vis('combat.pbaoe') && pbaoe?.applies && (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'baseline',
-                    gap: 4,
-                    backgroundColor: 'rgba(249,115,22,0.15)',
-                    borderRadius: 3,
-                    padding: '3px 7px',
-                    fontSize: 12,
-                    lineHeight: 1.4,
-                  }}
-                  title={`Project Quarm reduces XP on this kill if more than 50% of the damage was PBAoE (you're level ${charLevel}, mob is ${mobLevel}). Expect ~${Math.round(pbaoe.xpMultiplier * 100)}% of normal XP if you PBAoE it.`}
-                >
-                  <span style={{ color: '#f97316', opacity: 0.85, fontWeight: 600, fontSize: 10, textTransform: 'uppercase' }}>PBAoE</span>
-                  <span style={{ color: '#f97316', fontWeight: 700 }}>{Math.round(pbaoe.xpMultiplier * 100)}%</span>
-                </span>
-              )}
-            </div>
-          )}
-
-          {sections.behavior &&
-            ((vis('behavior.delay') && npc.attack_delay > 0) ||
-              (vis('behavior.aggro') && npc.aggro_radius > 0) ||
-              (vis('behavior.assist') && npc.assist_radius > 0)) && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {vis('behavior.delay') && npc.attack_delay > 0 && (
-                <Chip label="Delay" value={`${(npc.attack_delay / 10).toFixed(1)}s`} />
-              )}
-              {vis('behavior.aggro') && npc.aggro_radius > 0 && (
-                <Chip label="Aggro" value={npc.aggro_radius} />
-              )}
-              {vis('behavior.assist') && npc.assist_radius > 0 && (
-                <Chip label="Assist" value={npc.assist_radius} />
-              )}
-            </div>
-          )}
-
-          {sections.resists &&
-            anyVis('resists.mr', 'resists.cr', 'resists.fr', 'resists.dr', 'resists.pr') && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {vis('resists.mr') && <ResistChip type="magic"   value={npc.mr} />}
-              {vis('resists.cr') && <ResistChip type="cold"    value={npc.cr} />}
-              {vis('resists.fr') && <ResistChip type="fire"    value={npc.fr} />}
-              {vis('resists.dr') && <ResistChip type="disease" value={npc.dr} />}
-              {vis('resists.pr') && <ResistChip type="poison"  value={npc.pr} />}
-            </div>
-          )}
-
-          {sections.attributes &&
-            anyVis('attributes.str', 'attributes.sta', 'attributes.dex', 'attributes.agi', 'attributes.int', 'attributes.wis', 'attributes.cha') && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {vis('attributes.str') && <Chip label="STR" value={npc.str} />}
-              {vis('attributes.sta') && <Chip label="STA" value={npc.sta} />}
-              {vis('attributes.dex') && <Chip label="DEX" value={npc.dex} />}
-              {vis('attributes.agi') && <Chip label="AGI" value={npc.agi} />}
-              {vis('attributes.int') && <Chip label="INT" value={npc.int} />}
-              {vis('attributes.wis') && <Chip label="WIS" value={npc.wis} />}
-              {vis('attributes.cha') && <Chip label="CHA" value={npc.cha} />}
-            </div>
-          )}
-
-          {sections.special_abilities && shown.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {shown.map((a) => (
-                <AbilityBadge key={a.code} ability={a} tagStyle={tagStyle} />
-              ))}
-            </div>
-          )}
-
-          {casterSummary && (
-            <NPCCasterSummarySection
-              summary={casterSummary}
-              sections={sections}
-              distance={distance}
-              theme={{
-                heading: 'rgba(255,255,255,0.4)',
-                muted: 'rgba(255,255,255,0.45)',
-                chipBg: 'rgba(255,255,255,0.08)',
-                chipText: 'rgba(255,255,255,0.85)',
-              }}
-              onSpellClick={onSpellClick}
-            />
-          )}
-
-          {sections.faction && <FactionSection npcId={npc.id} />}
+          {sectionOrder.map((id) => (
+            <React.Fragment key={id}>{blocks[id]}</React.Fragment>
+          ))}
         </>
       )}
     </>
