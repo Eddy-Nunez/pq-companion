@@ -349,30 +349,36 @@ var popFlagsLiteralLines = map[string]popFlagsBoolEffect{
 // memory. Complete means the flag (or the later flag it was combined into,
 // or Plane of Time access) is held, and the server deliberately hides any
 // stale memory in that case; Missing means neither the flag nor its memory.
-// Both clear the cl_* flag. qglobal is set only where this line is the sole
-// report of that qglobal (the cipher halves and the book); the other bosses'
-// state already comes from their zone's stage line.
+// Both clear the cl_* flag. When the boss's own stage line isn't printed in
+// the same section, Complete also records floor on qglobal (Behemoth and
+// Bertoxxulous — #487 dropped Tier 1's Giwin line, so the Behemoth flag is
+// now Tier 1's only zeks signal). absent marks lines that are the sole
+// report of their qglobal, so Missing confirms it absent (the cipher halves
+// and the book; Complete is a floor there since the half may since have been
+// combined into cipher/zebuxoruk).
 type popFlagsBossLine struct {
 	label   string
 	pending string
 	qglobal string
+	floor   int
+	absent  bool
 }
 
 var popFlagsBossLines = []popFlagsBossLine{
-	{"Grummus flag", "cl_grummus", ""},
-	{"Terris Thule flag", "cl_terris", ""},
-	{"Manaetic Behemoth flag", "cl_behemoth", ""},
-	{"Aerin`Dar flag", "cl_aerindar", ""},
-	{"Bertoxxulous flag", "cl_bertox", ""},
-	{"Keeper of Sorrows flag", "cl_keeper", ""},
-	{"Saryrn cipher half", "cl_saryrn", "saryrn"},
-	{"Mithaniel Marr cipher half", "cl_mmarr", "mmarr"},
-	{"Mithaniel Marr book", "cl_mmarr_book", "mmarr_book"},
-	{"Agnarr / Karana flag", "cl_karana", ""},
-	{"Vallon Zek flag", "cl_vallon", ""},
-	{"Tallon Zek flag", "cl_tallon", ""},
-	{"Rallos Zek flag", "cl_rallos", ""},
-	{"Solusek Ro flag", "cl_solusek", ""},
+	{"Grummus flag", "cl_grummus", "", 0, false},
+	{"Terris Thule flag", "cl_terris", "", 0, false},
+	{"Manaetic Behemoth flag", "cl_behemoth", "zeks", 2, false},
+	{"Aerin`Dar flag", "cl_aerindar", "", 0, false},
+	{"Bertoxxulous flag", "cl_bertox", "fuirstel", 4, false},
+	{"Keeper of Sorrows flag", "cl_keeper", "", 0, false},
+	{"Saryrn cipher half", "cl_saryrn", "saryrn", 1, true},
+	{"Mithaniel Marr cipher half", "cl_mmarr", "mmarr", 1, true},
+	{"Mithaniel Marr book", "cl_mmarr_book", "mmarr_book", 1, true},
+	{"Agnarr / Karana flag", "cl_karana", "", 0, false},
+	{"Vallon Zek flag", "cl_vallon", "", 0, false},
+	{"Tallon Zek flag", "cl_tallon", "", 0, false},
+	{"Rallos Zek flag", "cl_rallos", "", 0, false},
+	{"Solusek Ro flag", "cl_solusek", "", 0, false},
 }
 
 func matchBossLine(r PopFlagsReport, line string) bool {
@@ -383,17 +389,15 @@ func matchBossLine(r PopFlagsReport, line string) bool {
 		}
 		switch rest {
 		case "Complete":
-			// Floor, not exact: the half may since have been combined into
-			// cipher/zebuxoruk, but it was earned either way.
 			r.Exact[b.pending] = ""
 			if b.qglobal != "" {
-				r.setAtLeast(b.qglobal, 1)
+				r.setAtLeast(b.qglobal, b.floor)
 			}
 		case "Pending memory":
 			r.Pending[b.pending] = true
 		case "Missing":
 			r.Exact[b.pending] = ""
-			if b.qglobal != "" {
+			if b.absent {
 				r.Exact[b.qglobal] = ""
 			}
 		default:

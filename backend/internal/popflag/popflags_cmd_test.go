@@ -140,6 +140,22 @@ func TestParsePopFlagsReportTier1Current(t *testing.T) {
 	if r.Pending["cl_grummus"] || r.Pending["cl_terris"] {
 		t.Errorf("pending = %v, Complete/Missing must not mark pending", r.Pending)
 	}
+
+	// With Tier 1's Giwin line gone, the Behemoth flag is its zeks signal.
+	r = ParsePopFlagsReport(splitBlock(
+		"=== Tier 1 Progression ===",
+		"Manaetic Behemoth flag: Complete",
+	))
+	if r.AtLeast["zeks"] != 2 {
+		t.Errorf("AtLeast[zeks] = %d, want 2", r.AtLeast["zeks"])
+	}
+	done := map[string]bool{}
+	for _, id := range DeriveCompletion(map[string]string{"zeks": "2"}) {
+		done[id] = true
+	}
+	if !done["poi_mb"] {
+		t.Errorf("zeks=2 should derive poi_mb, got %v", done)
+	}
 }
 
 func TestParsePopFlagsReportBossLinesHalvesAndBook(t *testing.T) {
