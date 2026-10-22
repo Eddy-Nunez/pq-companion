@@ -6,6 +6,7 @@ import { useWebSocket, type WsMessage } from '../hooks/useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
 import BackfillLink from './BackfillLink'
 import CharacterRecapLoot from './CharacterRecapLoot'
+import { usePersistentState } from '../hooks/usePersistentState'
 
 const WINDOW_OPTIONS = [1, 7, 30, 90] as const
 type WindowDays = (typeof WINDOW_OPTIONS)[number]
@@ -84,7 +85,9 @@ function formatAge(unix: number | undefined): string {
 
 export default function CharacterRecapPanel({ characterName }: CharacterRecapPanelProps): React.ReactElement {
   const [windowDays, setWindowDays] = useState<WindowDays>(30)
-  const [scope, setScope] = useState<Scope>('character')
+  const [scope, setScope] = usePersistentState<Scope>(
+    'pq-tab:char-recap-scope', 'character', ['character', 'all'],
+  )
   const [recap, setRecap] = useState<CharacterRecap | null>(null)
   const [allRecaps, setAllRecaps] = useState<CharacterRecap[] | null>(null)
   const [loading, setLoading] = useState(true)

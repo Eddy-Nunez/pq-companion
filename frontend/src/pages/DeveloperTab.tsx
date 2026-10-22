@@ -8,6 +8,7 @@ const SchemaGraphPanel = React.lazy(() => import('./SchemaGraphPanel'))
 import SpellEmotesPanel from './SpellEmotesPanel'
 import { getConfig, saveConfigChanges } from '../services/api'
 import type { Config } from '../types/config'
+import { usePersistentState } from '../hooks/usePersistentState'
 
 // DeveloperTab hosts power-user tools that don't belong in the regular UI.
 // Only visible when Preferences.DeveloperMode is true; toggled by
@@ -31,7 +32,9 @@ const SUB_TABS: SubTabDef[] = [
 ]
 
 export default function DeveloperTab(): React.ReactElement {
-  const [sub, setSub] = useState<SubTab>('sandbox')
+  const [sub, setSub] = usePersistentState<SubTab>(
+    'pq-tab:developer', 'sandbox', ['notes', 'sandbox', 'graph', 'flags', 'emotes'],
+  )
 
   return (
     <div className="flex h-full flex-col">

@@ -7,18 +7,19 @@ import { useCallback, useState } from 'react'
  *
  * `allowed` guards against a stale stored value (a tab that was renamed,
  * removed or is now gated off) — anything not in the list falls back to
- * `initial`. Storage failures (private mode, blocked site data) are swallowed
+ * `initial`. Pass `null` for an open-ended value (e.g. a picked zone) that
+ * any stored string satisfies. Storage failures (private mode, blocked site data) are swallowed
  * and the state simply behaves like plain useState.
  */
 export function usePersistentState<T extends string>(
   key: string,
   initial: T,
-  allowed: readonly T[],
+  allowed: readonly T[] | null,
 ): [T, (next: T) => void] {
   const [value, setValue] = useState<T>(() => {
     try {
       const stored = localStorage.getItem(key)
-      if (stored !== null && (allowed as readonly string[]).includes(stored)) {
+      if (stored !== null && (allowed === null || (allowed as readonly string[]).includes(stored))) {
         return stored as T
       }
     } catch {

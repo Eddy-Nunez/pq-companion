@@ -527,7 +527,9 @@ interface StatsPanelProps {
 }
 
 function StatsPanel({ stats, hasStats, characterID, characterName }: StatsPanelProps): React.ReactElement {
-  const [mode, setMode] = useState<StatMode>('equipped')
+  const [mode, setMode] = usePersistentState<StatMode>(
+    'pq-tab:char-stats-mode', 'equipped', ['base', 'equipped', 'buffed', 'live'],
+  )
   // Saved raid-buff preset (ordered list of spell IDs) plus the resolved
   // name/icon/delta metadata for each. Both are loaded together — when the
   // saved preset is empty the UI substitutes DEFAULT_PRESET_IDS.
@@ -1488,7 +1490,10 @@ function relativeAge(unixSeconds: number): string {
 }
 
 function AAPanel({ trained, available, unspentAA, unspentAAAt }: AAPanelProps): React.ReactElement {
-  const [category, setCategory] = useState<AACategoryKey>('general')
+  const [category, setCategory] = usePersistentState<AACategoryKey>(
+    'pq-tab:char-aa-category', 'general',
+    ['general', 'archetype', 'class', 'pop_advance', 'pop_ability'],
+  )
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<AARow | null>(null)
 

@@ -59,6 +59,7 @@ import { ConfirmModal } from '../components/ConfirmModal'
 import WishlistAlertSettings from '../components/WishlistAlertSettings'
 import { ItemIcon } from '../components/Icon'
 import { WISHLIST_SLOT_ORDER, GENERAL_BUCKET, validSlotsForItem, isMultiSlotItem } from '../lib/wishlistSlots'
+import { usePersistentState } from '../hooks/usePersistentState'
 
 type ViewMode = 'category' | 'all'
 
@@ -503,7 +504,9 @@ export default function WishlistPage(): React.ReactElement {
   const [characters, setCharacters] = useState<Character[]>([])
   const [entries, setEntries] = useState<WishlistEntry[]>([])
   const [slotLayout, setSlotLayout] = useState<WishlistSlotLayout[]>([])
-  const [viewMode, setViewMode] = useState<ViewMode>('category')
+  const [viewMode, setViewMode] = usePersistentState<ViewMode>(
+    'pq-tab:wishlist-view', 'category', ['category', 'all'],
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sourcesCache, setSourcesCache] = useState<Map<number, ItemSources>>(new Map())

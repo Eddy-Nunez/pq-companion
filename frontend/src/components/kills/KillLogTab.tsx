@@ -8,6 +8,7 @@ import { WSEvent } from '../../lib/wsEvents'
 import { useEscapeToClose } from '../../hooks/useEscapeToClose'
 import MissingLogNotice from '../MissingLogNotice'
 import BackfillLink from '../BackfillLink'
+import { usePersistentState } from '../../hooks/usePersistentState'
 
 // Seconds matter here — the Kill Log exists to time named/placeholder
 // respawns, so the timestamp keeps them.
@@ -79,7 +80,7 @@ export default function KillLogTab(): React.ReactElement {
   const [zoneFilter, setZoneFilter] = useState('')
   const [scope, setScope] = useState<KillScope>('npc')
   const [windowSecs, setWindowSecs] = useState(0)
-  const [view, setView] = useState<View>('list')
+  const [view, setView] = usePersistentState<View>('pq-tab:kill-log-view', 'list', ['list', 'mob'])
   const [listSort, setListSort] = useState<ListSort>('time')
   const [mobSort, setMobSort] = useState<MobSort>('last')
   const [sortDir, setSortDir] = useState<SortDir>('desc')

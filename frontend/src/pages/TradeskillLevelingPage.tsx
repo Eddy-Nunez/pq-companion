@@ -29,6 +29,7 @@ import { useWebSocket, type WsMessage } from '../hooks/useWebSocket'
 import { WSEvent } from '../lib/wsEvents'
 import { RecipeBody } from '../components/RecipeView'
 import RecipeSearchModal from '../components/RecipeSearchModal'
+import { usePersistentState } from '../hooks/usePersistentState'
 
 const CHAR_KEY = 'tsLevelCharId'
 const SKILL_KEY = 'tsLevelSkill'
@@ -66,7 +67,9 @@ export default function TradeskillLevelingPage(): React.ReactElement {
   const [charSkills, setCharSkills] = useState<TradeskillView[] | null>(null)
   const [start, setStart] = useState<number | ''>('')
   const [target, setTarget] = useState<number | ''>('')
-  const [mode, setMode] = useState<TradeskillMode>('recommended')
+  const [mode, setMode] = usePersistentState<TradeskillMode>(
+    'pq-tab:tradeskill-leveling', 'recommended', ['recommended', 'custom'],
+  )
   const [maelin, setMaelin] = useState(false)
 
   // Custom path: the saved recipes for the selected discipline (global, shared

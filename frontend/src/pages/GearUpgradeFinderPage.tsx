@@ -171,7 +171,9 @@ function inputStyle(): React.CSSProperties {
 export default function GearUpgradeFinderPage(): React.ReactElement {
   const [characters, setCharacters] = useState<Character[]>([])
   const [viewed, setViewed] = useState('')
-  const [slot, setSlot] = useState('head')
+  const [slot, setSlot] = usePersistentState<string>(
+    'pq-gear-upgrades:slot', 'head', SLOTS.map((s) => s.key),
+  )
 
   const [data, setData] = useState<UpgradesResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -223,7 +225,9 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
     'pq-gear-upgrades:zone-layout', 'slots', ['slots', 'flat'],
   )
   const [liveZone, setLiveZone] = useState('')
-  const [pickedZone, setPickedZone] = useState('')
+  const [pickedZone, setPickedZone] = usePersistentState<string>(
+    'pq-gear-upgrades:zone', '', null,
+  )
   const [zoneData, setZoneData] = useState<ZoneUpgradesResponse | null>(null)
   const [zoneLoading, setZoneLoading] = useState(false)
   const [zoneError, setZoneError] = useState<string | null>(null)
@@ -333,7 +337,7 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
       setZoneLoading(true)
       setZoneError(null)
       getCharacterZoneUpgrades(selected.id, activeZone, {
-        weights, showPoP, hideCrafted, hideNoDrop, weaponStyle,
+        weights, hideCrafted, hideNoDrop, weaponStyle,
       })
         .then((r) => {
           if (!cancelled) setZoneData(r)
@@ -349,7 +353,7 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
       cancelled = true
       clearTimeout(id)
     }
-  }, [mode, selected, activeZone, weights, showPoP, hideCrafted, hideNoDrop, weaponStyle, reload])
+  }, [mode, selected, activeZone, weights, hideCrafted, hideNoDrop, weaponStyle, reload])
 
   // Load the viewed character's wishlist for the star toggles.
   const refreshWishlist = useCallback((charID: number) => {
@@ -617,11 +621,13 @@ export default function GearUpgradeFinderPage(): React.ReactElement {
                 <input type="checkbox" checked={hideCrafted} onChange={(e) => setHideCrafted(e.target.checked)} />
                 Hide crafted
               </label>
-              <label className="flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}
-                title="Planes of Power gear isn't obtainable on Quarm yet">
-                <input type="checkbox" checked={showPoP} onChange={(e) => setShowPoP(e.target.checked)} />
-                Show PoP gear
-              </label>
+              {mode === 'overview' && (
+                <label className="flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}
+                  title="Planes of Power gear isn't obtainable on Quarm yet">
+                  <input type="checkbox" checked={showPoP} onChange={(e) => setShowPoP(e.target.checked)} />
+                  Show PoP gear
+                </label>
+              )}
               <label className="flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}
                 title="Restrict Primary suggestions to a hand style, regardless of stats">
                 Weapon style:
