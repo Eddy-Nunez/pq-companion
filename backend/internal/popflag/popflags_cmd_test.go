@@ -47,6 +47,8 @@ func TestParsePopFlagsReportOverview(t *testing.T) {
 	}
 }
 
+// TestParsePopFlagsReportTier1 uses the pre-PR #487 wording, which a log
+// backfill can still hit; TestParsePopFlagsReportTier1Current covers today's.
 func TestParsePopFlagsReportTier1(t *testing.T) {
 	block := splitBlock(
 		"=== Tier 1 Progression ===",
@@ -92,6 +94,83 @@ func TestParsePopFlagsReportTier1(t *testing.T) {
 	}
 	if !r.Pending["cl_grummus"] || !r.Pending["cl_maze"] {
 		t.Errorf("pending = %+v, want cl_grummus and cl_maze", r.Pending)
+	}
+}
+
+func TestParsePopFlagsReportTier1Current(t *testing.T) {
+	block := splitBlock(
+		"=== Tier 1 Progression ===",
+		"--- Plane of Justice ---",
+		"Mavuin's case: Mavuin's case is complete",
+		"Seventh Hammer access: Unlocked",
+		"--- Plane of Disease ---",
+		"Fuirstel progression: Elder Fuirstel aided; defeat Bertoxxulous",
+		"Crypt of Decay access: Unlocked",
+		"Grummus flag: Complete",
+		"--- Plane of Nightmare ---",
+		"Thelin progression: Help Thelin escape the hedge maze",
+		"Pending memory: Thelin's hedge maze",
+		"Terris Thule flag: Missing",
+		"--- Plane of Innovation ---",
+		"Factory door access: Locked",
+		"Manaetic Behemoth flag: Pending memory",
+		"A checklist memory is ready to be unlocked.",
+		"Sit near Seer Mal Nae`Shi and say 'unlock memories', then check #popflags again.",
+	)
+	for _, line := range block {
+		if !MatchPopFlagsLine(line) {
+			t.Errorf("MatchPopFlagsLine(%q) = false", line)
+		}
+	}
+	r := ParsePopFlagsReport(block)
+	if r.Exact["fuirstel"] != "3" {
+		t.Errorf("fuirstel = %q, want 3", r.Exact["fuirstel"])
+	}
+	if r.Exact["thelin"] != "1" {
+		t.Errorf("thelin = %q, want 1", r.Exact["thelin"])
+	}
+	for _, cl := range []string{"cl_grummus", "cl_terris"} {
+		if v, ok := r.Exact[cl]; !ok || v != "" {
+			t.Errorf("Exact[%q] = (%q,%v), want cleared", cl, v, ok)
+		}
+	}
+	if !r.Pending["cl_behemoth"] || !r.Pending["cl_maze"] {
+		t.Errorf("pending = %v, want cl_behemoth and cl_maze", r.Pending)
+	}
+	if r.Pending["cl_grummus"] || r.Pending["cl_terris"] {
+		t.Errorf("pending = %v, Complete/Missing must not mark pending", r.Pending)
+	}
+}
+
+func TestParsePopFlagsReportBossLinesHalvesAndBook(t *testing.T) {
+	r := ParsePopFlagsReport(splitBlock(
+		"=== Tier 3 Progression ===",
+		"Mithaniel Marr cipher half: Complete",
+		"Mithaniel Marr book: Missing",
+		"Agnarr / Karana flag: Pending memory",
+		"Miak the Searedsoul preflag: Missing",
+		"Speak to Miak the Searedsoul in Tranquility about 'portal's destination'; hailing alone does not grant the preflag.",
+	))
+	if r.AtLeast["mmarr"] != 1 {
+		t.Errorf("AtLeast[mmarr] = %d, want 1", r.AtLeast["mmarr"])
+	}
+	if v, ok := r.Exact["mmarr_book"]; !ok || v != "" {
+		t.Errorf("Exact[mmarr_book] = (%q,%v), want confirmed absent", v, ok)
+	}
+	if !r.Pending["cl_karana"] {
+		t.Errorf("cl_karana should be pending")
+	}
+
+	r = ParsePopFlagsReport(splitBlock(
+		"=== Tier 2 Progression ===",
+		"Saryrn cipher half: Missing",
+		"Keeper of Sorrows flag: Complete",
+	))
+	if v, ok := r.Exact["saryrn"]; !ok || v != "" {
+		t.Errorf("Exact[saryrn] = (%q,%v), want confirmed absent", v, ok)
+	}
+	if _, ok := r.Exact["tylis"]; ok {
+		t.Errorf("Keeper flag line must not set tylis (the stage line owns it)")
 	}
 }
 

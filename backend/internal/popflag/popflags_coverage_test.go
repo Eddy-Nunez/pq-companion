@@ -3,8 +3,9 @@ package popflag
 import "testing"
 
 // This file is a full-coverage sweep of every distinct line popflags.cpp can
-// print (as of the 2026-09-28 re-check against the live source, commit
-// cec9e73a — see the header comment on popflags_cmd.go), transcribed by hand
+// print (re-transcribed 2026-10-22 against commit a3b80b24, PR #487 — see
+// the header comment on popflags_cmd.go; pre-#487 legacy lines are kept too,
+// since a log backfill can still contain them), transcribed by hand
 // from the actual c->Message(...) call sites rather than sampled. Its only
 // job is to catch a MatchPopFlagsLine recognition gap: a line the server can
 // really print that the live Consumer's buffering gate doesn't recognize,
@@ -80,6 +81,9 @@ func TestMatchPopFlagsLineFullCoverage(t *testing.T) {
 			add(sl.label + ": " + s)
 		}
 	}
+	for _, s := range popFlagsFuirstelLegacyStages {
+		add("Fuirstel progression: " + s)
+	}
 
 	// The two Karana print sites: their own stage arrays, "Not started", and
 	// the "combined into Zebuxoruk lore" short-circuit variant.
@@ -136,10 +140,29 @@ func TestMatchPopFlagsLineFullCoverage(t *testing.T) {
 		"Plane of Fire access: Unlocked", "Plane of Fire access: Locked",
 	)
 
-	// Pending memory lines — one per PopFlagsPrintPending call site (13 total).
+	// Pending memory lines — the two remaining PopFlagsPrintPending call
+	// sites plus the legacy ones.
 	for desc := range popFlagsPendingDesc {
 		add("Pending memory: " + desc)
 	}
+
+	// PopFlagsPrintBoss call sites (PR #487), each with all three states.
+	for _, label := range []string{
+		"Grummus flag", "Terris Thule flag", "Manaetic Behemoth flag",
+		"Aerin`Dar flag", "Bertoxxulous flag", "Keeper of Sorrows flag",
+		"Saryrn cipher half", "Mithaniel Marr cipher half",
+		"Mithaniel Marr book", "Agnarr / Karana flag", "Vallon Zek flag",
+		"Tallon Zek flag", "Rallos Zek flag", "Solusek Ro flag",
+	} {
+		add(label+": Complete", label+": Pending memory", label+": Missing")
+	}
+
+	// Miak's Tower preflag and the hint printed while it's Missing.
+	add(
+		"Miak the Searedsoul preflag: Complete",
+		"Miak the Searedsoul preflag: Missing",
+		"Speak to Miak the Searedsoul in Tranquility about 'portal's destination'; hailing alone does not grant the preflag.",
+	)
 
 	// PopFlagsPrintSeerNotice's two message pairs.
 	add(

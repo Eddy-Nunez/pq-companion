@@ -6,9 +6,14 @@ import (
 )
 
 // This file parses the player-facing '#popflags' command added in
-// EQMacEmu/EQMacEmu PR #382 (zone/gm_commands/popflags.cpp, commit cec9e73a,
-// 2026-09-06 — re-checked against the live upstream source 2026-09-28, still
-// the only commit touching this file). '#popflags [overview|1|2|3|4|5|time]'
+// SecretsOTheP/EQMacEmu PR #382 (zone/gm_commands/popflags.cpp, commit
+// cec9e73a, 2026-09-06) and reworded by PR #487 (commit a3b80b24,
+// 2026-10-22). PR #487 replaced the per-boss "Pending memory: X" lines with
+// "X flag: Complete|Pending memory|Missing" status lines (popFlagsBossLines),
+// added Mithaniel Marr book, Agnarr / Karana and Miak preflag lines, and
+// reworded the Fuirstel stages. The pre-#487 strings are still accepted
+// (marked "legacy" below) so a log backfill over older '#popflags' output
+// keeps parsing. '#popflags [overview|1|2|3|4|5|time]'
 // prints a deterministic report built directly from the character's PoP
 // qglobals, the same underlying state the Seer Mal Nae`Shi "guided
 // meditation" (seer.go) reconstructs from narrative text. Unlike the Seer
@@ -88,9 +93,9 @@ func (r PopFlagsReport) setAtLeast(qglobal string, floor int) {
 
 // popFlagsPendingDesc maps the description text '#popflags' prints in a
 // "Pending memory: X" line back to the 'cl_*' qglobal name (popflags.cpp's
-// PopFlagsPrintPending calls). cl_mmarr and cl_mmarr_book are never printed
-// this way upstream (PopFlagsHasPendingMemories checks them, but no call site
-// names them individually) — matches this file's Section header comment.
+// PopFlagsPrintPending calls). Since PR #487 only "Thelin's hedge maze" and
+// "Karana" are still printed this way; the rest are legacy and now arrive as
+// popFlagsBossLines instead.
 var popFlagsPendingDesc = map[string]string{
 	"Grummus":             "cl_grummus",
 	"Thelin's hedge maze": "cl_maze",
@@ -118,6 +123,14 @@ var (
 		"Mavuin's case is complete",
 	}
 	popFlagsFuirstelStages = []string{
+		"Obtain the Ward for Milyk",
+		"Grummus defeated; return to Elder Fuirstel",
+		"Elder Fuirstel aided; defeat Bertoxxulous",
+		"Bertoxxulous defeated; return to Elder Fuirstel",
+		"Fuirstel progression complete",
+	}
+	// Pre-PR #487 wording for the same fuirstel values.
+	popFlagsFuirstelLegacyStages = []string{
 		"Obtain the Ward for Milyk",
 		"The Ward was recovered",
 		"Grummus was defeated",
@@ -167,20 +180,22 @@ var (
 )
 
 // popFlagsStageLabels binds a printed label to its stage array and the
-// qglobal it backs, for the generic stage-line matcher.
+// qglobal it backs, for the generic stage-line matcher. legacy, when set, is
+// an older wording of the same array, tried only if stages doesn't match.
 type popFlagsStageLabel struct {
 	label   string
 	qglobal string
 	stages  []string
+	legacy  []string
 }
 
 var popFlagsStageLabels = []popFlagsStageLabel{
-	{"Mavuin's case", "mavuin", popFlagsMavuinStages},
-	{"Fuirstel progression", "fuirstel", popFlagsFuirstelStages},
-	{"Thelin progression", "thelin", popFlagsThelinStages},
-	{"Aerin`Dar progression", "aerindar", popFlagsAerindarStages},
-	{"Tylis progression", "tylis", popFlagsTylisStages},
-	{"Giwin and Zek progression", "zeks", popFlagsZekStages},
+	{"Mavuin's case", "mavuin", popFlagsMavuinStages, nil},
+	{"Fuirstel progression", "fuirstel", popFlagsFuirstelStages, popFlagsFuirstelLegacyStages},
+	{"Thelin progression", "thelin", popFlagsThelinStages, nil},
+	{"Aerin`Dar progression", "aerindar", popFlagsAerindarStages, nil},
+	{"Tylis progression", "tylis", popFlagsTylisStages, nil},
+	{"Giwin and Zek progression", "zeks", popFlagsZekStages, nil},
 }
 
 // popFlagsKaranaLabels handles the two Karana print sites, which additionally
@@ -219,19 +234,24 @@ var popFlagsLiteralLines = map[string]popFlagsBoolEffect{
 	"Factory door access: Unlocked": exactEffect("poi_door", "1"),
 	"Factory door access: Locked":   exactEffect("poi_door", ""),
 
+	// Legacy (removed by PR #487).
 	"Giwin and Manaetic Behemoth progression: Progress recorded": atLeastEffect("zeks", 1),
 	"Giwin and Manaetic Behemoth progression: Not started":       exactEffect("zeks", ""),
 
 	"Lower Crypt access: Unlocked": exactEffect("bertox_key", "1"),
 	"Lower Crypt access: Locked":   exactEffect("bertox_key", ""),
 
-	"Saryrn cipher half: Combined into Cipher": atLeastEffect("cipher", 1),
-	"Saryrn cipher half: Complete":             exactEffect("saryrn", "1"),
-	"Saryrn cipher half: Incomplete":           exactEffect("saryrn", ""),
-
+	// Legacy cipher-half states (removed by PR #487). The shared
+	// "...: Complete" state is handled by popFlagsBossLines for both formats.
+	"Saryrn cipher half: Combined into Cipher":         atLeastEffect("cipher", 1),
+	"Saryrn cipher half: Incomplete":                   exactEffect("saryrn", ""),
 	"Mithaniel Marr cipher half: Combined into Cipher": atLeastEffect("cipher", 1),
-	"Mithaniel Marr cipher half: Complete":             exactEffect("mmarr", "1"),
 	"Mithaniel Marr cipher half: Incomplete":           exactEffect("mmarr", ""),
+
+	// Miak's Tower preflag (pofire>=1||time). The "Plane of Fire progression"
+	// line in the same section already reports pofire, so these add nothing.
+	"Miak the Searedsoul preflag: Complete": noEffect,
+	"Miak the Searedsoul preflag: Missing":  noEffect,
 
 	"Cipher information: Received": atLeastEffect("cipher", 1),
 	"Cipher information: Missing":  noEffect,
@@ -324,6 +344,66 @@ var popFlagsLiteralLines = map[string]popFlagsBoolEffect{
 	"Tier 5 - Plane of Time: Not started": exactEffect("time", ""),
 }
 
+// popFlagsBossLine is one PopFlagsPrintBoss call site (PR #487): a
+// "<label>: Complete|Pending memory|Missing" line for one boss's checklist
+// memory. Complete means the flag (or the later flag it was combined into,
+// or Plane of Time access) is held, and the server deliberately hides any
+// stale memory in that case; Missing means neither the flag nor its memory.
+// Both clear the cl_* flag. qglobal is set only where this line is the sole
+// report of that qglobal (the cipher halves and the book); the other bosses'
+// state already comes from their zone's stage line.
+type popFlagsBossLine struct {
+	label   string
+	pending string
+	qglobal string
+}
+
+var popFlagsBossLines = []popFlagsBossLine{
+	{"Grummus flag", "cl_grummus", ""},
+	{"Terris Thule flag", "cl_terris", ""},
+	{"Manaetic Behemoth flag", "cl_behemoth", ""},
+	{"Aerin`Dar flag", "cl_aerindar", ""},
+	{"Bertoxxulous flag", "cl_bertox", ""},
+	{"Keeper of Sorrows flag", "cl_keeper", ""},
+	{"Saryrn cipher half", "cl_saryrn", "saryrn"},
+	{"Mithaniel Marr cipher half", "cl_mmarr", "mmarr"},
+	{"Mithaniel Marr book", "cl_mmarr_book", "mmarr_book"},
+	{"Agnarr / Karana flag", "cl_karana", ""},
+	{"Vallon Zek flag", "cl_vallon", ""},
+	{"Tallon Zek flag", "cl_tallon", ""},
+	{"Rallos Zek flag", "cl_rallos", ""},
+	{"Solusek Ro flag", "cl_solusek", ""},
+}
+
+func matchBossLine(r PopFlagsReport, line string) bool {
+	for _, b := range popFlagsBossLines {
+		rest, ok := strings.CutPrefix(line, b.label+": ")
+		if !ok {
+			continue
+		}
+		switch rest {
+		case "Complete":
+			// Floor, not exact: the half may since have been combined into
+			// cipher/zebuxoruk, but it was earned either way.
+			r.Exact[b.pending] = ""
+			if b.qglobal != "" {
+				r.setAtLeast(b.qglobal, 1)
+			}
+		case "Pending memory":
+			r.Pending[b.pending] = true
+		case "Missing":
+			r.Exact[b.pending] = ""
+			if b.qglobal != "" {
+				r.Exact[b.qglobal] = ""
+			}
+		default:
+			return false
+		}
+		return true
+	}
+	return false
+}
+
 // popFlagsBitLine handles one hohtrials/sol_room per-bit line.
 type popFlagsBitLine struct {
 	label   string
@@ -405,6 +485,9 @@ func ParsePopFlagsReport(lines []string) PopFlagsReport {
 			r.Pending[desc] = true
 			continue
 		}
+		if matchBossLine(r, line) {
+			continue
+		}
 		if matchBitLine(line, hoh, sol) {
 			continue
 		}
@@ -462,7 +545,9 @@ func matchBitLine(line string, hoh, sol *popFlagsBitState) bool {
 func matchStageLine(r PopFlagsReport, line string) bool {
 	for _, sl := range popFlagsStageLabels {
 		if rest, ok := strings.CutPrefix(line, sl.label+": "); ok {
-			applyStageRest(r, sl.qglobal, sl.stages, rest)
+			if !applyStageRest(r, sl.qglobal, sl.stages, rest) && sl.legacy != nil {
+				applyStageRest(r, sl.qglobal, sl.legacy, rest)
+			}
 			return true
 		}
 	}
@@ -483,18 +568,19 @@ func matchStageLine(r PopFlagsReport, line string) bool {
 // exact match at index i means the qglobal's CURRENT value is i+1; "Not
 // started" means confirmed absent; anything else (the "Progress recorded"
 // defensive fallback for an out-of-range value) is recognized but contributes
-// no state.
-func applyStageRest(r PopFlagsReport, qglobal string, stages []string, rest string) {
+// no state. Reports whether rest resolved to a value.
+func applyStageRest(r PopFlagsReport, qglobal string, stages []string, rest string) bool {
 	if rest == "Not started" {
 		r.Exact[qglobal] = ""
-		return
+		return true
 	}
 	for i, s := range stages {
 		if rest == s {
 			r.Exact[qglobal] = strconv.Itoa(i + 1)
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // zoneHeaderPrefix/Suffix recognize a "--- Zone Name ---" sub-header line.
@@ -519,6 +605,8 @@ var popFlagsNoticeLines = map[string]bool{
 	"Pending checklist memories exist, but their prerequisite steps are incomplete.":      true,
 	"Complete the unfinished progression shown above, then return to Seer Mal Nae`Shi.":   true,
 	"If one of these is missing, hail Maelin and ask about new lore and new information.": true,
+	// Printed under the Miak preflag line while it's Missing (PR #487).
+	"Speak to Miak the Searedsoul in Tranquility about 'portal's destination'; hailing alone does not grant the preflag.": true,
 	// PopFlagsPrintTime's hint, printed whenever Plane of Time access is still
 	// Locked — i.e. for nearly every player who checks '#popflags time' before
 	// finishing Tier 4. Missing until 2026-09-28's full re-check against the
@@ -560,6 +648,9 @@ func MatchPopFlagsLine(line string) bool {
 	// Bit and stage lines: reuse the parse path against throwaway state so
 	// recognition never drifts from what ParsePopFlagsReport actually accepts.
 	throwaway := newPopFlagsReport()
+	if matchBossLine(throwaway, line) {
+		return true
+	}
 	if matchBitLine(line, &popFlagsBitState{}, &popFlagsBitState{}) {
 		return true
 	}
