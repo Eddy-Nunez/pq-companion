@@ -709,6 +709,16 @@ type Preferences struct {
 	// alongside the cast range on the distance readout. 0 = off.
 	NPCOverlayRangedRange int `yaml:"npc_overlay_ranged_range" json:"npc_overlay_ranged_range"`
 
+	// NPCOverlayRangesManual makes the overlay use the two ranges above as
+	// typed. Off (the default), it works them out from the active character's
+	// gear instead (GET /api/characters/{id}/ranges) and the fields above are
+	// only the fallback when that's unavailable.
+	NPCOverlayRangesManual bool `yaml:"npc_overlay_ranges_manual,omitempty" json:"npc_overlay_ranges_manual"`
+
+	// NPCRangesAutoMigrationDone marks the one-time switch to automatic
+	// ranges: configs that already had custom ranges keep them as manual.
+	NPCRangesAutoMigrationDone bool `yaml:"npc_ranges_auto_migration_done,omitempty" json:"npc_ranges_auto_migration_done"`
+
 	// NPCOverlayTagStyle customises the NPC overlay's special-ability badge
 	// colours on both surfaces. Zero value = built-in category colours.
 	// Frontend-only; the engine never reads it.
@@ -1641,6 +1651,16 @@ func applyDefaults(cfg *Config) bool {
 	}
 	if cfg.Preferences.NPCOverlayRangedRange < 0 {
 		cfg.Preferences.NPCOverlayRangedRange = 0
+		changed = true
+	}
+	// Ranges became automatic by default; anyone who had typed their own keeps
+	// them, as manual.
+	if !cfg.Preferences.NPCRangesAutoMigrationDone {
+		p := &cfg.Preferences
+		if p.NPCOverlayCastRange != 200 || p.NPCOverlayRangedRange != 0 {
+			p.NPCOverlayRangesManual = true
+		}
+		p.NPCRangesAutoMigrationDone = true
 		changed = true
 	}
 	// Respawn-alert TTS spelling: a config saved with the exact legacy default

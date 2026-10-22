@@ -1901,3 +1901,36 @@ func isBeneficialSpell(d *db.DB, spellID int) bool {
 	}
 	return good == 1
 }
+
+// ranges handles GET /api/characters/{id}/ranges: the character's effective
+// spell and ranged-attack reach from their gear, for the NPC overlay's
+// distance readout.
+func (h *charactersHandler) ranges(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	char, ok, err := h.store.Get(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "character not found")
+		return
+	}
+	cfg := h.mgr.Get()
+	// No EQ path or no Quarmy export yet: report the defaults rather than an
+	// error, so the overlay just falls back to them.
+	if cfg.EQPath == "" || zeal.FindQuarmyFile(cfg.EQPath, char.Name) == "" {
+		writeJSON(w, http.StatusOK, buffmod.Ranges{Character: char.Name, CastRange: buffmod.BaseSpellRange})
+		return
+	}
+	res, err := buffmod.ComputeRanges(cfg.EQPath, char.Name, h.db)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

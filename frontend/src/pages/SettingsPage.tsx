@@ -2581,13 +2581,15 @@ export default function SettingsPage(): React.ReactElement {
               sectionOrder={config.preferences.npc_overlay_section_order ?? []}
               castRange={config.preferences.npc_overlay_cast_range || 200}
               rangedRange={config.preferences.npc_overlay_ranged_range || 0}
-              onChangeRanges={(cast, ranged) =>
+              rangesManual={Boolean(config.preferences.npc_overlay_ranges_manual)}
+              onChangeRanges={(cast, ranged, manual) =>
                 setConfig({
                   ...config,
                   preferences: {
                     ...config.preferences,
                     npc_overlay_cast_range: cast,
                     npc_overlay_ranged_range: ranged,
+                    npc_overlay_ranges_manual: manual,
                   },
                 })
               }

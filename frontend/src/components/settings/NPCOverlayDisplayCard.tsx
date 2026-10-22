@@ -12,7 +12,9 @@ import {
 } from '../../lib/npcItemFilters'
 import { resolveSectionOrder } from '../../lib/npcOverlayLayout'
 import DecimalInput from '../DecimalInput'
+import { useCharacterRanges } from '../../hooks/useCharacterRanges'
 import type { EnumsCatalog } from '../../types/enums'
+import type { CharacterRanges } from '../../services/api'
 
 interface Props {
   /** Global hidden keys (sections and items). */
@@ -26,7 +28,9 @@ interface Props {
   sectionOrder: string[]
   castRange: number
   rangedRange: number
-  onChangeRanges: (cast: number, ranged: number) => void
+  /** True when the user typed their own ranges instead of the gear-based ones. */
+  rangesManual: boolean
+  onChangeRanges: (cast: number, ranged: number, manual: boolean) => void
 }
 
 interface Item {
@@ -121,8 +125,10 @@ export default function NPCOverlayDisplayCard({
   sectionOrder,
   castRange,
   rangedRange,
+  rangesManual,
   onChangeRanges,
 }: Props): React.ReactElement {
+  const auto = useCharacterRanges()
   const [catalog, setCatalog] = useState<EnumsCatalog | null>(null)
   const [characters, setCharacters] = useState<string[]>([])
   const [scope, setScope] = useState('') // '' = all characters (global list)
@@ -363,41 +369,14 @@ export default function NPCOverlayDisplayCard({
                     ))}
 
                     {sec.id === 'distance' && (
-                      <div className="flex flex-wrap items-end gap-4 pl-[21px]">
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
-                            Cast range
-                          </span>
-                          <DecimalInput
-                            value={castRange}
-                            onValue={(v) => onChangeRanges(Math.round(v), rangedRange)}
-                            min={1}
-                            max={2000}
-                            fallback={200}
-                            className="w-20 rounded px-2 py-1 text-sm"
-                            style={inputStyle}
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs" style={{ color: 'var(--color-foreground)' }}>
-                            Ranged attack range (0 = off)
-                          </span>
-                          <DecimalInput
-                            value={rangedRange}
-                            onValue={(v) => onChangeRanges(castRange, Math.round(v))}
-                            min={0}
-                            max={2000}
-                            fallback={0}
-                            className="w-20 rounded px-2 py-1 text-sm"
-                            style={inputStyle}
-                          />
-                        </label>
-                        <p className="min-w-[14rem] flex-1 text-xs" style={muted}>
-                          The readout is green within your cast range, yellow in its last 10%, and
-                          red beyond it. Most nukes and debuffs reach 200. Zeal only reports a
-                          target&rsquo;s position within 250 units, so past that it reads n/a.
-                        </p>
-                      </div>
+                      <RangeSettings
+                        auto={auto}
+                        manual={rangesManual}
+                        castRange={castRange}
+                        rangedRange={rangedRange}
+                        onChange={onChangeRanges}
+                        inputStyle={inputStyle}
+                      />
                     )}
                   </div>
                 )}
@@ -407,5 +386,117 @@ export default function NPCOverlayDisplayCard({
         </div>
       )}
     </section>
+  )
+}
+
+function RangeSettings({
+  auto,
+  manual,
+  castRange,
+  rangedRange,
+  onChange,
+  inputStyle,
+}: {
+  auto: CharacterRanges | null
+  manual: boolean
+  castRange: number
+  rangedRange: number
+  onChange: (cast: number, ranged: number, manual: boolean) => void
+  inputStyle: React.CSSProperties
+}): React.ReactElement {
+  const muted = { color: 'var(--color-muted-foreground)' }
+  const fg = { color: 'var(--color-foreground)' }
+  const autoOk = auto?.has_export === true
+  return (
+    <div className="flex flex-col gap-2 pl-[21px] pt-1">
+      <p className="text-xs" style={muted}>
+        The distance readout is green within your range, yellow in its last 10%, and red
+        beyond it. Zeal only reports a target&rsquo;s position within 250 units, so past that
+        it reads n/a.
+      </p>
+
+      <label className="flex cursor-pointer items-start gap-2 text-sm" style={fg}>
+        <input
+          type="radio"
+          checked={!manual}
+          onChange={() => onChange(castRange, rangedRange, false)}
+          style={{ marginTop: 3 }}
+        />
+        <span>
+          From your character&rsquo;s gear
+          {autoOk ? (
+            <span className="block text-xs" style={muted}>
+              {auto.character}: cast range <b style={fg}>{auto.cast_range}</b>
+              {auto.cast_focus_percent > 0
+                ? ` (200 + ${auto.cast_focus_percent}% from ${auto.cast_focus_item ?? 'a focus'})`
+                : ' (no Extended Range focus worn)'}
+              {', ranged '}
+              {auto.ranged_range > 0 ? (
+                <>
+                  <b style={fg}>{auto.ranged_range}</b> ({auto.ranged_item}
+                  {auto.ammo_item ? ` + ${auto.ammo_item}` : ''})
+                </>
+              ) : (
+                'off (no ranged weapon)'
+              )}
+              . Updates when you camp or run /outputfile.
+            </span>
+          ) : (
+            <span className="block text-xs" style={muted}>
+              Needs a Zeal inventory export for the active character (made when you camp, or
+              with /outputfile). Until then the values below are used.
+            </span>
+          )}
+        </span>
+      </label>
+
+      <label className="flex cursor-pointer items-start gap-2 text-sm" style={fg}>
+        <input
+          type="radio"
+          checked={manual}
+          onChange={() =>
+            // Start manual mode from the gear values, so switching doesn't jump.
+            autoOk
+              ? onChange(auto.cast_range, auto.ranged_range, true)
+              : onChange(castRange, rangedRange, true)
+          }
+          style={{ marginTop: 3 }}
+        />
+        <span>Set manually</span>
+      </label>
+
+      {(manual || !autoOk) && (
+        <div className="flex flex-wrap items-end gap-4 pl-6">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs" style={fg}>
+              Cast range
+            </span>
+            <DecimalInput
+              value={castRange}
+              onValue={(v) => onChange(Math.round(v), rangedRange, manual)}
+              min={1}
+              max={2000}
+              fallback={200}
+              className="w-20 rounded px-2 py-1 text-sm"
+              style={inputStyle}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs" style={fg}>
+              Ranged attack range (0 = off)
+            </span>
+            <DecimalInput
+              value={rangedRange}
+              onValue={(v) => onChange(castRange, Math.round(v), manual)}
+              min={0}
+              max={2000}
+              fallback={0}
+              className="w-20 rounded px-2 py-1 text-sm"
+              style={inputStyle}
+            />
+          </label>
+        </div>
+      )}
+    </div>
   )
 }

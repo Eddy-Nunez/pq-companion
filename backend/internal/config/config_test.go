@@ -620,3 +620,36 @@ func TestMigrateNPCSectionsToHidden(t *testing.T) {
 		t.Error("section structs not reset to all-true")
 	}
 }
+
+// Ranges switched to automatic by default; a config that already had custom
+// ranges keeps them by being marked manual.
+func TestLoadFrom_NPCRangesAutoMigration(t *testing.T) {
+	tests := []struct {
+		name       string
+		prefs      string
+		wantManual bool
+	}{
+		{"defaults go automatic", "  npc_overlay_cast_range: 200\n", false},
+		{"custom cast range stays manual", "  npc_overlay_cast_range: 250\n", true},
+		{"custom ranged range stays manual", "  npc_overlay_cast_range: 200\n  npc_overlay_ranged_range: 300\n", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte("eq_path: /games/EQ\npreferences:\n"+tt.prefs), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			m, err := LoadFrom(path)
+			if err != nil {
+				t.Fatalf("LoadFrom: %v", err)
+			}
+			p := m.Get().Preferences
+			if p.NPCOverlayRangesManual != tt.wantManual {
+				t.Errorf("manual = %v, want %v", p.NPCOverlayRangesManual, tt.wantManual)
+			}
+			if !p.NPCRangesAutoMigrationDone {
+				t.Error("migration flag not set")
+			}
+		})
+	}
+}

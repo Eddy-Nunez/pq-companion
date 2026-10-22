@@ -279,6 +279,9 @@ export interface Preferences {
   // npc_overlay_ranged_range: optional second range (e.g. a bow's); 0 = off.
   npc_overlay_cast_range: number
   npc_overlay_ranged_range: number
+  // npc_overlay_ranges_manual: use the two ranges above as typed. Off, the
+  // overlay works them out from the active character's gear instead.
+  npc_overlay_ranges_manual?: boolean
   // Special-ability badge colour overrides for both NPC overlay surfaces.
   npc_overlay_tag_style?: NPCOverlayTagStyle
   // Stats-view section order (lib/npcOverlayLayout ids) and special-ability

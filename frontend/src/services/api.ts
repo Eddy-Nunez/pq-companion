@@ -2172,6 +2172,30 @@ export interface QuarmyData {
   aas: CharacterAA[]
 }
 
+/**
+ * A character's effective spell and ranged-attack reach from their latest
+ * Quarmy export, for the NPC overlay's distance readout. Mirrors
+ * buffmod.Ranges.
+ */
+export interface CharacterRanges {
+  character: string
+  // has_export is false when there's no Quarmy export yet (values are the
+  // defaults then).
+  has_export: boolean
+  cast_range: number
+  cast_focus_percent: number
+  cast_focus_item?: string
+  cast_focus_name?: string
+  // ranged_range is 0 with no ranged weapon in the Range slot.
+  ranged_range: number
+  ranged_item?: string
+  ammo_item?: string
+}
+
+export function getCharacterRanges(id: number): Promise<CharacterRanges> {
+  return get<CharacterRanges>(`/api/characters/${id}/ranges`)
+}
+
 export interface CharactersResponse {
   characters: Character[]
   active: string
