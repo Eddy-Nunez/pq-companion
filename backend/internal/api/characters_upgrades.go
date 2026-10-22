@@ -512,8 +512,8 @@ type zoneUpgradesResponse struct {
 // upgradesZone handles GET /api/characters/{id}/upgrades/zone?zone=<short>&limit=
 // — every upgrade per slot that drops in one zone, ranked by score, each with
 // the NPCs that drop it. Built for walking into a raid or hunting zone and
-// seeing what's worth killing, bidding, or rolling on. Takes the same filter
-// params as the overview; limit caps results per slot (default 25).
+// seeing what's worth killing, bidding, or rolling on. Takes the overview's
+// filter params except show_pop; limit caps results per slot (default 25).
 func (h *charactersHandler) upgradesZone(w http.ResponseWriter, r *http.Request) {
 	zoneShort := strings.TrimSpace(r.URL.Query().Get("zone"))
 	if zoneShort == "" {
@@ -529,11 +529,9 @@ func (h *charactersHandler) upgradesZone(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	// Picking a Planes of Power zone is an explicit ask for its gear, so don't
-	// let the PoP-gear toggle blank the whole view.
-	if db.IsPoPZone(zone.ShortName) {
-		sw.excludePoP = false
-	}
+	// The zone itself decides what's obtainable here, so the PoP-gear toggle
+	// doesn't apply (the UI hides it in this view): never PoP-gate zone drops.
+	sw.excludePoP = false
 	limit := 25
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
 		limit = v

@@ -19,12 +19,6 @@ type ZoneItemSource struct {
 	Chance  float64 `json:"chance"`
 }
 
-// IsPoPZone reports whether a zone short name belongs to the Planes of Power
-// bucket of the curated zoneCatalog.
-func IsPoPZone(shortName string) bool {
-	return zoneCatalog[shortName] >= popExpansion
-}
-
 // ZoneItemSources returns every item that drops in a zone, keyed by canonical
 // item id (the id UpgradeCandidates reports), with the NPCs that drop it
 // sorted by best chance first. It covers three kinds of drop:
