@@ -10,6 +10,8 @@ import { useNPCOverlaySections } from '../hooks/useNPCOverlaySections'
 import { useNPCOverlayView, type NPCOverlayView } from '../hooks/useNPCOverlayView'
 import { useNPCOverlayHiddenItems } from '../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../lib/npcItemFilters'
+import { emphasisStyle, resolveTagStyle } from '../lib/npcTagStyle'
+import { useNPCOverlayTagStyle } from '../hooks/useNPCOverlayTagStyle'
 import { useNPCTargetDistance, type NPCTargetDistance } from '../hooks/useNPCTargetDistance'
 import { useWishlistItemIds } from '../hooks/useWishlistItemIds'
 import { useActiveCharacterLevel } from '../hooks/useActiveCharacterLevel'
@@ -39,42 +41,27 @@ import { effectiveDropPct, rarityColor } from '../lib/lootHelpers'
 import type { TargetState, SpecialAbility, TargetVariant, NPCCasterSummary } from '../types/overlay'
 import { variantSuffix } from '../types/overlay'
 import type { NPC, NPCLootTable, LootDrop, NPCFaction } from '../types/npc'
-import type { NPCOverlaySections } from '../types/config'
+import type { NPCOverlaySections, NPCOverlayTagStyle } from '../types/config'
 
-// ── Ability badge colours ──────────────────────────────────────────────────────
-// Yellow  = special attacks (direct combat threat to the player)
-// Red     = damage/magic immunities (NPC can't be killed normally)
-// Orange  = crowd-control immunities (NPC resists player CC tactics)
-// Gray    = passive/informational
-
-// Dangerous melee specials: Summon, Enrage, Rampage, Area Rampage, Flurry,
-// Triple Attack, Dual Wield.
-const ATTACK_ABILITIES = new Set([1, 2, 3, 4, 5, 6, 7])
-// Damage-blocking immunities: Melee, Magic, Non-Bane Melee, Non-Magical
-// Melee, Harm-from-Client, Ranged Spells.
-const DAMAGE_IMMUNE_ABILITIES = new Set([19, 20, 22, 23, 26, 35])
-// Crowd-control immunities: Slow, Mez, Charm, Stun, Snare, Fear, Dispel,
-// Fleeing, Aggro, Taunt, Pacify, Haste, Disarm, Riposte.
-const CC_IMMUNE_ABILITIES = new Set([12, 13, 14, 15, 16, 17, 18, 21, 24, 28, 31, 51, 52, 53])
-
-function abilityBadgeColor(code: number): string {
-  if (ATTACK_ABILITIES.has(code)) return '#ca8a04'
-  if (DAMAGE_IMMUNE_ABILITIES.has(code)) return '#dc2626'
-  if (CC_IMMUNE_ABILITIES.has(code)) return '#f97316'
-  return '#6b7280'
-}
-
-function AbilityBadge({ ability }: { ability: SpecialAbility }): React.ReactElement {
+function AbilityBadge({
+  ability,
+  tagStyle,
+}: {
+  ability: SpecialAbility
+  tagStyle: NPCOverlayTagStyle | undefined
+}): React.ReactElement {
+  const { color, emphasized } = resolveTagStyle(ability.code, tagStyle)
   return (
     <span
       style={{
-        backgroundColor: abilityBadgeColor(ability.code),
+        backgroundColor: color,
         color: '#fff',
         fontSize: 11,
         fontWeight: 600,
         borderRadius: 3,
         padding: '2px 6px',
         lineHeight: 1.4,
+        ...(emphasized ? emphasisStyle(color) : null),
       }}
     >
       {ability.name || `Ability ${ability.code}`}
@@ -399,6 +386,7 @@ function StatsBody({
   distance?: number | null
 }): React.ReactElement {
   const hidden = useNPCOverlayHiddenItems()
+  const tagStyle = useNPCOverlayTagStyle()
   const vis = (k: string): boolean => !hidden.has(k)
   const anyVis = (...ks: string[]): boolean => ks.some(vis)
   const shown = abilities.filter((a) => a.value !== 0 && vis(abilityKey(a.code)))
@@ -530,7 +518,7 @@ function StatsBody({
           {sections.special_abilities && shown.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {shown.map((a) => (
-                <AbilityBadge key={a.code} ability={a} />
+                <AbilityBadge key={a.code} ability={a} tagStyle={tagStyle} />
               ))}
             </div>
           )}

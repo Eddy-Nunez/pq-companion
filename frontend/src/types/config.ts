@@ -1,6 +1,18 @@
 import type { OverlayName, LockedMode, FadeMode } from '../lib/overlays'
 import type { SavedRollProfile } from './rolls'
 
+// User overrides for NPC overlay special-ability badges (lib/npcTagStyle).
+// Colour values of '' mean "use the default" — config map keys can't be
+// deleted through the PUT, so a reset stores an empty string.
+export interface NPCOverlayTagStyle {
+  // Category id ('attack' | 'damage_immune' | 'cc_immune' | 'other') → hex.
+  category_colors?: Record<string, string>
+  // Special-ability code (as a string) → hex, beating the category colour.
+  tag_colors?: Record<string, string>
+  // Ability codes drawn with a glow so they stand out.
+  emphasized?: number[]
+}
+
 export interface NPCOverlaySections {
   identity: boolean
   combat: boolean
@@ -243,6 +255,8 @@ export interface Preferences {
   // npc_overlay_ranged_range: optional second range (e.g. a bow's); 0 = off.
   npc_overlay_cast_range: number
   npc_overlay_ranged_range: number
+  // Special-ability badge colour overrides for both NPC overlay surfaces.
+  npc_overlay_tag_style?: NPCOverlayTagStyle
   // Per-overlay locked behaviour, keyed by canonical overlay name. Missing
   // keys default to "interactive". See lib/overlays.ts.
   overlay_locked_modes?: Partial<Record<OverlayName, LockedMode>>

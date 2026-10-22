@@ -11,6 +11,7 @@ import DiscordVoiceOverlaySettings from '../components/settings/DiscordVoiceOver
 import DiscordWebhookSettings from '../components/settings/DiscordWebhookSettings'
 import TimerAlertPrefEditor from '../components/settings/TimerAlertPrefEditor'
 import NPCOverlayItemFiltersCard from '../components/settings/NPCOverlayItemFiltersCard'
+import NPCOverlayTagStyleCard from '../components/settings/NPCOverlayTagStyleCard'
 import DetrimSpellOverridesEditor from '../components/settings/DetrimSpellOverridesEditor'
 import DecimalInput from '../components/DecimalInput'
 import { getConfig, saveConfigChanges, getLogStatus, getLogFileInfo, cleanupLog, exportDebugLogs, getServerInfo, testPortAvailability, detectZeal, getZealPipeStatus, getQuarmClientStatus, getEqwStatus, getChangelog, type ServerInfo, type TestPortResult, type ChangelogEntry } from '../services/api'
@@ -2510,6 +2511,19 @@ export default function SettingsPage(): React.ReactElement {
                 npc_overlay_hidden_items: hidden,
                 npc_overlay_hidden_items_by_character: byCharacter,
               },
+            })
+          }
+        />
+        )}
+
+        {/* ── NPC Overlay tag colors ─────────────────────────────────────── */}
+        {tab === 'overlays' && (
+        <NPCOverlayTagStyleCard
+          style={config.preferences.npc_overlay_tag_style ?? {}}
+          onChange={(tagStyle) =>
+            setConfig({
+              ...config,
+              preferences: { ...config.preferences, npc_overlay_tag_style: tagStyle },
             })
           }
         />

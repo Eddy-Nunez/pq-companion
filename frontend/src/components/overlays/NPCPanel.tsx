@@ -6,6 +6,8 @@ import { useNPCOverlaySections } from '../../hooks/useNPCOverlaySections'
 import { useNPCOverlayView, type NPCOverlayView } from '../../hooks/useNPCOverlayView'
 import { useNPCOverlayHiddenItems } from '../../hooks/useNPCOverlayHiddenItems'
 import { abilityKey } from '../../lib/npcItemFilters'
+import { emphasisStyle, resolveTagStyle } from '../../lib/npcTagStyle'
+import { useNPCOverlayTagStyle } from '../../hooks/useNPCOverlayTagStyle'
 import { useWishlistItemIds } from '../../hooks/useWishlistItemIds'
 import { useTargetTimers } from '../../hooks/useTargetTimers'
 import { useTargetPlayer } from '../../hooks/useTargetPlayer'
@@ -37,7 +39,7 @@ import { variantSuffix } from '../../types/overlay'
 import type { LogTailerStatus } from '../../types/logEvent'
 import type { NPC, NPCLootTable, LootDrop, NPCFaction } from '../../types/npc'
 import type { Item } from '../../types/item'
-import type { NPCOverlaySections } from '../../types/config'
+import type { NPCOverlaySections, NPCOverlayTagStyle } from '../../types/config'
 
 type View = NPCOverlayView
 
@@ -105,24 +107,18 @@ function StatusBar({ status }: { status: LogTailerStatus | null }): React.ReactE
   )
 }
 
-// Dangerous melee specials: Summon, Enrage, Rampage, Area Rampage, Flurry,
-// Triple Attack, Dual Wield.
-const DANGER_ABILITIES = new Set([1, 2, 3, 4, 5, 6, 7])
-// Hard immunities to highlight on the badge: Slow, Mez, Charm, Stun, Snare,
-// Fear, Dispel, Melee, Magic, Ranged Spells, Aggro, Pacify.
-const IMMUNE_ABILITIES = new Set([12, 13, 14, 15, 16, 17, 18, 19, 20, 24, 26, 31])
-
-function abilityBadgeColor(code: number): string {
-  if (DANGER_ABILITIES.has(code)) return '#dc2626'
-  if (IMMUNE_ABILITIES.has(code)) return '#f97316'
-  return '#6b7280'
-}
-
-function AbilityBadge({ ability }: { ability: SpecialAbility }): React.ReactElement {
+function AbilityBadge({
+  ability,
+  tagStyle,
+}: {
+  ability: SpecialAbility
+  tagStyle: NPCOverlayTagStyle | undefined
+}): React.ReactElement {
+  const { color, emphasized } = resolveTagStyle(ability.code, tagStyle)
   return (
     <span
       className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-      style={{ backgroundColor: abilityBadgeColor(ability.code) }}
+      style={{ backgroundColor: color, ...(emphasized ? emphasisStyle(color) : null) }}
     >
       {ability.name || `Ability ${ability.code}`}
     </span>
@@ -528,6 +524,7 @@ function NPCDetails({
         : npc.level
   const pbaoe = charLevel != null ? pbaoeReduction(charLevel, mobLevel) : null
   const hidden = useNPCOverlayHiddenItems()
+  const tagStyle = useNPCOverlayTagStyle()
   const vis = (k: string): boolean => !hidden.has(k)
   const anyVis = (...ks: string[]): boolean => ks.some(vis)
   const shownAbilities = abilities.filter((a) => a.value !== 0 && vis(abilityKey(a.code)))
@@ -660,7 +657,7 @@ function NPCDetails({
               <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-muted)' }}>Special Abilities</p>
               <div className="flex flex-wrap gap-1">
                 {shownAbilities.map((a) => (
-                  <AbilityBadge key={a.code} ability={a} />
+                  <AbilityBadge key={a.code} ability={a} tagStyle={tagStyle} />
                 ))}
               </div>
             </div>

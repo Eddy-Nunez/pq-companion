@@ -701,6 +701,11 @@ type Preferences struct {
 	// alongside the cast range on the distance readout. 0 = off.
 	NPCOverlayRangedRange int `yaml:"npc_overlay_ranged_range" json:"npc_overlay_ranged_range"`
 
+	// NPCOverlayTagStyle customises the NPC overlay's special-ability badge
+	// colours on both surfaces. Zero value = built-in category colours.
+	// Frontend-only; the engine never reads it.
+	NPCOverlayTagStyle NPCOverlayTagStyle `yaml:"npc_overlay_tag_style,omitempty" json:"npc_overlay_tag_style"`
+
 	// OverlayLockedModes maps each popout overlay (by its canonical name:
 	// "dps", "hps", "buffTimer", "detrimTimer", "npc", "rollTracker",
 	// "respawnTimer") to how it behaves while locked:
@@ -966,6 +971,20 @@ const (
 type OverlayPosition struct {
 	X int `yaml:"x" json:"x"`
 	Y int `yaml:"y" json:"y"`
+}
+
+// NPCOverlayTagStyle holds user overrides for NPC overlay special-ability
+// badges. Colour maps store "" for "use the default" because the config PUT
+// decodes over the existing config and can't delete map keys.
+type NPCOverlayTagStyle struct {
+	// CategoryColors maps a badge category ("attack", "damage_immune",
+	// "cc_immune", "other") to a hex colour.
+	CategoryColors map[string]string `yaml:"category_colors,omitempty" json:"category_colors,omitempty"`
+	// TagColors maps a special-ability code (as a string) to a hex colour,
+	// overriding its category colour.
+	TagColors map[string]string `yaml:"tag_colors,omitempty" json:"tag_colors,omitempty"`
+	// Emphasized lists ability codes drawn with a glow so they stand out.
+	Emphasized []int `yaml:"emphasized,omitempty" json:"emphasized,omitempty"`
 }
 
 // NPCOverlaySections toggles individual NPC overlay sections on/off. All
