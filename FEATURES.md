@@ -2014,6 +2014,42 @@ name-based path when a field is nil, so older Zeal is unaffected.
   the `wornHere` (same-Location) and `wornLore` (any-slot LORE) sets in
   the same canonical id space the candidate list already uses.
 
+## v0.30.0 — NPC Overlay Customization, Upgrades By Zone, PoP Class Packs
+
+- **NPC Overlay settings tab** — all NPC overlay settings move to Settings →
+  NPC Overlay with a sticky live preview (`GET /api/overlay/npc/preview/{id}`
+  builds a live-shaped target without touching the tracker); a preview
+  context feeds unsaved settings and a chosen character to the display hooks.
+- **Tag colors and layout** — `npc_overlay_tag_style` (category/per-tag
+  color, emphasis ring), `npc_overlay_section_order` /
+  `npc_overlay_tag_order` drag ordering; badge logic shared in
+  `lib/npcTagStyle`. Reverse Slow (50) counts as a CC immunity.
+- **Display card** — Sections and Items merge into one card with Dashboard /
+  Popout checkboxes per section and item, stored in the hidden-items lists
+  (`dashboard:` / `popout:` prefixes, `section.<id>` keys); one-time
+  migration preserves existing toggles.
+- **Outline rules** — any/all/none ability-tag and class conditions, color,
+  flash and match labels; first match draws the frame. Per-character sets in
+  `npc_overlay_outline_rule_sets`.
+- **Gear-derived ranges** — `GET /api/characters/{id}/ranges`: cast range
+  200 + best Extended Range focus (SPA 129), ranged range from the Range slot
+  (+ arrow for bows); "Set manually" keeps the old inputs, and existing
+  custom ranges migrate to manual.
+- **Gear Upgrade Finder: By zone** — per-zone upgrades with dropping NPCs
+  and rates, following `current_zone` or a picked zone; covers script-spawned
+  bosses (id/1000) and zone-wide loot pools. Shared `upgradeSweep` helper.
+- **PoP spells in class packs** — PoP upgrades for every class pack's
+  tracked lines plus shared charm/root/snare/mez break patterns; durations
+  at the level-60 formula (test-enforced).
+- **`#popflags` after EQMacEmu PR #487** — new "X flag: Complete|Pending
+  memory|Missing" lines, Mithaniel Marr book, Agnarr/Karana/Miak preflags,
+  reworded Fuirstel; Complete/Missing clear stale cl_* memory; old wording
+  still parsed. Per-character JSON export.
+- Fixes: `config.DecodeOver` replaces sent maps so a config save can remove
+  map entries; empty Overlay Text fade alerts fall back to the placeholder;
+  overlays drop the minimize box and restore if minimized, with visibility
+  logging; more sub-tabs persist via `usePersistentState`.
+
 ## v0.29.1 — NPC Zones, Security Updates
 
 - **NPC zones** — `db.NPCZones` returns every spawn2 zone per NPC, falling
