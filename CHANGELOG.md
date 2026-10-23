@@ -9,6 +9,27 @@ Newest first. To add a new release, prepend a new `## vX.Y.Z — YYYY-MM-DD`
 section at the top — the `discord-notify` workflow picks up the topmost
 section automatically.
 
+## v0.30.0 — 2026-10-22
+
+Customize the NPC overlay from its own Settings tab with a live preview, find upgrades zone by zone in the Gear Upgrade Finder, and get timers for Planes of Power spells in the built-in class packs. PoP Flags also handles today's reworded `#popflags` output.
+
+### Highlights
+- **NPC Overlay settings tab with live preview** — all NPC overlay settings now have their own tab, Settings → NPC Overlay, next to a preview of the real overlay for any NPC you search for (Lord Nagafen by default). Changes show in the preview before you save.
+- **Customize the NPC overlay** — recolor special-ability tags by category or one at a time, and make key ones like Immune to Charm/Mez stand out with a glow. Drag to reorder the Stats sections and to put the tags you care about first. One display card sets what shows on the dashboard and on the popout, separately, per section or per item, and per character if you want.
+- **NPC overlay outline rules** — outline the overlay when the target has (or lacks) chosen abilities or is one of chosen classes, for example can't be mezzed, rampages, summons, or is a caster. Each rule has its own color and optional flash, and labels show which rules matched. Characters can have their own rule list.
+- **Cast and ranged range from your gear** — the overlay's distance readout now works out your cast range (including an Extended Range focus) and your ranged range (bow plus arrow) from the active character's latest Quarmy export, instead of using numbers typed in by hand. "Set manually" keeps custom values, and ranges you had already customized stay as they are.
+- **NPC overlay remembers its tab** — the dashboard panel and the popout reopen on Stats, Loot or Timers, whichever you left them on.
+- **Gear Upgrade Finder: By zone** — a new tab lists every upgrade that drops in one zone, ranked by score, with the NPCs that drop it and their drop rates. It follows your current zone or any zone you pick, and includes script-spawned bosses (like the Plane of Time gods) and zone-wide loot such as Vex Thal's. Group the list by slot, or show one list sorted by score for raid bidding.
+- **PoP spells in the built-in class packs** — the class trigger packs now include the Planes of Power upgrades of the spells they track: charms like Command of Druzzil, Call of the Arch Mage and Word of Terris, plus Voice of Quellious, Tranquility, Virtue, Protection of the Nine, Malosinia, Seduction of Saryrn, Requiem of Time and more. The charm, root, snare and mez break alerts cover the PoP spells too.
+- **More pages remember their sub-tab** — Developer, Wishlist, the Character Info stat mode and AA category, Tradeskill Leveling, Kill Log, Recap, and the Gear Upgrade Finder's slot and zone now stay put across pages and restarts.
+- **Export JSON on each PoP Flags character tab** — previously only on the All tab; each character tab now exports just that character.
+
+### Fixes
+- **PoP Flags sync after today's server patch** — the 2026-10-22 patch reworded `#popflags`. The tracker now reads the new "flag: Complete / Pending memory / Missing" lines, the new Mithaniel Marr book, Agnarr/Karana and Miak preflag lines, and the reworded Fuirstel stages. Older logs still sync. A Tier 1-only sync once again ticks the Manaetic Behemoth and Giwin preflags.
+- **Removing settings entries didn't stick** — turning off a character's NPC overlay override, deleting a raid threat mod or clearing a detrimental spell override now actually saves.
+- **Overlay Text fade alerts showed nothing** — a trigger fade alert switched to Overlay Text with no message now shows the "{spell} expiring soon" text, instead of only speaking it.
+- **Overlays vanishing after a minimize** — overlays have no taskbar button to bring them back, so they can no longer be minimized, and one that gets minimized anyway is restored right away. Overlay visibility is also logged to help diagnose overlays that disappear.
+
 ## v0.29.1 — 2026-10-21
 
 NPC zones now show wherever you look up an NPC or where an item drops, plus security updates and an overlay fix.
