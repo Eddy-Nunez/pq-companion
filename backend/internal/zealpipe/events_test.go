@@ -468,3 +468,24 @@ func TestDecodeDeath_RejectsOtherShapes(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeItemDisplay(t *testing.T) {
+	it, err := DecodeItemDisplay(`{"item_id":13073,"name":"Bone Chips"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.ItemID != 13073 || it.Name != "Bone Chips" {
+		t.Errorf("unexpected decode: %+v", it)
+	}
+	for _, payload := range []string{
+		`{"spawn_id":5,"killer_id":1}`, // a death
+		`{"item_id":13073}`,            // no name
+		`{"item_id":0,"name":"x"}`,     // invalid id
+		`[{"item_id":1,"name":"x"}]`,   // array
+		`not json`,
+	} {
+		if _, err := DecodeItemDisplay(payload); err == nil {
+			t.Errorf("expected %s to be rejected", payload)
+		}
+	}
+}

@@ -12,6 +12,7 @@
 //	go run ./cmd/zealdump -every     # every tick, not just on change
 //	go run ./cmd/zealdump -types     # count envelopes per type; sample per type
 //	go run ./cmd/zealdump -deaths    # one line per death event (type 7)
+//	go run ./cmd/zealdump -items     # one line per item window opened
 //	go run ./cmd/zealdump -file cap  # replay a capture instead of dialing
 //
 // To keep a capture for later: go run ./cmd/zealdump -raw > capture.txt
@@ -68,6 +69,7 @@ func main() {
 	every := flag.Bool("every", false, "print every tick, not just when the target changes")
 	types := flag.Bool("types", false, "count envelopes per type; print one sample payload per type (diagnoses which message types a Zeal build actually emits — e.g. raid/type 5)")
 	deaths := flag.Bool("deaths", false, "print one line per death event (type 7, proposed Zeal PR) instead of target changes")
+	items := flag.Bool("items", false, "print one line per item display event (proposed Zeal PR; type 7 or 8) instead of target changes")
 	pipeName := flag.String("pipe", "", "pipe to read (default: first one discovered)")
 	fromFile := flag.String("file", "", "read a saved capture instead of dialing a pipe")
 	flag.Parse()
@@ -91,6 +93,10 @@ func main() {
 
 	if *deaths {
 		runDeaths(ctx, conn)
+		return
+	}
+	if *items {
+		runItems(ctx, conn)
 		return
 	}
 	run(ctx, conn, *raw, *every, *types)
@@ -118,6 +124,34 @@ func runDeaths(ctx context.Context, conn io.Reader) {
 		fmt.Printf("%s #%d %s\n", time.Now().Format("15:04:05"), n, formatDeath(env.Data))
 	}
 	fmt.Printf("\n%d death events\n", n)
+}
+
+// runItems prints one line per item display event. The message type isn't
+// settled (7 alone, 8 alongside the death PR), so any envelope whose payload
+// decodes as an item counts, and the type it arrived under is shown.
+func runItems(ctx context.Context, conn io.Reader) {
+	fmt.Println("waiting for item display events. Click an item link or inspect an item. Ctrl+C to stop.")
+	n := 0
+	dec := json.NewDecoder(conn)
+	for ctx.Err() == nil {
+		var env zealpipe.Envelope
+		if err := dec.Decode(&env); err != nil {
+			if !errors.Is(err, io.EOF) && ctx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "\nread ended: %v\n", err)
+			}
+			break
+		}
+		if env.Type != 7 && env.Type != 8 {
+			continue
+		}
+		it, err := zealpipe.DecodeItemDisplay(env.Data)
+		if err != nil {
+			continue
+		}
+		n++
+		fmt.Printf("%s #%d type=%d item_id=%d name=%s\n", time.Now().Format("15:04:05"), n, env.Type, it.ItemID, it.Name)
+	}
+	fmt.Printf("\n%d item display events\n", n)
 }
 
 // formatDeath renders one death payload as a single line.

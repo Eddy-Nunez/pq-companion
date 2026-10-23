@@ -300,6 +300,16 @@ type Death struct {
 	KillerName string `json:"killer_name,omitempty"`
 }
 
+// ItemDisplay is the payload of the proposed Zeal item message, sent each time
+// an in-game item display window is filled (a chat link clicked, or an item
+// inspected from a slot). Its type number isn't settled — 7 on a build with
+// only that PR, 8 alongside the death PR — so it's recognised by shape with
+// DecodeItemDisplay rather than by a MsgX constant.
+type ItemDisplay struct {
+	ItemID int    `json:"item_id"`
+	Name   string `json:"name"`
+}
+
 // Location is a 3D world position, with Zeal's field names.
 //
 // Read GameX/GameY rather than these fields directly — see the methods below.
@@ -424,6 +434,30 @@ func DecodeDeath(payload string) (Death, error) {
 		return d, fmt.Errorf("zealpipe: decode death: spawn_id %d", d.SpawnID)
 	}
 	return d, nil
+}
+
+// DecodeItemDisplay parses an item display payload. Like DecodeDeath, the
+// payload must look like an item — an object with item_id and name, and a
+// positive id — because the type number it arrives under is not fixed.
+func DecodeItemDisplay(payload string) (ItemDisplay, error) {
+	var it ItemDisplay
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(payload), &keys); err != nil {
+		return it, fmt.Errorf("zealpipe: decode item display: %w", err)
+	}
+	if _, ok := keys["item_id"]; !ok {
+		return it, fmt.Errorf("zealpipe: decode item display: no item_id")
+	}
+	if _, ok := keys["name"]; !ok {
+		return it, fmt.Errorf("zealpipe: decode item display: no name")
+	}
+	if err := json.Unmarshal([]byte(payload), &it); err != nil {
+		return it, fmt.Errorf("zealpipe: decode item display: %w", err)
+	}
+	if it.ItemID <= 0 {
+		return it, fmt.Errorf("zealpipe: decode item display: item_id %d", it.ItemID)
+	}
+	return it, nil
 }
 
 // DecodeGroup parses a MsgGroup (type 6) payload — an array of GroupMember.
